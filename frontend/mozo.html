@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>App Mozos · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -22,7 +23,8 @@
   .login { display:grid; place-items:center; padding:22px; background:linear-gradient(135deg,#fff7ed,#fff); }
   .login-card { width:100%; max-width:430px; background:#fff; border:1px solid var(--border); border-radius:24px; padding:28px; box-shadow:var(--shadow); }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
-  .brand-mark { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; background:linear-gradient(135deg,var(--or),var(--or-dk)); color:#fff; font-weight:800; }
+  .brand-mark { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; background:#050505; box-shadow:0 10px 24px rgba(15,23,42,.18); overflow:hidden; }
+  .brand-mark img { width:34px; height:34px; object-fit:contain; display:block; }
   .brand-name { font-family:var(--display); font-size:22px; font-weight:800; }
   h1 { font-family:var(--display); font-size:28px; line-height:1.05; margin:0 0 8px; }
   .sub { color:var(--muted); margin:0 0 22px; line-height:1.5; }
@@ -88,7 +90,7 @@
 <body>
 <section class="screen login" id="loginScreen">
   <form class="login-card" id="loginForm">
-    <div class="brand"><div class="brand-mark">G</div><div class="brand-name">Gestiva</div></div>
+    <div class="brand"><div class="brand-mark"><img src="assets/logo-gestiva-icon.png" alt=""></div><div class="brand-name">Gestiva</div></div>
     <h1>App de mozos</h1>
     <p class="sub">Entrá con el email del restaurante y tu PIN para tomar pedidos desde el celular.</p>
     <div class="err" id="loginErr" aria-live="polite"></div>
