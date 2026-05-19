@@ -27,8 +27,12 @@ const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '40000');
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
+// SKIP_BILLING=1 desactiva todo cobro: registros quedan 'active' por 1 año.
+// Útil mientras no esté integrado el banco. Para activar cobro real, poner SKIP_BILLING=0.
+const SKIP_BILLING = process.env.SKIP_BILLING === '1' || !MP_TOKEN;
 
-if (!MP_TOKEN) console.warn('[mp] MP_ACCESS_TOKEN missing — billing endpoints will fail');
+if (SKIP_BILLING) console.warn('[billing] SKIP_BILLING active — todos los registros se activan automáticamente');
+else if (!MP_TOKEN) console.warn('[mp] MP_ACCESS_TOKEN missing — billing endpoints will fail');
 
 // ---------- Database ----------
 const dbUrl = process.env.DATABASE_URL;
@@ -124,6 +128,7 @@ async function requireAuth(req, res, next) {
 }
 
 function requireSubscription(req, res, next) {
+  if (SKIP_BILLING) return next();
   const s = req.tenant.subscription_status;
   if (s === 'active' || s === 'grace') return next();
   return res.status(402).json({ error: 'subscription_required', status: s, initPoint: req.tenant.mp_init_point });
@@ -144,10 +149,23 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     if (exists.rows[0]) return res.status(409).json({ error: 'email_taken' });
 
     const hash = await bcrypt.hash(password, 10);
+
+    // Si SKIP_BILLING está activo, dejamos al tenant 'active' por 1 año desde el registro.
+    let initialStatus = 'pending';
+    let endsAt = null, graceEndsAt = null, startedAt = null;
+    if (SKIP_BILLING) {
+      initialStatus = 'active';
+      startedAt = new Date();
+      endsAt = new Date(startedAt.getTime() + 365 * 86400000);
+      graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+    }
+
     const ins = await q(
-      `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone, subscription_status)
-       VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
-      [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null]
+      `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone,
+                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null,
+       initialStatus, startedAt, endsAt, graceEndsAt]
     );
     const t = ins.rows[0];
 

@@ -125,7 +125,12 @@ form.addEventListener('submit', async (e) => {
 
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    location.href = 'checkout.html';
+    // Si ya viene activo (SKIP_BILLING en backend) → entrar directo al panel
+    if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+      location.href = 'app.html';
+    } else {
+      location.href = 'checkout.html';
+    }
   } catch (e) {
     errEl.textContent = e.message;
     errEl.classList.add('on');
