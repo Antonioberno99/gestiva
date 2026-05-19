@@ -421,7 +421,7 @@ app.post('/api/tables', async (req, res) => {
   const { num, seats } = req.body || {};
   const numToUse = num || (await q('SELECT COALESCE(MAX(num),0)+1 AS n FROM tables WHERE tenant_id=$1', [req.tenant.id])).rows[0].n;
   try {
-    const r = await q(`INSERT INTO tables (tenant_id, num, seats) VALUES ($1,$2,$3) RETURNING *`,
+    const r = await q(`INSERT INTO tables (tenant_id, num, seats, status) VALUES ($1,$2,$3,'free') RETURNING *`,
       [req.tenant.id, numToUse, seats || 4]);
     res.json(r.rows[0]);
   } catch (e) {
@@ -430,14 +430,33 @@ app.post('/api/tables', async (req, res) => {
   }
 });
 app.put('/api/tables/:id', async (req, res) => {
-  const { num, seats } = req.body || {};
-  const r = await q(`UPDATE tables SET num=COALESCE($1,num), seats=COALESCE($2,seats)
-                     WHERE id=$3 AND tenant_id=$4 RETURNING *`,
-    [num, seats, req.params.id, req.tenant.id]);
-  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
-  res.json(r.rows[0]);
+  const { num, seats, status, reservationName, reservationTime } = req.body || {};
+  if (status && !['free', 'reserved'].includes(status)) {
+    return res.status(400).json({ error: 'invalid_status' });
+  }
+  if (status === 'reserved') {
+    const open = await q('SELECT 1 FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
+    if (open.rows[0]) return res.status(409).json({ error: 'table_is_open' });
+  }
+  try {
+    const r = await q(`UPDATE tables SET
+                         num=COALESCE($1,num),
+                         seats=COALESCE($2,seats),
+                         status=COALESCE($3,status),
+                         reservation_name=CASE WHEN $3='free' THEN NULL ELSE COALESCE($4,reservation_name) END,
+                         reservation_time=CASE WHEN $3='free' THEN NULL ELSE COALESCE($5,reservation_time) END
+                       WHERE id=$6 AND tenant_id=$7 RETURNING *`,
+      [num, seats, status || null, reservationName || null, reservationTime || null, req.params.id, req.tenant.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'duplicate_num' });
+    throw e;
+  }
 });
 app.delete('/api/tables/:id', async (req, res) => {
+  const open = await q('SELECT 1 FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
+  if (open.rows[0]) return res.status(409).json({ error: 'table_is_open' });
   await q('DELETE FROM tables WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
   res.json({ ok: true });
 });
@@ -484,6 +503,8 @@ app.post('/api/open-tables', async (req, res) => {
                      ON CONFLICT (table_id) DO UPDATE SET waiter_id=EXCLUDED.waiter_id
                      RETURNING *`,
     [tableId, req.tenant.id, waiterId]);
+  await q(`UPDATE tables SET status='free', reservation_name=NULL, reservation_time=NULL
+           WHERE id=$1 AND tenant_id=$2`, [tableId, req.tenant.id]);
   res.json(r.rows[0]);
 });
 app.put('/api/open-tables/:tid', async (req, res) => {

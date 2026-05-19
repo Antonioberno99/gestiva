@@ -103,11 +103,15 @@
   .table-card:hover { transform:translateY(-3px); box-shadow:var(--sh-md); }
   .table-card.libre { border-color:var(--border); }
   .table-card.ocupada { border-color:var(--or); background:linear-gradient(135deg,#fff7ed,#fff); box-shadow:0 4px 16px rgba(249,115,22,.15); }
+  .table-card.reservada { border-color:var(--purple); background:linear-gradient(135deg,#f5f3ff,#fff); }
   .table-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:3px 8px; border-radius:999px; align-self:flex-start; }
   .table-status.libre { background:var(--green-lt); color:#047857; }
   .table-status.ocupada { background:var(--or-100); color:var(--or-dk); }
+  .table-status.reservada { background:#ede9fe; color:#6d28d9; }
   .table-num { font-size:26px; font-weight:800; font-family:var(--ff-display); }
   .table-total { font-size:18px; font-weight:700; color:var(--or-dk); }
+  .table-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
+  .table-actions .btn-ghost { font-size:12px; padding:5px 8px; border:1px solid var(--border-soft); background:rgba(255,255,255,.85); }
   .table-meta { font-size:12px; color:var(--tx-mid); }
 
   .list { display:flex; flex-direction:column; }
@@ -311,6 +315,7 @@ const API = {
   productDelete: (id) => api('/api/products/'+id, { method:'DELETE' }),
   tables: () => api('/api/tables'),
   tableCreate: (b) => api('/api/tables', { method:'POST', body: JSON.stringify(b) }),
+  tableUpdate: (id, b) => api('/api/tables/'+id, { method:'PUT', body: JSON.stringify(b) }),
   tableDelete: (id) => api('/api/tables/'+id, { method:'DELETE' }),
   waiters: () => api('/api/waiters'),
   waiterCreate: (b) => api('/api/waiters', { method:'POST', body: JSON.stringify(b) }),
@@ -510,6 +515,7 @@ route('dashboard', async () => {
 route('mesas', async () => {
   const [tables, open] = await Promise.all([API.tables(), API.openTables()]);
   const openMap = new Map(open.map(o => [o.table_id, o]));
+  const reservedCount = tables.filter(t => !openMap.has(t.id) && t.status === 'reserved').length;
   const products = await API.products();
   const prodMap = new Map(products.map(p => [p.id, p]));
   const waiters = await API.waiters();
@@ -525,22 +531,31 @@ route('mesas', async () => {
   $('#view').innerHTML = `
     <div class="page-header">
       <div><h1 class="page-title">Mesas</h1>
-        <div class="page-subtitle">${open.length} ocupadas · ${tables.length - open.length} libres</div>
+        <div class="page-subtitle">${open.length} ocupadas · ${reservedCount} reservadas · ${tables.length - open.length - reservedCount} libres</div>
       </div>
       <button class="btn btn-secondary" onclick="addTable()">+ Agregar mesa</button>
     </div>
     <div class="table-grid">
       ${tables.map(t => {
         const ot = openMap.get(t.id);
-        const st = ot ? 'ocupada' : 'libre';
+        const st = ot ? 'ocupada' : (t.status === 'reserved' ? 'reservada' : 'libre');
         const total = ot ? calcTotal(ot.items) : 0;
         const w = ot ? waiterMap.get(ot.waiter_id) : null;
-        return `<button class="table-card ${st}" onclick="location.hash='#/mesa/${t.id}'">
+        const reserveText = t.reservation_name ? `${t.reservation_name}` : 'Reserva';
+        const reserveTime = t.reservation_time ? new Date(t.reservation_time).toLocaleString('es-AR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+        return `<div class="table-card ${st}" onclick="location.hash='#/mesa/${t.id}'">
           <span class="table-status ${st}">${st}</span>
           <div class="table-num">M${t.num}</div>
           <div class="table-meta">${t.seats} lugares</div>
           ${ot ? `<div class="table-total">${fmt(total)}</div><div class="table-meta">${w?w.name:''} · ${(ot.items||[]).length} items</div>` : ''}
-        </button>`;
+          ${st === 'reservada' ? `<div class="table-meta">${reserveText}${reserveTime ? ' · ' + reserveTime : ''}</div>` : ''}
+          <div class="table-actions" onclick="event.stopPropagation()">
+            ${!ot ? `<button class="btn-ghost" onclick="reserveTable('${t.id}')">${st==='reservada'?'Editar reserva':'Reservar'}</button>` : ''}
+            ${st === 'reservada' ? `<button class="btn-ghost" onclick="clearReservation('${t.id}')">Liberar</button>` : ''}
+            <button class="btn-ghost" onclick="editTable('${t.id}')">Editar</button>
+            ${!ot ? `<button class="btn-ghost" onclick="deleteTableCfm('${t.id}')">Eliminar</button>` : ''}
+          </div>
+        </div>`;
       }).join('')}
     </div>
   `;
@@ -548,6 +563,59 @@ route('mesas', async () => {
 async function addTable() {
   try { await API.tableCreate({}); navigate(); toast('Mesa agregada','success'); }
   catch(e) { toast(e.message,'error'); }
+}
+async function editTable(id) {
+  const tables = await API.tables();
+  const t = tables.find(t => t.id === id);
+  if (!t) return toast('Mesa no encontrada','error');
+  openModal('Editar mesa', `
+    <div class="grid grid-2" style="gap:12px;">
+      <div class="field"><label>Número de mesa</label><input id="tableNum" type="number" min="1" step="1" value="${t.num}" autofocus/></div>
+      <div class="field"><label>Lugares</label><input id="tableSeats" type="number" min="1" step="1" value="${t.seats || 4}"/></div>
+    </div>
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:8px;">Usá lugares para diferenciar mesas chicas, grandes, barra o mesas compartidas.</p>`,
+    `<button class="btn btn-danger" style="margin-right:auto;" onclick="deleteTableCfm('${id}')">Eliminar</button>
+     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveTable('${id}')">Guardar</button>`);
+}
+async function saveTable(id) {
+  const num = parseInt($('#tableNum').value, 10);
+  const seats = parseInt($('#tableSeats').value, 10);
+  if (!num || num < 1 || !seats || seats < 1) return toast('Número y lugares inválidos','error');
+  try { await API.tableUpdate(id, { num, seats }); closeModal(); navigate(); toast('Mesa actualizada','success'); }
+  catch(e) { toast(e.message === 'duplicate_num' ? 'Ya existe una mesa con ese número' : e.message, 'error'); }
+}
+async function reserveTable(id) {
+  const tables = await API.tables();
+  const t = tables.find(t => t.id === id);
+  if (!t) return toast('Mesa no encontrada','error');
+  const dt = t.reservation_time ? new Date(t.reservation_time) : null;
+  const localValue = dt ? new Date(dt.getTime() - dt.getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  openModal('Reservar mesa ' + t.num, `
+    <div class="field"><label>Nombre de la reserva</label><input id="reservationName" value="${t.reservation_name || ''}" placeholder="Ej: Pérez"/></div>
+    <div class="field"><label>Día y hora</label><input id="reservationTime" type="datetime-local" value="${localValue}"/></div>
+    <p style="font-size:13px;color:var(--tx-mid);">La mesa queda marcada como reservada hasta que la abras o la liberes.</p>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveReservation('${id}')">Guardar reserva</button>`);
+}
+async function saveReservation(id) {
+  try {
+    await API.tableUpdate(id, {
+      status: 'reserved',
+      reservationName: $('#reservationName').value.trim(),
+      reservationTime: $('#reservationTime').value || null
+    });
+    closeModal(); navigate(); toast('Mesa reservada','success');
+  } catch(e) { toast(e.message === 'table_is_open' ? 'La mesa está ocupada' : e.message, 'error'); }
+}
+async function clearReservation(id) {
+  try { await API.tableUpdate(id, { status: 'free' }); navigate(); toast('Reserva liberada','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function deleteTableCfm(id) {
+  if (!confirm('¿Eliminar esta mesa?')) return;
+  try { await API.tableDelete(id); closeModal(); navigate(); toast('Mesa eliminada','success'); }
+  catch(e) { toast(e.message === 'table_is_open' ? 'No podés eliminar una mesa ocupada' : e.message, 'error'); }
 }
 
 // ---------- MESA INDIVIDUAL ----------
@@ -577,15 +645,21 @@ route('mesa', async (params) => {
       $('#view').innerHTML = `<div class="empty"><h3>No tenés mozos</h3><p>Creá uno primero para poder abrir mesas.</p><a href="#/mozos" class="btn btn-primary">Ir a Mozos</a></div>`;
       return;
     }
+    const isReserved = t.status === 'reserved';
+    const reserveTime = t.reservation_time ? new Date(t.reservation_time).toLocaleString('es-AR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
     $('#view').innerHTML = `
       <div class="page-header"><div style="display:flex;align-items:center;gap:14px;">
         <a href="#/mesas" class="btn-ghost btn-icon">←</a>
         <div><h1 class="page-title">Mesa ${t.num}</h1>
-          <div class="page-subtitle">${t.seats} lugares · libre</div></div>
+          <div class="page-subtitle">${t.seats} lugares · ${isReserved ? '<span class="badge yellow">reservada</span>' : 'libre'}</div></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="reserveTable('${tableId}')">${isReserved ? 'Editar reserva' : 'Reservar'}</button>
+        <button class="btn btn-secondary" onclick="editTable('${tableId}')">Editar mesa</button>
       </div></div>
       <div class="card" style="text-align:center;padding:40px 20px;max-width:480px;margin:0 auto;">
         <h3 style="margin-bottom:8px;">Abrir mesa</h3>
-        <p style="color:var(--tx-mid);margin-bottom:20px;">Seleccioná un mozo</p>
+        <p style="color:var(--tx-mid);margin-bottom:20px;">${isReserved ? `Reserva: ${t.reservation_name || 'sin nombre'}${reserveTime ? ' · ' + reserveTime : ''}` : 'Seleccioná un mozo'}</p>
         <div class="field"><label>Mozo</label><select id="newWaiter">${CURRENT_WAITERS.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}</select></div>
         <button class="btn btn-primary btn-block" onclick="openTableNow('${tableId}')">Abrir mesa</button>
       </div>`;

@@ -47,9 +47,15 @@ CREATE TABLE IF NOT EXISTS tables (
   tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   num        INT NOT NULL,
   seats      INT DEFAULT 4,
+  status     TEXT DEFAULT 'free',
+  reservation_name TEXT,
+  reservation_time TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (tenant_id, num)
 );
+ALTER TABLE IF EXISTS tables ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'free';
+ALTER TABLE IF EXISTS tables ADD COLUMN IF NOT EXISTS reservation_name TEXT;
+ALTER TABLE IF EXISTS tables ADD COLUMN IF NOT EXISTS reservation_time TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_tables_tenant ON tables(tenant_id);
 
 -- WAITERS
