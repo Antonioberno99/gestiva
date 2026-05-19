@@ -371,6 +371,29 @@
     .ben-card p  { font-size: 13px; color: var(--tx-mid); line-height: 1.55; }
 
     /* ── CTA ── */
+    /* Team app */
+    .s-team-app { padding: 96px 0; background: #fff; }
+    .team-app-layout { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(300px,.95fr); gap: 52px; align-items: center; }
+    .team-copy .sec-title { text-align: left; }
+    .team-copy .sec-sub { max-width: 560px; }
+    .team-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:28px; }
+    .team-actions .btn { min-height:48px; }
+    .team-list { display:grid; gap:12px; margin-top:28px; }
+    .team-row { display:flex; align-items:flex-start; gap:12px; color:var(--tx-mid); line-height:1.55; }
+    .team-dot { width:22px; height:22px; border-radius:7px; background:var(--or-lt); color:var(--or-dk); display:grid; place-items:center; font-weight:900; flex:0 0 auto; }
+    .team-phone { background:#0f172a; border-radius:28px; padding:18px; box-shadow:0 24px 70px rgba(15,23,42,.22); color:#fff; max-width:380px; margin-left:auto; }
+    .team-phone-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 4px 14px; }
+    .team-phone-brand { display:flex; align-items:center; gap:10px; font-weight:900; }
+    .team-phone-logo { width:34px; height:34px; border-radius:10px; background:#050505; display:grid; place-items:center; }
+    .team-phone-logo img { width:28px; height:28px; object-fit:contain; }
+    .team-screen { background:#f8fafc; color:var(--tx-dark); border-radius:20px; padding:18px; }
+    .team-status { border:1px solid #bbf7d0; background:#ecfdf5; border-radius:16px; padding:14px; margin-bottom:12px; }
+    .team-status b { display:block; font-size:18px; margin-top:4px; }
+    .team-metrics { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+    .team-metric { background:#fff; border:1px solid var(--border); border-radius:14px; padding:12px; }
+    .team-metric span { display:block; color:var(--tx-mid); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+    .team-metric b { display:block; font-size:20px; margin-top:4px; }
+
     .s-cta { padding: 96px 0; background: #fff; }
     .cta-box { background: linear-gradient(140deg, #0f172a 0%, #1e293b 100%); border-radius: var(--r-xl); padding: 84px 64px; text-align: center; position: relative; overflow: hidden; }
     .cta-box::before { content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%); width: 420px; height: 420px; background: radial-gradient(circle, rgba(249,115,22,.28) 0%, transparent 70%); pointer-events: none; }
@@ -415,7 +438,7 @@
     @media (max-width: 768px) {
       .nav-links, .nav-ctas { display: none; }
       .hamburger { display: flex; }
-      .hero-grid, .sol-grid, .ben-grid-outer { grid-template-columns: 1fr; gap: 48px; }
+      .hero-grid, .sol-grid, .ben-grid-outer, .team-app-layout { grid-template-columns: 1fr; gap: 48px; }
       .browser { transform: none; }
       .sol-visual { padding: 0; }
       .fc1, .fc2 { display: none; }
@@ -426,6 +449,9 @@
       .foot-grid { grid-template-columns: 1fr; gap: 32px; }
       .cta-box { padding: 52px 24px; }
       .cta-btns { flex-direction: column; align-items: center; }
+      .team-actions { flex-direction: column; }
+      .team-actions .btn { width: 100%; justify-content: center; }
+      .team-phone { margin: 0 auto; }
       .hero-stats { gap: 24px; flex-wrap: wrap; }
       .big-content { flex-direction: column; height: auto; }
       .big-side { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
@@ -459,6 +485,7 @@
   <ul>
     <li><a href="#problema"  onclick="toggleMenu()">El problema</a></li>
     <li><a href="#funciones" onclick="toggleMenu()">Funciones</a></li>
+    <li><a href="#app-equipo" onclick="toggleMenu()">App equipo</a></li>
     <li><a href="#negocios"  onclick="toggleMenu()">Para tu negocio</a></li>
     <li><a href="#beneficios" onclick="toggleMenu()">Beneficios</a></li>
   </ul>
@@ -478,11 +505,13 @@
       <ul class="nav-links">
         <li><a href="#problema">El problema</a></li>
         <li><a href="#funciones">Funciones</a></li>
+        <li><a href="#app-equipo">App equipo</a></li>
         <li><a href="#negocios">Para tu negocio</a></li>
         <li><a href="#beneficios">Beneficios</a></li>
       </ul>
       <div class="nav-ctas">
         <a href="login.html" class="btn btn-outline">Iniciar sesión</a>
+        <a href="#app-equipo" class="btn btn-outline">App equipo</a>
         <a href="signup.html" class="btn btn-primary">Probar sistema</a>
       </div>
       <div class="hamburger" onclick="toggleMenu()">
@@ -1059,6 +1088,47 @@
   </div>
 </section>
 
+<!-- TEAM APP -->
+<section class="s-team-app" id="app-equipo">
+  <div class="container">
+    <div class="team-app-layout">
+      <div class="team-copy fade">
+        <div class="tag">App para el equipo</div>
+        <h2 class="sec-title">Mozos, bartenders y cocina trabajan desde el celular</h2>
+        <p class="sec-sub">La app del equipo sirve para tomar pedidos por mesa, ver su panel personal, marcar ingreso y salida, y controlar sus horas trabajadas. Entran con el email del restaurante y el PIN que les das desde el panel central.</p>
+        <div class="team-actions">
+          <a href="mozo.html" class="btn btn-primary">Abrir app para instalar</a>
+          <button class="btn btn-outline" onclick="downloadTeamApk()">Descargar APK</button>
+        </div>
+        <div class="team-list">
+          <div class="team-row"><span class="team-dot">1</span><span>El encargado crea el integrante en el panel Equipo y le asigna un PIN.</span></div>
+          <div class="team-row"><span class="team-dot">2</span><span>El empleado abre la app, entra con email + PIN y marca su ingreso.</span></div>
+          <div class="team-row"><span class="team-dot">3</span><span>Los pedidos y las horas aparecen en el panel central del restaurante.</span></div>
+        </div>
+      </div>
+      <div class="team-phone fade">
+        <div class="team-phone-head">
+          <div class="team-phone-brand"><span class="team-phone-logo"><img src="assets/logo-gestiva-icon.png" alt=""></span>Gestiva Equipo</div>
+          <span style="color:rgba(255,255,255,.65);font-size:12px;">Celular</span>
+        </div>
+        <div class="team-screen">
+          <div class="team-status">
+            <span style="color:#047857;font-weight:800;font-size:12px;text-transform:uppercase;">Trabajando ahora</span>
+            <b>Ingreso 19:04</b>
+            <div style="color:var(--tx-mid);font-size:13px;margin-top:4px;">Mozo · Mesa 4 activa</div>
+          </div>
+          <div class="team-metrics">
+            <div class="team-metric"><span>Horas hoy</span><b>3h 25m</b></div>
+            <div class="team-metric"><span>Pedidos</span><b>8</b></div>
+            <div class="team-metric"><span>Rol</span><b>Mozo</b></div>
+            <div class="team-metric"><span>Estado</span><b>Online</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- CTA -->
 <section class="s-cta" id="demo">
   <div class="container">
@@ -1113,6 +1183,17 @@
   // ── mobile menu ──
   function toggleMenu() {
     document.getElementById('mMenu').classList.toggle('open');
+  }
+
+  async function downloadTeamApk() {
+    const apk = 'assets/gestiva-equipo.apk';
+    try {
+      const r = await fetch(apk, { method: 'HEAD' });
+      if (!r.ok) throw new Error('missing');
+      location.href = apk;
+    } catch (e) {
+      alert('El APK todavia no esta publicado. Por ahora abri "Abrir app para instalar" desde el celular y agregala a la pantalla de inicio.');
+    }
   }
 
   // ── scroll: nav shadow + progress bar ──
