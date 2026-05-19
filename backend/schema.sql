@@ -63,12 +63,27 @@ CREATE TABLE IF NOT EXISTS waiters (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
+  role       TEXT DEFAULT 'Mozo',
   color      TEXT DEFAULT '#f97316',
   access_pin_hash TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE IF EXISTS waiters ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'Mozo';
 ALTER TABLE IF EXISTS waiters ADD COLUMN IF NOT EXISTS access_pin_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_waiters_tenant ON waiters(tenant_id);
+
+-- STAFF SHIFTS (ingreso/salida del equipo)
+CREATE TABLE IF NOT EXISTS staff_shifts (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  waiter_id   UUID NOT NULL REFERENCES waiters(id) ON DELETE CASCADE,
+  started_at  TIMESTAMPTZ DEFAULT now(),
+  ended_at    TIMESTAMPTZ,
+  note        TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_shifts_tenant ON staff_shifts(tenant_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_shifts_waiter ON staff_shifts(waiter_id, started_at DESC);
 
 -- OPEN TABLES (mesas actualmente ocupadas)
 CREATE TABLE IF NOT EXISTS open_tables (

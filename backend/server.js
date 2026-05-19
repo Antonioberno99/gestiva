@@ -95,6 +95,7 @@ function publicWaiter(w) {
     id: w.id,
     tenant_id: w.tenant_id,
     name: w.name,
+    role: w.role || 'Mozo',
     color: w.color,
     hasPin: !!w.access_pin_hash,
     created_at: w.created_at
@@ -455,18 +456,54 @@ app.get('/waiter/me', requireWaiterAuth, async (req, res) => {
 
 app.get('/waiter/bootstrap', requireWaiterAuth, async (req, res) => {
   await seedDefaultProducts(req.tenant.id);
-  const [tables, openTables, products] = await Promise.all([
+  const [tables, openTables, products, activeShift, recentShifts] = await Promise.all([
     q('SELECT * FROM tables WHERE tenant_id=$1 ORDER BY num', [req.tenant.id]),
     q('SELECT * FROM open_tables WHERE tenant_id=$1', [req.tenant.id]),
-    q('SELECT * FROM products WHERE tenant_id=$1 AND available=true ORDER BY cat, name', [req.tenant.id])
+    q('SELECT * FROM products WHERE tenant_id=$1 AND available=true ORDER BY cat, name', [req.tenant.id]),
+    q(`SELECT * FROM staff_shifts
+       WHERE tenant_id=$1 AND waiter_id=$2 AND ended_at IS NULL
+       ORDER BY started_at DESC LIMIT 1`, [req.tenant.id, req.waiter.id]),
+    q(`SELECT * FROM staff_shifts
+       WHERE tenant_id=$1 AND waiter_id=$2
+       ORDER BY started_at DESC LIMIT 20`, [req.tenant.id, req.waiter.id])
   ]);
   res.json({
     restaurant: publicTenant(req.tenant),
     waiter: publicWaiter(req.waiter),
     tables: tables.rows,
     openTables: openTables.rows,
-    products: products.rows
+    products: products.rows,
+    activeShift: activeShift.rows[0] || null,
+    recentShifts: recentShifts.rows
   });
+});
+
+app.get('/waiter/shifts', requireWaiterAuth, async (req, res) => {
+  const r = await q(`SELECT * FROM staff_shifts
+                     WHERE tenant_id=$1 AND waiter_id=$2
+                     ORDER BY started_at DESC LIMIT 60`, [req.tenant.id, req.waiter.id]);
+  res.json(r.rows);
+});
+
+app.post('/waiter/clock', requireWaiterAuth, async (req, res) => {
+  const { action, note } = req.body || {};
+  if (!['in', 'out'].includes(action)) return res.status(400).json({ error: 'invalid_action' });
+
+  const active = (await q(`SELECT * FROM staff_shifts
+                           WHERE tenant_id=$1 AND waiter_id=$2 AND ended_at IS NULL
+                           ORDER BY started_at DESC LIMIT 1`, [req.tenant.id, req.waiter.id])).rows[0];
+
+  if (action === 'in') {
+    if (active) return res.json({ shift: active, alreadyOpen: true });
+    const r = await q(`INSERT INTO staff_shifts (tenant_id, waiter_id, note)
+                       VALUES ($1,$2,$3) RETURNING *`, [req.tenant.id, req.waiter.id, note || null]);
+    return res.json({ shift: r.rows[0] });
+  }
+
+  if (!active) return res.status(409).json({ error: 'shift_not_open' });
+  const r = await q(`UPDATE staff_shifts SET ended_at=now(), note=COALESCE($1,note)
+                     WHERE id=$2 AND tenant_id=$3 RETURNING *`, [note || null, active.id, req.tenant.id]);
+  return res.json({ shift: r.rows[0] });
 });
 
 app.post('/waiter/open-tables', requireWaiterAuth, async (req, res) => {
@@ -586,22 +623,23 @@ app.get('/api/waiters', async (req, res) => {
   res.json(r.rows.map(publicWaiter));
 });
 app.post('/api/waiters', async (req, res) => {
-  const { name, color, pin } = req.body || {};
+  const { name, role, color, pin } = req.body || {};
   if (!name) return res.status(400).json({ error: 'missing_name' });
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
-  const r = await q(`INSERT INTO waiters (tenant_id, name, color, access_pin_hash) VALUES ($1,$2,$3,$4) RETURNING *`,
-    [req.tenant.id, name, color || '#f97316', hash]);
+  const r = await q(`INSERT INTO waiters (tenant_id, name, role, color, access_pin_hash) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [req.tenant.id, name, role || 'Mozo', color || '#f97316', hash]);
   res.json(publicWaiter(r.rows[0]));
 });
 app.put('/api/waiters/:id', async (req, res) => {
-  const { name, color, pin } = req.body || {};
+  const { name, role, color, pin } = req.body || {};
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
   const r = await q(`UPDATE waiters SET
                        name=COALESCE($1,name),
-                       color=COALESCE($2,color),
-                       access_pin_hash=COALESCE($3,access_pin_hash)
-                     WHERE id=$4 AND tenant_id=$5 RETURNING *`,
-    [name, color, hash, req.params.id, req.tenant.id]);
+                       role=COALESCE($2,role),
+                       color=COALESCE($3,color),
+                       access_pin_hash=COALESCE($4,access_pin_hash)
+                     WHERE id=$5 AND tenant_id=$6 RETURNING *`,
+    [name, role, color, hash, req.params.id, req.tenant.id]);
   if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(publicWaiter(r.rows[0]));
 });
@@ -611,6 +649,16 @@ app.delete('/api/waiters/:id', async (req, res) => {
   if (open.rows[0]) return res.status(409).json({ error: 'waiter_has_open_tables' });
   await q('DELETE FROM waiters WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
   res.json({ ok: true });
+});
+
+app.get('/api/staff-shifts', async (req, res) => {
+  const from = req.query.from || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const r = await q(`SELECT ss.*, w.name AS waiter_name, w.role AS waiter_role, w.color AS waiter_color
+                     FROM staff_shifts ss
+                     JOIN waiters w ON w.id=ss.waiter_id
+                     WHERE ss.tenant_id=$1 AND ss.started_at::date >= $2
+                     ORDER BY ss.started_at DESC LIMIT 500`, [req.tenant.id, from]);
+  res.json(r.rows);
 });
 
 // ----- OPEN TABLES -----

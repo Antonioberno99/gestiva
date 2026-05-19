@@ -239,7 +239,7 @@
     </a>
     <a href="#/mozos" class="nav-item" data-route="mozos">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-      Mozos
+      Equipo
     </a>
     <a href="#/reportes" class="nav-item" data-route="reportes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
@@ -291,6 +291,12 @@ const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 const CURRENCY = () => USER?.currency || '$';
 const fmt = (n) => CURRENCY() + ' ' + Math.round(n || 0).toLocaleString('es-AR');
 const today = () => new Date().toISOString().slice(0,10);
+const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
+const fmtHours = (h) => {
+  const minutes = Math.round((h || 0) * 60);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+};
+const teamAppUrl = () => new URL('mozo.html', location.href).href;
 
 // ---------- API ----------
 async function api(path, opts = {}) {
@@ -323,6 +329,7 @@ const API = {
   waiterCreate: (b) => api('/api/waiters', { method:'POST', body: JSON.stringify(b) }),
   waiterUpdate: (id, b) => api('/api/waiters/'+id, { method:'PUT', body: JSON.stringify(b) }),
   waiterDelete: (id) => api('/api/waiters/'+id, { method:'DELETE' }),
+  staffShifts: (qs = '') => api('/api/staff-shifts' + qs),
   openTables: () => api('/api/open-tables'),
   openTable: (b) => api('/api/open-tables', { method:'POST', body: JSON.stringify(b) }),
   updateOpenTable: (tid, b) => api('/api/open-tables/'+tid, { method:'PUT', body: JSON.stringify(b) }),
@@ -989,6 +996,141 @@ async function saveWaiter(id) {
 async function deleteWaiterCfm(id) {
   if (!confirm('¿Eliminar mozo?')) return;
   try { await API.waiterDelete(id); closeModal(); navigate(); toast('Mozo eliminado','success'); }
+  catch(e) { toast(e.message==='waiter_has_open_tables'?'Tiene mesas abiertas':e.message,'error'); }
+}
+
+// Version ampliada: equipo, roles, horas y descarga de app.
+route('mozos', async () => {
+  const [waiters, open, orders, shifts] = await Promise.all([
+    API.waiters(),
+    API.openTables(),
+    API.orders('?limit=200'),
+    API.staffShifts('?from=' + new Date(Date.now() - 7*86400000).toISOString().slice(0,10))
+  ]);
+  const today_ = today();
+  const appUrl = teamAppUrl();
+  const todayShifts = shifts.filter(s => s.started_at.slice(0,10) === today_);
+  const activeShifts = shifts.filter(s => !s.ended_at);
+  const totalHoursToday = todayShifts.reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Equipo</h1><div class="page-subtitle">Mozos, bartenders, cocina y otros roles</div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn btn-secondary" href="mozo.html" target="_blank">Abrir app equipo</a>
+        <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo integrante</button>
+      </div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:24px;">
+      <div class="card"><div class="card-title">En turno ahora</div><div class="card-value">${activeShifts.length}</div><div class="card-delta neu">ingresos sin salida marcada</div></div>
+      <div class="card"><div class="card-title">Horas de hoy</div><div class="card-value">${fmtHours(totalHoursToday)}</div><div class="card-delta neu">${todayShifts.length} fichaje${todayShifts.length===1?'':'s'}</div></div>
+      <div class="card">
+        <div class="card-title">App del equipo</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <a class="btn btn-secondary btn-sm" href="mozo.html" target="_blank">Abrir</a>
+          <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadTeamApk()">Descargar APK</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          <h3 style="font-size:16px;margin-bottom:6px;">Instalacion para celulares</h3>
+          <div style="color:var(--tx-mid);line-height:1.55;">El equipo entra con el email del restaurante y su PIN. El APK se descarga desde aca cuando este publicado como <strong>frontend/assets/gestiva-equipo.apk</strong>.</div>
+          <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${appUrl}</div>
+        </div>
+        <div style="min-width:220px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+          <a class="btn btn-secondary" href="mozo.html" target="_blank">Ver app</a>
+          <button class="btn btn-primary" onclick="downloadTeamApk()">Descargar APK</button>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:24px;">
+      ${waiters.length===0 ? '<div class="empty" style="grid-column:1/-1;"><h3>Sin integrantes</h3><button class="btn btn-primary" onclick="editWaiter()">+ Crear integrante</button></div>' : waiters.map(w => {
+        const activeTables = open.filter(ot => ot.waiter_id === w.id).length;
+        const activeShift = activeShifts.find(s => s.waiter_id === w.id);
+        const todayOrders = orders.filter(o => o.waiter_id === w.id && o.closed_at.slice(0,10) === today_);
+        const todaySales = todayOrders.reduce((s,o) => s + parseFloat(o.total), 0);
+        const worked = todayShifts.filter(s => s.waiter_id === w.id).reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
+        return `<div class="card" style="cursor:pointer;" onclick="editWaiter('${w.id}')">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+            <div class="avatar" style="background:${w.color};width:48px;height:48px;font-size:18px;">${(w.name||'?')[0].toUpperCase()}</div>
+            <div><div style="font-weight:700;font-size:17px;">${w.name}</div>
+                 <div style="color:var(--tx-mid);font-size:13px;">${w.role || 'Mozo'} - ${w.hasPin ? 'PIN activo' : 'sin PIN'}</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--border-soft);">
+            <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Turno</div>
+                 <div style="font-weight:700;color:${activeShift?'var(--green)':'var(--tx-mid)'};">${activeShift ? 'Trabajando' : 'Sin ingreso'}</div></div>
+            <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Horas</div>
+                 <div style="font-weight:700;">${fmtHours(worked)}</div></div>
+            <div style="text-align:right;"><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Ventas</div>
+                 <div style="font-weight:700;color:var(--or-dk);">${fmt(todaySales)}</div></div>
+          </div>
+          <div style="color:var(--tx-mid);font-size:12px;margin-top:10px;">${activeTables} mesa${activeTables===1?'':'s'} activas - ${todayOrders.length} ordenes hoy</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:16px;">Fichajes recientes</h3>
+      ${shifts.length===0 ? '<div class="empty">Todavia no hay ingresos o salidas registradas.</div>' : `<table class="data-table">
+        <thead><tr><th>Persona</th><th>Rol</th><th>Ingreso</th><th>Salida</th><th>Horas</th><th>Estado</th></tr></thead>
+        <tbody>${shifts.slice(0,20).map(s => `<tr>
+          <td><strong>${s.waiter_name}</strong></td>
+          <td>${s.waiter_role || 'Mozo'}</td>
+          <td>${new Date(s.started_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${s.ended_at ? new Date(s.ended_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
+          <td>${fmtHours(hoursBetween(s.started_at, s.ended_at || new Date()))}</td>
+          <td><span class="badge ${s.ended_at ? 'gray' : 'green'}">${s.ended_at ? 'Cerrado' : 'En turno'}</span></td>
+        </tr>`).join('')}</tbody>
+      </table>`}
+    </div>`;
+});
+async function copyTeamAppLink() {
+  try {
+    await navigator.clipboard.writeText(teamAppUrl());
+    toast('Link copiado','success');
+  } catch(e) {
+    prompt('Copiar link de la app', teamAppUrl());
+  }
+}
+async function downloadTeamApk() {
+  const apk = 'assets/gestiva-equipo.apk';
+  try {
+    const r = await fetch(apk, { method:'HEAD' });
+    if (!r.ok) throw new Error('missing');
+    location.href = apk;
+  } catch(e) {
+    toast('El APK todavia no esta publicado. Subi el archivo gestiva-equipo.apk a frontend/assets/.', 'error');
+  }
+}
+async function editWaiter(id) {
+  let w = { name:'', role:'Mozo', color:'#f97316' };
+  if (id) { const list = await API.waiters(); w = list.find(w => w.id === id) || w; }
+  openModal(id?'Editar integrante':'Nuevo integrante', `
+    <div class="field"><label>Nombre</label><input id="wName" value="${w.name||''}" placeholder="Juan"/></div>
+    <div class="field"><label>Rol</label><select id="wRole">
+      ${['Mozo','Bartender','Cocina','Caja','Encargado','Delivery','Otro'].map(r => `<option value="${r}" ${r===(w.role||'Mozo')?'selected':''}>${r}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>
+    <div class="field"><label>PIN para app del equipo</label><input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${id ? 'Dejar vacio para no cambiar' : 'Ej: 1234'}"/></div>
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">Cada persona entra a la app con el email del restaurante y su PIN.</p>`,
+    `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
+     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
+}
+async function saveWaiter(id) {
+  const data = { name: $('#wName').value.trim(), role: $('#wRole').value, color: $('#wColor').value };
+  const pin = $('#wPin').value.trim();
+  if (pin) data.pin = pin;
+  if (!data.name) return toast('Falta el nombre','error');
+  if (!id && !pin) return toast('Defini un PIN para que pueda entrar','error');
+  if (pin && pin.length < 4) return toast('El PIN debe tener al menos 4 numeros','error');
+  try { if (id) await API.waiterUpdate(id, data); else await API.waiterCreate(data); closeModal(); navigate(); toast('Integrante guardado','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function deleteWaiterCfm(id) {
+  if (!confirm('Eliminar integrante?')) return;
+  try { await API.waiterDelete(id); closeModal(); navigate(); toast('Integrante eliminado','success'); }
   catch(e) { toast(e.message==='waiter_has_open_tables'?'Tiene mesas abiertas':e.message,'error'); }
 }
 

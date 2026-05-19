@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>App Mozos · Gestiva</title>
 <link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -44,6 +45,7 @@
   .who { min-width:0; }
   .who strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .who span { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .top-actions { display:flex; gap:8px; align-items:center; }
   .content { padding:14px; max-width:980px; margin:0 auto; }
   .toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:12px; }
   .pill { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
@@ -79,6 +81,14 @@
   .cart-actions { padding:14px; border-top:1px solid var(--border); display:flex; gap:10px; }
   .cart-actions .btn { flex:1; }
   .empty { text-align:center; color:var(--muted); padding:32px 16px; }
+  .profile-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:12px; }
+  .metric { background:#fff; border:1px solid var(--border); border-radius:16px; padding:14px; }
+  .metric-label { color:var(--muted); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+  .metric-value { font-family:var(--display); font-size:24px; font-weight:800; margin-top:6px; }
+  .shift-card { background:#fff; border:1px solid var(--border); border-radius:18px; padding:16px; margin-bottom:12px; }
+  .shift-open { border-color:#86efac; background:linear-gradient(135deg,#ecfdf5,#fff); }
+  .shift-row { display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid #f1f5f9; font-size:14px; }
+  .shift-row:last-child { border-bottom:0; }
   .hidden { display:none !important; }
   @media (max-width:420px) {
     .login-card { padding:22px; }
@@ -112,7 +122,11 @@
       <strong id="restaurantName">Restaurante</strong>
       <span id="waiterName">Mozo</span>
     </div>
-    <button class="btn btn-secondary" onclick="logout()">Salir</button>
+    <div class="top-actions">
+      <button class="btn btn-secondary" id="clockBtn" onclick="toggleClock()">Ingresar</button>
+      <button class="btn btn-secondary" onclick="showProfile()">Mi panel</button>
+      <button class="btn btn-secondary" onclick="logout()">Salir</button>
+    </div>
   </header>
   <main class="content">
     <section id="tablesView">
@@ -145,16 +159,32 @@
         </div>
       </div>
     </section>
+
+    <section id="profileView" class="hidden">
+      <div class="order-head">
+        <button class="btn btn-secondary" onclick="showTables()">Mesas</button>
+        <div class="order-title">
+          <h2>Mi panel</h2>
+          <div class="meta" id="profileMeta"></div>
+        </div>
+      </div>
+      <div id="profileContent"></div>
+    </section>
   </main>
 </section>
 
 <script src="gestiva-config.js"></script>
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
-let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], table:null, items:[], cat:'todos' };
+let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos' };
 
 const $ = (s) => document.querySelector(s);
 const money = (n) => new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', maximumFractionDigits:0 }).format(Number(n||0));
+const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
+const fmtHours = (h) => {
+  const minutes = Math.round((h || 0) * 60);
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+};
 
 async function api(path, opts = {}) {
   const r = await fetch(window.API_URL + path, {
@@ -210,7 +240,9 @@ async function loadData() {
   const data = await api('/waiter/bootstrap');
   state = { ...state, ...data };
   $('#restaurantName').textContent = data.restaurant.restaurantName;
-  $('#waiterName').textContent = data.waiter.name;
+  $('#waiterName').textContent = `${data.waiter.name} · ${data.waiter.role || 'Mozo'}`;
+  $('#clockBtn').textContent = data.activeShift ? 'Marcar salida' : 'Marcar ingreso';
+  $('#clockBtn').className = data.activeShift ? 'btn btn-danger' : 'btn btn-secondary';
   renderTables();
 }
 
@@ -255,9 +287,65 @@ async function selectTable(id) {
 }
 
 function showTables() {
+  $('#profileView').classList.add('hidden');
   $('#orderView').classList.add('hidden');
   $('#tablesView').classList.remove('hidden');
   loadData().catch(console.error);
+}
+
+function showProfile() {
+  $('#tablesView').classList.add('hidden');
+  $('#orderView').classList.add('hidden');
+  $('#profileView').classList.remove('hidden');
+  renderProfile();
+}
+
+function renderProfile() {
+  const shifts = state.recentShifts || [];
+  const today = new Date().toISOString().slice(0,10);
+  const todayShifts = shifts.filter(s => s.started_at.slice(0,10) === today);
+  const hoursToday = todayShifts.reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
+  const orders = state.openTables.filter(ot => ot.waiter_id === state.waiter?.id).length;
+  $('#profileMeta').textContent = `${state.waiter?.name || ''} · ${state.waiter?.role || 'Mozo'}`;
+  $('#profileContent').innerHTML = `
+    <div class="shift-card ${state.activeShift ? 'shift-open' : ''}">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div>
+          <div class="metric-label">Estado</div>
+          <div style="font-weight:800;font-size:18px;margin-top:4px;">${state.activeShift ? 'Trabajando ahora' : 'Fuera de turno'}</div>
+          <div class="meta">${state.activeShift ? 'Ingreso: ' + new Date(state.activeShift.started_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) : 'Marca tu ingreso al llegar al restaurante.'}</div>
+        </div>
+        <button class="btn ${state.activeShift ? 'btn-danger' : 'btn-primary'}" onclick="toggleClock()">${state.activeShift ? 'Marcar salida' : 'Marcar ingreso'}</button>
+      </div>
+    </div>
+    <div class="profile-grid">
+      <div class="metric"><div class="metric-label">Horas hoy</div><div class="metric-value">${fmtHours(hoursToday)}</div></div>
+      <div class="metric"><div class="metric-label">Mesas activas</div><div class="metric-value">${orders}</div></div>
+      <div class="metric"><div class="metric-label">Rol</div><div class="metric-value">${state.waiter?.role || 'Mozo'}</div></div>
+    </div>
+    <div class="shift-card">
+      <div style="font-weight:800;margin-bottom:8px;">Mis ultimos fichajes</div>
+      ${shifts.length === 0 ? '<div class="empty">Sin ingresos registrados.</div>' : shifts.slice(0,10).map(s => `
+        <div class="shift-row">
+          <div>
+            <strong>${new Date(s.started_at).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</strong>
+            <div class="meta">${new Date(s.started_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})} - ${s.ended_at ? new Date(s.ended_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) : 'en curso'}</div>
+          </div>
+          <strong>${fmtHours(hoursBetween(s.started_at, s.ended_at || new Date()))}</strong>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function toggleClock() {
+  try {
+    const action = state.activeShift ? 'out' : 'in';
+    await api('/waiter/clock', { method:'POST', body: JSON.stringify({ action }) });
+    await loadData();
+    if (!$('#profileView').classList.contains('hidden')) renderProfile();
+    alert(action === 'in' ? 'Ingreso registrado.' : 'Salida registrada.');
+  } catch (e) {
+    alert(e.message === 'shift_not_open' ? 'No tenes un ingreso abierto.' : e.message);
+  }
 }
 
 function renderOrder() {
@@ -328,6 +416,10 @@ function logout() {
   localStorage.removeItem('gestiva_waiter_token');
   token = null;
   showLogin();
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 (async () => {
