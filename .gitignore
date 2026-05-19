@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env.local
+*.env.render
+backend/.env.render
 *.log
 .DS_Store
 dist/
