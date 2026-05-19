@@ -89,6 +89,35 @@ function computeDaysLeft(t) {
   return Math.ceil((end - now) / (1000 * 60 * 60 * 24));
 }
 
+const DEFAULT_PRODUCTS = [
+  { cat: 'Entradas', name: 'Papas fritas', price: 4500, emoji: '🍟' },
+  { cat: 'Entradas', name: 'Empanada carne', price: 1200, emoji: '🥟' },
+  { cat: 'Entradas', name: 'Picada chica', price: 9500, emoji: '🧀' },
+  { cat: 'Pizzas', name: 'Pizza muzzarella', price: 9800, emoji: '🍕' },
+  { cat: 'Pizzas', name: 'Pizza especial', price: 12500, emoji: '🍕' },
+  { cat: 'Minutas', name: 'Milanesa con papas', price: 11500, emoji: '🍽️' },
+  { cat: 'Minutas', name: 'Hamburguesa completa', price: 9800, emoji: '🍔' },
+  { cat: 'Bebidas', name: 'Agua sin gas', price: 1800, emoji: '💧' },
+  { cat: 'Bebidas', name: 'Gaseosa 500ml', price: 2500, emoji: '🥤' },
+  { cat: 'Bebidas', name: 'Cerveza pinta', price: 4200, emoji: '🍺' },
+  { cat: 'Cafetería', name: 'Café', price: 1800, emoji: '☕' },
+  { cat: 'Postres', name: 'Flan casero', price: 3800, emoji: '🍮' }
+];
+
+async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
+  if (onlyIfEmpty) {
+    const existing = await q('SELECT count(*)::int AS n FROM products WHERE tenant_id=$1', [tenantId]);
+    if (existing.rows[0].n > 0) return 0;
+  }
+
+  for (const p of DEFAULT_PRODUCTS) {
+    await q(`INSERT INTO products (tenant_id, name, cat, price, emoji, available)
+             VALUES ($1,$2,$3,$4,$5,true)`,
+      [tenantId, p.name, p.cat, p.price, p.emoji]);
+  }
+  return DEFAULT_PRODUCTS.length;
+}
+
 // Refresca el estado de suscripción según fechas (lazy eval)
 async function refreshSubscriptionStatus(tenantId) {
   const r = await q('SELECT * FROM tenants WHERE id=$1', [tenantId]);
@@ -191,6 +220,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     }
     await q('INSERT INTO waiters (tenant_id, name, color) VALUES ($1,$2,$3)',
       [t.id, ownerName || 'Mozo 1', '#f97316']);
+    await seedDefaultProducts(t.id);
 
     const token = signToken(t);
     return res.json({ token, user: publicTenant(t) });
@@ -363,6 +393,11 @@ app.use('/api', apiLimiter, requireAuth, requireSubscription);
 app.get('/api/products', async (req, res) => {
   const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, name', [req.tenant.id]);
   res.json(r.rows);
+});
+app.post('/api/products/seed-default', async (req, res) => {
+  const inserted = await seedDefaultProducts(req.tenant.id);
+  const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, name', [req.tenant.id]);
+  res.json({ inserted, products: r.rows });
 });
 app.post('/api/products', async (req, res) => {
   const { name, cat, price, emoji, available } = req.body || {};

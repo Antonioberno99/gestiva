@@ -309,6 +309,7 @@ const API = {
   productCreate: (b) => api('/api/products', { method:'POST', body: JSON.stringify(b) }),
   productUpdate: (id, b) => api('/api/products/'+id, { method:'PUT', body: JSON.stringify(b) }),
   productDelete: (id) => api('/api/products/'+id, { method:'DELETE' }),
+  productSeedDefault: () => api('/api/products/seed-default', { method:'POST' }),
   tables: () => api('/api/tables'),
   tableCreate: (b) => api('/api/tables', { method:'POST', body: JSON.stringify(b) }),
   tableDelete: (id) => api('/api/tables/'+id, { method:'DELETE' }),
@@ -709,11 +710,14 @@ route('productos', async () => {
     <div class="page-header">
       <div><h1 class="page-title">Productos</h1>
         <div class="page-subtitle">${list.length} productos · ${list.filter(p=>p.available).length} disponibles</div></div>
-      <button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${list.length===0 ? '<button class="btn btn-secondary" onclick="seedDefaultProducts()">Cargar ejemplo</button>' : ''}
+        <button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button>
+      </div>
     </div>
     <div class="chips">${cats.map(c => `<button class="chip ${c===PROD_FILTER?'active':''}" onclick="setProdFilter('${c}')">${c}</button>`).join('')}</div>
     <div class="prod-grid">
-      ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Creá tu primer producto para empezar a vender.</p><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div>` :
+      ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Cargá productos para que aparezcan como botones al abrir una mesa y armar una comanda.</p><div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;"><button class="btn btn-secondary" onclick="seedDefaultProducts()">Cargar ejemplo</button><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div></div>` :
         filtered.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
           <div class="prod-emoji">${p.emoji||'🍽️'}</div>
           <div class="prod-cat">${p.cat}</div>
@@ -724,6 +728,14 @@ route('productos', async () => {
     </div>`;
 });
 function setProdFilter(c) { PROD_FILTER = c; navigate(); }
+async function seedDefaultProducts() {
+  try {
+    const r = await API.productSeedDefault();
+    PROD_FILTER = 'todos';
+    await navigate();
+    toast(r.inserted ? 'Productos de ejemplo cargados' : 'Ya tenés productos cargados', 'success');
+  } catch(e) { toast(e.message,'error'); }
+}
 
 async function editProduct(id) {
   let p = { name:'', cat:'', price:0, emoji:'🍽️', available:true };
