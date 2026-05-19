@@ -937,7 +937,10 @@ route('mozos', async () => {
   $('#view').innerHTML = `
     <div class="page-header">
       <div><h1 class="page-title">Mozos</h1><div class="page-subtitle">${waiters.length} registrados</div></div>
-      <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo mozo</button>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn btn-secondary" href="mozo.html" target="_blank">Abrir app mozos</a>
+        <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo mozo</button>
+      </div>
     </div>
     <div class="grid grid-3">
       ${waiters.length===0 ? '<div class="empty" style="grid-column:1/-1;"><h3>Sin mozos</h3><button class="btn btn-primary" onclick="editWaiter()">+ Crear mozo</button></div>' : waiters.map(w => {
@@ -948,7 +951,7 @@ route('mozos', async () => {
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
             <div class="avatar" style="background:${w.color};width:48px;height:48px;font-size:18px;">${w.name[0].toUpperCase()}</div>
             <div><div style="font-weight:700;font-size:17px;">${w.name}</div>
-                 <div style="color:var(--tx-mid);font-size:13px;">${activeTables} mesa${activeTables===1?'':'s'} activas</div></div>
+                 <div style="color:var(--tx-mid);font-size:13px;">${activeTables} mesa${activeTables===1?'':'s'} activas · ${w.hasPin ? 'PIN activo' : 'sin PIN'}</div></div>
           </div>
           <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--border-soft);">
             <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Hoy</div>
@@ -964,14 +967,20 @@ async function editWaiter(id) {
   if (id) { const list = await API.waiters(); w = list.find(w => w.id === id); }
   openModal(id?'Editar mozo':'Nuevo mozo', `
     <div class="field"><label>Nombre</label><input id="wName" value="${w.name||''}" placeholder="Juan"/></div>
-    <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>`,
+    <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>
+    <div class="field"><label>PIN para app de mozos</label><input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${id ? 'Dejar vacío para no cambiar' : 'Ej: 1234'}"/></div>
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">El mozo entra en mozo.html con el email del restaurante y este PIN.</p>`,
     `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
 }
 async function saveWaiter(id) {
   const data = { name: $('#wName').value.trim(), color: $('#wColor').value };
+  const pin = $('#wPin').value.trim();
+  if (pin) data.pin = pin;
   if (!data.name) return toast('Falta el nombre','error');
+  if (!id && !pin) return toast('Definí un PIN para que el mozo pueda entrar','error');
+  if (pin && pin.length < 4) return toast('El PIN debe tener al menos 4 números','error');
   try { if (id) await API.waiterUpdate(id, data); else await API.waiterCreate(data); closeModal(); navigate(); toast('Mozo guardado','success'); }
   catch(e) { toast(e.message,'error'); }
 }
@@ -1094,6 +1103,12 @@ async function saveSettings() {
 
 // ---------- INIT ----------
 $('#mobileBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+setInterval(() => {
+  const current = (location.hash.slice(2) || 'dashboard').split('/')[0];
+  if (document.hidden || $('#modalRoot').innerHTML || !['dashboard', 'mesas'].includes(current)) return;
+  navigate().catch(console.error);
+}, 15000);
 
 (async () => {
   try {

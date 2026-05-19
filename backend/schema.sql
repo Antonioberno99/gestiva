@@ -64,8 +64,10 @@ CREATE TABLE IF NOT EXISTS waiters (
   tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
   color      TEXT DEFAULT '#f97316',
+  access_pin_hash TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+ALTER TABLE IF EXISTS waiters ADD COLUMN IF NOT EXISTS access_pin_hash TEXT;
 CREATE INDEX IF NOT EXISTS idx_waiters_tenant ON waiters(tenant_id);
 
 -- OPEN TABLES (mesas actualmente ocupadas)

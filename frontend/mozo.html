@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>App Mozos · Gestiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --or:#f97316; --or-dk:#ea580c; --or-lt:#fff7ed; --or-100:#ffedd5;
+    --tx:#0f172a; --muted:#64748b; --soft:#f8fafc; --border:#e2e8f0;
+    --green:#10b981; --green-lt:#d1fae5; --red:#ef4444; --yellow:#f59e0b; --purple:#7c3aed;
+    --r:14px; --shadow:0 10px 28px rgba(15,23,42,.10);
+    --ff:'Inter',system-ui,sans-serif; --display:'Outfit','Inter',sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; font-family:var(--ff); background:var(--soft); color:var(--tx); }
+  button,input { font:inherit; }
+  button { border:0; cursor:pointer; }
+  .screen { min-height:100vh; }
+  .login { display:grid; place-items:center; padding:22px; background:linear-gradient(135deg,#fff7ed,#fff); }
+  .login-card { width:100%; max-width:430px; background:#fff; border:1px solid var(--border); border-radius:24px; padding:28px; box-shadow:var(--shadow); }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:22px; }
+  .brand-mark { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; background:linear-gradient(135deg,var(--or),var(--or-dk)); color:#fff; font-weight:800; }
+  .brand-name { font-family:var(--display); font-size:22px; font-weight:800; }
+  h1 { font-family:var(--display); font-size:28px; line-height:1.05; margin:0 0 8px; }
+  .sub { color:var(--muted); margin:0 0 22px; line-height:1.5; }
+  .field { margin-bottom:14px; }
+  label { display:block; font-size:13px; font-weight:700; color:var(--muted); margin-bottom:6px; }
+  input { width:100%; min-height:46px; padding:12px 14px; border:1px solid var(--border); border-radius:12px; background:#fff; }
+  input:focus { outline:3px solid rgba(249,115,22,.18); border-color:var(--or); }
+  .btn { min-height:46px; border-radius:12px; padding:12px 16px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+  .btn-primary { width:100%; color:#fff; background:linear-gradient(135deg,var(--or),var(--or-dk)); box-shadow:0 8px 18px rgba(249,115,22,.25); }
+  .btn-secondary { background:#fff; color:var(--tx); border:1px solid var(--border); }
+  .btn-danger { background:#fee2e2; color:#b91c1c; }
+  .err { display:none; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:12px; padding:11px 12px; margin-bottom:14px; font-size:14px; }
+  .err.on { display:block; }
+
+  .app { display:none; min-height:100vh; }
+  .topbar { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--border); padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .who { min-width:0; }
+  .who strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .who span { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .content { padding:14px; max-width:980px; margin:0 auto; }
+  .toolbar { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
+  .pill.free { background:var(--green-lt); color:#047857; }
+  .pill.busy { background:var(--or-100); color:var(--or-dk); }
+  .pill.reserved { background:#ede9fe; color:var(--purple); }
+  .table-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:10px; }
+  .table { background:#fff; border:2px solid var(--border); border-radius:16px; padding:14px; text-align:left; min-height:132px; display:flex; flex-direction:column; gap:7px; }
+  .table.busy.mine { border-color:var(--or); background:linear-gradient(135deg,#fff7ed,#fff); }
+  .table.busy.other { opacity:.62; }
+  .table.reserved { border-color:#c4b5fd; background:linear-gradient(135deg,#f5f3ff,#fff); }
+  .table-num { font-family:var(--display); font-size:26px; font-weight:800; }
+  .meta { color:var(--muted); font-size:13px; line-height:1.35; }
+  .order-head { display:flex; align-items:center; gap:10px; justify-content:space-between; margin-bottom:12px; }
+  .order-title { min-width:0; }
+  .order-title h2 { font-family:var(--display); margin:0; font-size:24px; }
+  .tabs { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:8px; }
+  .tab { white-space:nowrap; padding:8px 12px; border-radius:999px; border:1px solid var(--border); background:#fff; font-weight:700; color:var(--muted); }
+  .tab.on { background:var(--or); color:#fff; border-color:var(--or); }
+  .product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(138px,1fr)); gap:10px; margin-bottom:16px; }
+  .product { min-height:102px; background:#fff; border:1px solid var(--border); border-radius:16px; padding:12px; text-align:left; display:flex; flex-direction:column; gap:5px; }
+  .product .emoji { font-size:24px; line-height:1; }
+  .product .name { font-weight:800; line-height:1.2; }
+  .product .price { color:var(--or-dk); font-weight:800; margin-top:auto; }
+  .cart { background:#fff; border:1px solid var(--border); border-radius:18px; overflow:hidden; }
+  .cart-title { padding:14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-weight:800; }
+  .cart-list { padding:4px 14px; }
+  .cart-row { display:grid; grid-template-columns:1fr auto; gap:8px; padding:12px 0; border-bottom:1px solid #f1f5f9; }
+  .cart-row:last-child { border-bottom:0; }
+  .qty { display:flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .qty button { width:38px; min-height:36px; background:#fff; font-weight:900; }
+  .qty span { min-width:34px; text-align:center; font-weight:800; }
+  .cart-actions { padding:14px; border-top:1px solid var(--border); display:flex; gap:10px; }
+  .cart-actions .btn { flex:1; }
+  .empty { text-align:center; color:var(--muted); padding:32px 16px; }
+  .hidden { display:none !important; }
+  @media (max-width:420px) {
+    .login-card { padding:22px; }
+    .content { padding:10px; }
+    .table-grid,.product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+</style>
+</head>
+<body>
+<section class="screen login" id="loginScreen">
+  <form class="login-card" id="loginForm">
+    <div class="brand"><div class="brand-mark">G</div><div class="brand-name">Gestiva</div></div>
+    <h1>App de mozos</h1>
+    <p class="sub">Entrá con el email del restaurante y tu PIN para tomar pedidos desde el celular.</p>
+    <div class="err" id="loginErr" aria-live="polite"></div>
+    <div class="field">
+      <label for="email">Email del restaurante</label>
+      <input id="email" name="email" type="email" required autocomplete="username" />
+    </div>
+    <div class="field">
+      <label for="pin">PIN del mozo</label>
+      <input id="pin" name="pin" type="password" inputmode="numeric" required autocomplete="current-password" />
+    </div>
+    <button class="btn btn-primary" id="loginBtn" type="submit">Entrar</button>
+  </form>
+</section>
+
+<section class="app" id="appScreen">
+  <header class="topbar">
+    <div class="who">
+      <strong id="restaurantName">Restaurante</strong>
+      <span id="waiterName">Mozo</span>
+    </div>
+    <button class="btn btn-secondary" onclick="logout()">Salir</button>
+  </header>
+  <main class="content">
+    <section id="tablesView">
+      <div class="toolbar">
+        <div>
+          <strong>Mesas</strong>
+          <div class="meta">Elegí una mesa para abrir o continuar una comanda.</div>
+        </div>
+        <button class="btn btn-secondary" onclick="loadData()">Actualizar</button>
+      </div>
+      <div class="table-grid" id="tableGrid"></div>
+    </section>
+
+    <section id="orderView" class="hidden">
+      <div class="order-head">
+        <button class="btn btn-secondary" onclick="showTables()">Volver</button>
+        <div class="order-title">
+          <h2 id="orderTableTitle">Mesa</h2>
+          <div class="meta" id="orderTableMeta"></div>
+        </div>
+      </div>
+      <div class="tabs" id="catTabs"></div>
+      <div class="product-grid" id="productGrid"></div>
+      <div class="cart">
+        <div class="cart-title"><span>Pedido</span><span id="cartTotal">$0</span></div>
+        <div class="cart-list" id="cartList"></div>
+        <div class="cart-actions">
+          <button class="btn btn-danger" onclick="clearCart()">Vaciar</button>
+          <button class="btn btn-primary" onclick="saveOrder()">Enviar pedido</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</section>
+
+<script src="gestiva-config.js"></script>
+<script>
+let token = localStorage.getItem('gestiva_waiter_token');
+let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], table:null, items:[], cat:'todos' };
+
+const $ = (s) => document.querySelector(s);
+const money = (n) => new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', maximumFractionDigits:0 }).format(Number(n||0));
+
+async function api(path, opts = {}) {
+  const r = await fetch(window.API_URL + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(opts.headers || {})
+    }
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) { localStorage.removeItem('gestiva_waiter_token'); showLogin(); throw new Error('Sesión vencida'); }
+  if (!r.ok) throw new Error(data.error || 'Error');
+  return data;
+}
+
+function showLogin() {
+  $('#loginScreen').style.display = 'grid';
+  $('#appScreen').style.display = 'none';
+}
+
+function showApp() {
+  $('#loginScreen').style.display = 'none';
+  $('#appScreen').style.display = 'block';
+}
+
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#loginErr');
+  const btn = $('#loginBtn');
+  err.classList.remove('on');
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+  try {
+    const data = await api('/waiter/login', {
+      method:'POST',
+      body: JSON.stringify({ email: $('#email').value.trim(), pin: $('#pin').value.trim() })
+    });
+    token = data.token;
+    localStorage.setItem('gestiva_waiter_token', token);
+    await loadData();
+    showApp();
+  } catch (e) {
+    err.textContent = e.message === 'invalid_credentials' ? 'Email o PIN incorrectos' : e.message;
+    err.classList.add('on');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+});
+
+async function loadData() {
+  const data = await api('/waiter/bootstrap');
+  state = { ...state, ...data };
+  $('#restaurantName').textContent = data.restaurant.restaurantName;
+  $('#waiterName').textContent = data.waiter.name;
+  renderTables();
+}
+
+function renderTables() {
+  const openMap = new Map(state.openTables.map(o => [o.table_id, o]));
+  $('#tableGrid').innerHTML = state.tables.map(t => {
+    const open = openMap.get(t.id);
+    const isMine = open && open.waiter_id === state.waiter.id;
+    const status = open ? (isMine ? 'busy mine' : 'busy other') : (t.status === 'reserved' ? 'reserved' : 'free');
+    const label = open ? (isMine ? 'Tu mesa' : 'Ocupada') : (t.status === 'reserved' ? 'Reservada' : 'Libre');
+    const reserved = t.status === 'reserved' && !open ? `<div class="meta">${t.reservation_name || 'Reserva'}${t.reservation_time ? ' · ' + new Date(t.reservation_time).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}) : ''}</div>` : '';
+    return `<button class="table ${status}" onclick="selectTable('${t.id}')">
+      <span class="pill ${open ? 'busy' : (t.status === 'reserved' ? 'reserved' : 'free')}">${label}</span>
+      <div class="table-num">M${t.num}</div>
+      <div class="meta">${t.seats || 4} lugares</div>
+      ${reserved}
+      ${open ? `<div class="meta">${(open.items||[]).reduce((s,it)=>s+it.qty,0)} productos cargados</div>` : ''}
+    </button>`;
+  }).join('');
+}
+
+async function selectTable(id) {
+  const table = state.tables.find(t => t.id === id);
+  const open = state.openTables.find(o => o.table_id === id);
+  if (open && open.waiter_id !== state.waiter.id) {
+    alert('Esta mesa está asignada a otro mozo.');
+    return;
+  }
+  let tableOpen = open;
+  if (!tableOpen) {
+    tableOpen = await api('/waiter/open-tables', { method:'POST', body: JSON.stringify({ tableId:id }) });
+    await loadData();
+  }
+  state.table = table;
+  state.items = structuredClone(tableOpen.items || []);
+  state.cat = 'todos';
+  $('#tablesView').classList.add('hidden');
+  $('#orderView').classList.remove('hidden');
+  $('#orderTableTitle').textContent = 'Mesa ' + table.num;
+  $('#orderTableMeta').textContent = (table.seats || 4) + ' lugares · ' + state.waiter.name;
+  renderOrder();
+}
+
+function showTables() {
+  $('#orderView').classList.add('hidden');
+  $('#tablesView').classList.remove('hidden');
+  loadData().catch(console.error);
+}
+
+function renderOrder() {
+  const cats = ['todos', ...new Set(state.products.map(p => p.cat).filter(Boolean))];
+  $('#catTabs').innerHTML = cats.map(c => `<button class="tab ${state.cat===c?'on':''}" onclick="setCat('${c}')">${c}</button>`).join('');
+  const filtered = state.products.filter(p => state.cat === 'todos' || p.cat === state.cat);
+  $('#productGrid').innerHTML = filtered.map(p => `<button class="product" onclick="addItem('${p.id}')">
+    <span class="emoji">${p.emoji || '🍽️'}</span>
+    <span class="name">${p.name}</span>
+    <span class="price">${money(p.price)}</span>
+  </button>`).join('');
+  renderCart();
+}
+
+function setCat(cat) { state.cat = cat; renderOrder(); }
+
+function addItem(productId) {
+  const existing = state.items.find(i => i.productId === productId);
+  if (existing) existing.qty += 1;
+  else state.items.push({ productId, qty:1 });
+  renderCart();
+}
+
+function changeQty(index, delta) {
+  state.items[index].qty += delta;
+  if (state.items[index].qty <= 0) state.items.splice(index, 1);
+  renderCart();
+}
+
+function clearCart() {
+  if (!state.items.length || confirm('¿Vaciar este pedido?')) {
+    state.items = [];
+    renderCart();
+  }
+}
+
+function renderCart() {
+  const prodMap = new Map(state.products.map(p => [p.id, p]));
+  let total = 0;
+  if (!state.items.length) {
+    $('#cartList').innerHTML = '<div class="empty">Todavía no cargaste productos.</div>';
+    $('#cartTotal').textContent = money(0);
+    return;
+  }
+  $('#cartList').innerHTML = state.items.map((it, i) => {
+    const p = prodMap.get(it.productId);
+    if (p) total += Number(p.price) * it.qty;
+    return `<div class="cart-row">
+      <div><strong>${p ? p.name : 'Producto'}</strong><div class="meta">${p ? money(p.price) : ''}</div></div>
+      <div class="qty"><button onclick="changeQty(${i},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${i},1)">+</button></div>
+    </div>`;
+  }).join('');
+  $('#cartTotal').textContent = money(total);
+}
+
+async function saveOrder() {
+  if (!state.table) return;
+  try {
+    await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
+    alert('Pedido enviado al panel.');
+    showTables();
+  } catch (e) {
+    alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);
+  }
+}
+
+function logout() {
+  localStorage.removeItem('gestiva_waiter_token');
+  token = null;
+  showLogin();
+}
+
+(async () => {
+  if (!token) return showLogin();
+  try {
+    await loadData();
+    showApp();
+  } catch (e) {
+    showLogin();
+  }
+})();
+</script>
+</body>
+</html>

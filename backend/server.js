@@ -67,6 +67,14 @@ function signToken(tenant) {
   );
 }
 
+function signWaiterToken(tenant, waiter) {
+  return jwt.sign(
+    { role: 'waiter', tenantId: tenant.id, waiterId: waiter.id, name: waiter.name },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
 function publicTenant(t) {
   return {
     id: t.id, email: t.email,
@@ -79,6 +87,17 @@ function publicTenant(t) {
     graceEndsAt: t.grace_ends_at,
     mpInitPoint: t.mp_init_point,
     daysLeft: computeDaysLeft(t)
+  };
+}
+
+function publicWaiter(w) {
+  return {
+    id: w.id,
+    tenant_id: w.tenant_id,
+    name: w.name,
+    color: w.color,
+    hasPin: !!w.access_pin_hash,
+    created_at: w.created_at
   };
 }
 
@@ -173,6 +192,30 @@ function requireSubscription(req, res, next) {
   const s = req.tenant.subscription_status;
   if (s === 'active' || s === 'grace') return next();
   return res.status(402).json({ error: 'subscription_required', status: s, initPoint: req.tenant.mp_init_point });
+}
+
+async function requireWaiterAuth(req, res, next) {
+  try {
+    const h = req.headers.authorization || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'no_token' });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'waiter' || !decoded.tenantId || !decoded.waiterId) {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+    const t = await refreshSubscriptionStatus(decoded.tenantId);
+    if (!t) return res.status(401).json({ error: 'tenant_not_found' });
+    if (!SKIP_BILLING && !['active', 'grace'].includes(t.subscription_status)) {
+      return res.status(402).json({ error: 'subscription_required' });
+    }
+    const waiter = (await q('SELECT * FROM waiters WHERE id=$1 AND tenant_id=$2', [decoded.waiterId, t.id])).rows[0];
+    if (!waiter) return res.status(401).json({ error: 'waiter_not_found' });
+    req.tenant = t;
+    req.waiter = waiter;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
 }
 
 // ============================================================
@@ -380,6 +423,82 @@ app.post('/billing/dev-activate', requireAuth, async (req, res) => {
 });
 
 // ============================================================
+//                       WAITER APP
+// ============================================================
+
+app.post('/waiter/login', authLimiter, async (req, res) => {
+  try {
+    const { email, pin } = req.body || {};
+    if (!email || !pin) return res.status(400).json({ error: 'missing_fields' });
+    const tenant = (await q('SELECT * FROM tenants WHERE email=$1', [email.toLowerCase().trim()])).rows[0];
+    if (!tenant) return res.status(401).json({ error: 'invalid_credentials' });
+
+    const waiters = (await q('SELECT * FROM waiters WHERE tenant_id=$1 AND access_pin_hash IS NOT NULL ORDER BY created_at', [tenant.id])).rows;
+    for (const waiter of waiters) {
+      if (await bcrypt.compare(String(pin), waiter.access_pin_hash)) {
+        const freshTenant = await refreshSubscriptionStatus(tenant.id);
+        const token = signWaiterToken(freshTenant, waiter);
+        return res.json({ token, restaurant: publicTenant(freshTenant), waiter: publicWaiter(waiter) });
+      }
+    }
+
+    return res.status(401).json({ error: 'invalid_credentials' });
+  } catch (e) {
+    console.error('[waiter-login]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/waiter/me', requireWaiterAuth, async (req, res) => {
+  res.json({ restaurant: publicTenant(req.tenant), waiter: publicWaiter(req.waiter) });
+});
+
+app.get('/waiter/bootstrap', requireWaiterAuth, async (req, res) => {
+  await seedDefaultProducts(req.tenant.id);
+  const [tables, openTables, products] = await Promise.all([
+    q('SELECT * FROM tables WHERE tenant_id=$1 ORDER BY num', [req.tenant.id]),
+    q('SELECT * FROM open_tables WHERE tenant_id=$1', [req.tenant.id]),
+    q('SELECT * FROM products WHERE tenant_id=$1 AND available=true ORDER BY cat, name', [req.tenant.id])
+  ]);
+  res.json({
+    restaurant: publicTenant(req.tenant),
+    waiter: publicWaiter(req.waiter),
+    tables: tables.rows,
+    openTables: openTables.rows,
+    products: products.rows
+  });
+});
+
+app.post('/waiter/open-tables', requireWaiterAuth, async (req, res) => {
+  const { tableId } = req.body || {};
+  if (!tableId) return res.status(400).json({ error: 'missing_table' });
+  const table = (await q('SELECT * FROM tables WHERE id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
+  if (!table) return res.status(404).json({ error: 'table_not_found' });
+
+  const current = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
+  if (current && current.waiter_id !== req.waiter.id) return res.status(409).json({ error: 'table_taken' });
+  if (current) return res.json(current);
+
+  const r = await q(`INSERT INTO open_tables (table_id, tenant_id, waiter_id, items, opened_at)
+                     VALUES ($1,$2,$3,'[]'::jsonb, now()) RETURNING *`,
+    [tableId, req.tenant.id, req.waiter.id]);
+  await q(`UPDATE tables SET status='free', reservation_name=NULL, reservation_time=NULL
+           WHERE id=$1 AND tenant_id=$2`, [tableId, req.tenant.id]);
+  res.json(r.rows[0]);
+});
+
+app.put('/waiter/open-tables/:tid', requireWaiterAuth, async (req, res) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'invalid_items' });
+  const ot = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.tid, req.tenant.id])).rows[0];
+  if (!ot) return res.status(404).json({ error: 'table_not_open' });
+  if (ot.waiter_id !== req.waiter.id) return res.status(403).json({ error: 'table_assigned_to_other_waiter' });
+  const r = await q(`UPDATE open_tables SET items=$1 WHERE table_id=$2 AND tenant_id=$3 RETURNING *`,
+    [JSON.stringify(items), req.params.tid, req.tenant.id]);
+  res.json(r.rows[0]);
+});
+
+// ============================================================
 //                       API (multi-tenant, requires sub)
 // ============================================================
 
@@ -464,21 +583,27 @@ app.delete('/api/tables/:id', async (req, res) => {
 // ----- WAITERS -----
 app.get('/api/waiters', async (req, res) => {
   const r = await q('SELECT * FROM waiters WHERE tenant_id=$1 ORDER BY name', [req.tenant.id]);
-  res.json(r.rows);
+  res.json(r.rows.map(publicWaiter));
 });
 app.post('/api/waiters', async (req, res) => {
-  const { name, color } = req.body || {};
+  const { name, color, pin } = req.body || {};
   if (!name) return res.status(400).json({ error: 'missing_name' });
-  const r = await q(`INSERT INTO waiters (tenant_id, name, color) VALUES ($1,$2,$3) RETURNING *`,
-    [req.tenant.id, name, color || '#f97316']);
-  res.json(r.rows[0]);
+  const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
+  const r = await q(`INSERT INTO waiters (tenant_id, name, color, access_pin_hash) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [req.tenant.id, name, color || '#f97316', hash]);
+  res.json(publicWaiter(r.rows[0]));
 });
 app.put('/api/waiters/:id', async (req, res) => {
-  const { name, color } = req.body || {};
-  const r = await q(`UPDATE waiters SET name=COALESCE($1,name), color=COALESCE($2,color)
-                     WHERE id=$3 AND tenant_id=$4 RETURNING *`,
-    [name, color, req.params.id, req.tenant.id]);
-  res.json(r.rows[0]);
+  const { name, color, pin } = req.body || {};
+  const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
+  const r = await q(`UPDATE waiters SET
+                       name=COALESCE($1,name),
+                       color=COALESCE($2,color),
+                       access_pin_hash=COALESCE($3,access_pin_hash)
+                     WHERE id=$4 AND tenant_id=$5 RETURNING *`,
+    [name, color, hash, req.params.id, req.tenant.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json(publicWaiter(r.rows[0]));
 });
 app.delete('/api/waiters/:id', async (req, res) => {
   // Si está asignado a una mesa abierta, error
