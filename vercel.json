@@ -6,5 +6,8 @@
   "buildCommand": null,
   "outputDirectory": "frontend",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "redirects": [
+    { "source": "/", "destination": "/landing", "permanent": false }
+  ]
 }
