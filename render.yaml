@@ -1,0 +1,42 @@
+# Render.com deployment for Gestiva SaaS backend.
+# Despliega un nuevo servicio web + una base PostgreSQL en Render.
+# Si este archivo está en la raíz del repo, Render lo detecta como blueprint.
+
+services:
+  - type: web
+    name: gestiva-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm run start:render
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MP_TEST_MODE
+        value: "1"
+      - key: SUB_PRICE_ARS
+        value: "40000"
+      - key: GRACE_DAYS
+        value: "7"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestiva-db
+          property: connectionString
+      - key: APP_URL
+        sync: false   # poner manualmente: https://gestiva.vercel.app o el dominio real
+      - key: BACKEND_URL
+        sync: false   # poner manualmente: https://gestiva-backend.onrender.com
+      - key: MP_ACCESS_TOKEN
+        sync: false   # poner manualmente: TEST-xxx (de https://www.mercadopago.com.ar/developers)
+
+databases:
+  - name: gestiva-db
+    plan: free
+    databaseName: gestiva
+    user: gestiva

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Activar suscripción · Gestiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--tx-dark:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--bg:#f8fafc;--border:#e2e8f0;--green:#10b981;--green-lt:#d1fae5;--red:#ef4444;--yellow:#f59e0b;--yellow-lt:#fef3c7;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed,#fafafa);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:520px;margin:0 auto;padding:40px 20px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:24px;text-decoration:none;color:inherit;justify-content:center}
+  .brand-logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--or),var(--or-dk));display:grid;place-items:center;color:white;box-shadow:0 6px 16px rgba(249,115,22,.35)}
+  .brand-name{font-family:var(--ff-display);font-weight:700;font-size:20px}
+  .brand-name em{color:var(--or);font-style:normal}
+  .card{background:white;border-radius:24px;padding:36px;box-shadow:var(--sh-md);text-align:center}
+  h1{font-family:var(--ff-display);font-size:26px;margin:0 0 8px;letter-spacing:-0.02em}
+  .sub{color:var(--tx-mid);margin-bottom:24px;font-size:14px}
+  .price-block{background:linear-gradient(135deg,var(--or-lt),#fff);border:1px solid var(--or-100);border-radius:20px;padding:24px;margin-bottom:20px}
+  .price{font-family:var(--ff-display);font-size:48px;font-weight:800;color:var(--or-dk);letter-spacing:-0.03em;line-height:1}
+  .price-period{color:var(--tx-mid);font-size:14px;margin-top:6px}
+  .feat{display:flex;flex-direction:column;gap:10px;text-align:left;margin:20px 0}
+  .feat-item{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--tx-mid)}
+  .feat-item svg{color:var(--green);flex-shrink:0}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 18px;border:none;border-radius:12px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;transition:transform .15s,box-shadow .15s;text-decoration:none}
+  .btn-primary{background:linear-gradient(135deg,var(--or),var(--or-dk));color:white;box-shadow:0 6px 16px rgba(249,115,22,.3)}
+  .btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(249,115,22,.4)}
+  .btn-test{background:white;color:var(--tx-dark);border:1px dashed var(--border);margin-top:10px;font-size:13px;font-weight:500}
+  .btn-test:hover{background:var(--bg)}
+  .info-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .info-row:last-child{border-bottom:none}
+  .info-row span:last-child{font-weight:600}
+  .alert{padding:14px;border-radius:10px;margin-bottom:16px;font-size:13px;text-align:left}
+  .alert.warn{background:var(--yellow-lt);color:#b45309;border:1px solid #fde68a}
+  .alert.info{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+  .alert.success{background:var(--green-lt);color:#047857;border:1px solid #6ee7b7}
+  .logout{text-align:center;margin-top:18px;font-size:12px;color:var(--tx-lt)}
+  .logout a{color:var(--tx-mid);text-decoration:underline;cursor:pointer}
+  .mp-logo{background:#00b1ea;color:white;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:0.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="landing.html" class="brand">
+    <div class="brand-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg></div>
+    <div class="brand-name">Gest<em>iva</em></div>
+  </a>
+
+  <div class="card" id="card">Cargando...</div>
+
+  <div class="logout">
+    <a id="logout">Cerrar sesión</a>
+  </div>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const token = localStorage.getItem('gestiva_token');
+const user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
+if (!token || !user) location.href = 'login.html';
+
+document.getElementById('logout').onclick = () => {
+  localStorage.removeItem('gestiva_token');
+  localStorage.removeItem('gestiva_user');
+  location.href = 'landing.html';
+};
+
+async function loadStatus() {
+  const r = await fetch(window.API_URL + '/billing/status', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (r.status === 401) { location.href = 'login.html'; return; }
+  return r.json();
+}
+
+function renderCheckout(status) {
+  const s = status?.status || 'pending';
+  const card = document.getElementById('card');
+
+  if (s === 'active') {
+    card.innerHTML = `
+      <div class="alert success">✓ Tu suscripción está activa hasta ${new Date(status.endsAt).toLocaleDateString('es-AR', {day:'numeric',month:'long',year:'numeric'})}</div>
+      <h1>¡Listo!</h1>
+      <p class="sub">Hola ${user.restaurantName}, ya podés entrar a tu panel.</p>
+      <a href="app.html" class="btn btn-primary">Ir al panel →</a>
+    `;
+    return;
+  }
+
+  if (s === 'grace') {
+    const daysGrace = Math.max(0, Math.ceil((new Date(status.graceEndsAt) - new Date()) / 86400000));
+    card.innerHTML = `
+      <div class="alert warn">Tu suscripción venció. Tenés <strong>${daysGrace} día${daysGrace===1?'':'s'}</strong> de gracia para renovar.</div>
+      <h1>Renová tu suscripción</h1>
+      <p class="sub">Para evitar bloqueo, renová antes de ${new Date(status.graceEndsAt).toLocaleDateString('es-AR')}.</p>
+      ${renderPayBlock()}
+    `;
+    bindPayBtn();
+    return;
+  }
+
+  if (s === 'expired' || s === 'cancelled') {
+    card.innerHTML = `
+      <div class="alert warn">Tu suscripción está ${s === 'expired' ? 'vencida' : 'cancelada'}. Reactivala para volver a usar el panel.</div>
+      <h1>Reactivar suscripción</h1>
+      <p class="sub">Hola ${user.restaurantName}, reactivá tu cuenta para seguir trabajando.</p>
+      ${renderPayBlock()}
+    `;
+    bindPayBtn();
+    return;
+  }
+
+  // pending
+  card.innerHTML = `
+    <h1>Activá tu suscripción</h1>
+    <p class="sub">Hola <strong>${user.restaurantName}</strong>, falta solo un paso para empezar.</p>
+
+    <div class="price-block">
+      <div class="price">$40.000</div>
+      <div class="price-period">por mes · Argentina</div>
+    </div>
+
+    <div class="feat">
+      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Mesas, comandas, caja y reportes ilimitados</div>
+      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Datos en la nube · acceso desde cualquier dispositivo</div>
+      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Cancelá cuando quieras · sin permanencia</div>
+      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Soporte por WhatsApp</div>
+    </div>
+
+    ${renderPayBlock()}
+  `;
+  bindPayBtn();
+}
+
+function renderPayBlock() {
+  return `
+    <button class="btn btn-primary" id="payBtn">
+      Pagar con <span class="mp-logo">MercadoPago</span> →
+    </button>
+    <button class="btn btn-test" id="testBtn">
+      🧪 Simular pago (modo TEST)
+    </button>
+    <p style="font-size:11px;color:var(--tx-lt);margin-top:12px;">
+      Se cobra automáticamente el mismo día de cada mes. Podés cancelar desde MercadoPago.
+    </p>
+  `;
+}
+
+async function bindPayBtn() {
+  const payBtn = document.getElementById('payBtn');
+  const testBtn = document.getElementById('testBtn');
+
+  if (payBtn) payBtn.onclick = async () => {
+    payBtn.disabled = true; payBtn.textContent = 'Generando link de pago...';
+    try {
+      const r = await fetch(window.API_URL + '/billing/subscribe', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Error al generar pago');
+      if (data.initPoint) window.location.href = data.initPoint;
+      else throw new Error('No se recibió URL de pago');
+    } catch (e) {
+      alert('Error: ' + e.message);
+      payBtn.disabled = false; payBtn.innerHTML = 'Pagar con <span class="mp-logo">MercadoPago</span> →';
+    }
+  };
+
+  if (testBtn) testBtn.onclick = async () => {
+    if (!confirm('¿Simular pago exitoso? (solo disponible en modo TEST)')) return;
+    testBtn.disabled = true; testBtn.textContent = 'Activando...';
+    try {
+      const r = await fetch(window.API_URL + '/billing/dev-activate', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + token }
+      });
+      if (!r.ok) {
+        const data = await r.json();
+        throw new Error(data.error === 'not_in_test_mode' ? 'El backend no está en modo TEST' : data.error);
+      }
+      // refresh user
+      const me = await fetch(window.API_URL + '/auth/me', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+      localStorage.setItem('gestiva_user', JSON.stringify(me.user));
+      location.reload();
+    } catch (e) {
+      alert('Error: ' + e.message);
+      testBtn.disabled = false; testBtn.textContent = '🧪 Simular pago (modo TEST)';
+    }
+  };
+}
+
+loadStatus().then(renderCheckout).catch(e => {
+  document.getElementById('card').innerHTML = '<div class="alert warn">Error de conexión con el backend. Verificá que esté corriendo.</div>';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Iniciar sesión · Gestiva</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--tx-dark:#0f172a;--tx-mid:#475569;--bg:#f8fafc;--border:#e2e8f0;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed,#fafafa);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:420px;margin:0 auto;padding:60px 20px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;text-decoration:none;color:inherit;justify-content:center}
+  .brand-logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--or),var(--or-dk));display:grid;place-items:center;color:white;box-shadow:0 6px 16px rgba(249,115,22,.35)}
+  .brand-name{font-family:var(--ff-display);font-weight:700;font-size:20px}
+  .brand-name em{color:var(--or);font-style:normal}
+  .card{background:white;border-radius:24px;padding:36px;box-shadow:var(--sh-md)}
+  h1{font-family:var(--ff-display);font-size:24px;margin:0 0 8px;letter-spacing:-0.02em;text-align:center}
+  .sub{color:var(--tx-mid);margin-bottom:24px;font-size:14px;text-align:center}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:6px}
+  .field input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+  .field input:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .btn{width:100%;padding:13px 16px;border:none;border-radius:12px;font-weight:600;font-size:15px;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--or),var(--or-dk));color:white;box-shadow:0 6px 16px rgba(249,115,22,.3);transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(249,115,22,.4)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .err{background:#fee2e2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none}
+  .err.on{display:block}
+  .alt{text-align:center;margin-top:20px;font-size:13px;color:var(--tx-mid)}
+  .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="landing.html" class="brand">
+    <div class="brand-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg></div>
+    <div class="brand-name">Gest<em>iva</em></div>
+  </a>
+  <div class="card">
+    <h1>Iniciar sesión</h1>
+    <p class="sub">Accedé a tu sistema Gestiva</p>
+    <div class="err" id="err"></div>
+    <form id="loginForm">
+      <div class="field">
+        <label>Email</label>
+        <input id="email" type="email" required autofocus autocomplete="email"/>
+      </div>
+      <div class="field">
+        <label>Contraseña</label>
+        <input id="password" type="password" required autocomplete="current-password"/>
+      </div>
+      <button class="btn" id="btn" type="submit">Iniciar sesión</button>
+    </form>
+    <div class="alt">¿Sos nuevo? <a href="signup.html">Crear cuenta</a></div>
+  </div>
+</div>
+<script src="gestiva-config.js"></script>
+<script>
+const form = document.getElementById('loginForm');
+const errEl = document.getElementById('err');
+const btn = document.getElementById('btn');
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errEl.classList.remove('on');
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const r = await fetch(window.API_URL + '/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('password').value
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : (data.error || 'Error'));
+    localStorage.setItem('gestiva_token', data.token);
+    localStorage.setItem('gestiva_user', JSON.stringify(data.user));
+    // si suscripción está activa o en gracia → app; si no → checkout
+    if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+      location.href = 'app.html';
+    } else {
+      location.href = 'checkout.html';
+    }
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+  }
+});
+</script>
+</body>
+</html>

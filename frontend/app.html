@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gestiva · App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed;
+    --or-100: #ffedd5; --or-200: #fed7aa;
+    --tx-dark: #0f172a; --tx-mid: #475569; --tx-lt: #94a3b8;
+    --bg: #f8fafc; --panel: #ffffff; --border: #e2e8f0; --border-soft: #f1f5f9;
+    --green: #10b981; --green-lt: #d1fae5;
+    --red: #ef4444; --red-lt: #fee2e2;
+    --blue: #3b82f6; --blue-lt: #dbeafe;
+    --yellow: #f59e0b; --yellow-lt: #fef3c7;
+    --purple: #8b5cf6; --purple-lt: #ede9fe;
+    --sh-sm: 0 2px 8px rgba(15,23,42,.06);
+    --sh-md: 0 8px 24px rgba(15,23,42,.08);
+    --sh-lg: 0 20px 48px rgba(15,23,42,.12);
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px;
+    --ff-display: 'Outfit','Inter',sans-serif;
+    --ff-body: 'Inter',-apple-system,sans-serif;
+    --ease: cubic-bezier(0.16,1,0.3,1);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: var(--ff-body); font-size: 14px; color: var(--tx-dark);
+    background: var(--bg); -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+  h1,h2,h3,h4 { font-family: var(--ff-display); margin: 0; letter-spacing: -0.02em; }
+
+  .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .sidebar { background:#fff; border-right:1px solid var(--border); padding:20px 16px;
+    display:flex; flex-direction:column; gap:4px; position:sticky; top:0; height:100vh; }
+  .brand { display:flex; align-items:center; gap:10px; padding:8px 12px 20px; text-decoration:none; color:inherit; }
+  .brand-logo { width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,var(--or),var(--or-dk)); display:grid; place-items:center; color:white; flex-shrink:0; box-shadow:0 4px 12px rgba(249,115,22,.35); }
+  .brand-name { font-family:var(--ff-display); font-weight:700; font-size:18px; }
+  .brand-name em { color: var(--or); font-style: normal; }
+
+  .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--r-md); color:var(--tx-mid); font-weight:500; transition:background .15s,color .15s; text-decoration:none; }
+  .nav-item:hover { background: var(--bg); color: var(--tx-dark); }
+  .nav-item.active { background: var(--or-lt); color: var(--or-dk); font-weight: 600; }
+  .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  .sidebar-footer { margin-top:auto; padding:12px; border-top:1px solid var(--border-soft); display:flex; flex-direction:column; gap:10px; }
+  .sub-pill { padding:10px 12px; background:var(--bg); border-radius:var(--r-md); font-size:12px; }
+  .sub-pill .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .sub-pill .restaurant { font-weight:700; color:var(--tx-dark); margin-bottom:4px; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sub-pill .status { display:flex; align-items:center; gap:6px; font-size:11px; }
+  .sub-pill .dot { width:7px; height:7px; border-radius:50%; }
+  .sub-pill.active .dot { background:var(--green); }
+  .sub-pill.grace .dot { background:var(--yellow); }
+  .sub-pill.other .dot { background:var(--red); }
+  .logout-btn { color:var(--tx-mid); font-size:12px; padding:6px 12px; border-radius:8px; text-align:left; }
+  .logout-btn:hover { background:var(--bg); color:var(--red); }
+
+  .cash-pill { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; background:var(--bg); border-radius:var(--r-md); font-size:12px; }
+  .cash-pill .dot { width:8px; height:8px; border-radius:50%; }
+  .cash-pill.open .dot { background:var(--green); box-shadow:0 0 0 3px rgba(16,185,129,.2); }
+  .cash-pill.closed .dot { background:var(--red); box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+
+  .main { padding: 24px 32px; overflow-x: hidden; }
+  .page-header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; gap:16px; flex-wrap:wrap; }
+  .page-title { font-size: 28px; font-weight: 700; }
+  .page-subtitle { color: var(--tx-mid); margin-top: 4px; font-size: 14px; }
+
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:var(--r-md); font-weight:600; font-size:14px; transition:transform .15s,box-shadow .15s,background .15s; white-space:nowrap; text-decoration:none; }
+  .btn svg { width:16px; height:16px; }
+  .btn-primary { background:linear-gradient(135deg,var(--or),var(--or-dk)); color:white; box-shadow:0 4px 12px rgba(249,115,22,.3); }
+  .btn-primary:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(249,115,22,.4); }
+  .btn-secondary { background:white; color:var(--tx-dark); border:1px solid var(--border); }
+  .btn-secondary:hover { background:var(--bg); border-color:var(--tx-lt); }
+  .btn-danger { background:var(--red); color:white; }
+  .btn-danger:hover { background:#dc2626; }
+  .btn-ghost { padding:6px 10px; color:var(--tx-mid); border-radius:var(--r-sm); }
+  .btn-ghost:hover { background:var(--bg); color:var(--tx-dark); }
+  .btn-sm { padding:6px 12px; font-size:13px; }
+  .btn-icon { padding:8px; }
+  .btn-block { width:100%; justify-content:center; }
+
+  .card { background:var(--panel); border-radius:var(--r-lg); border:1px solid var(--border); padding:20px; }
+  .card-title { font-size:13px; color:var(--tx-mid); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
+  .card-value { font-size:28px; font-weight:700; font-family:var(--ff-display); letter-spacing:-0.02em; }
+  .card-delta { font-size:12px; margin-top:6px; font-weight:600; }
+  .card-delta.up { color:var(--green); } .card-delta.down { color:var(--red); } .card-delta.neu { color:var(--tx-lt); }
+
+  .grid { display:grid; gap:16px; }
+  .grid-4 { grid-template-columns: repeat(4,1fr); }
+  .grid-3 { grid-template-columns: repeat(3,1fr); }
+  .grid-2 { grid-template-columns: repeat(2,1fr); }
+  @media (max-width:1100px) { .grid-4 { grid-template-columns: repeat(2,1fr); } }
+  @media (max-width:700px) { .grid-4,.grid-3,.grid-2 { grid-template-columns: 1fr; } }
+
+  .table-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:14px; }
+  .table-card { border-radius:var(--r-lg); padding:18px 16px; cursor:pointer; transition:transform .15s var(--ease),box-shadow .15s,border-color .15s; border:2px solid var(--border); background:white; position:relative; text-align:left; display:flex; flex-direction:column; gap:6px; min-height:130px; }
+  .table-card:hover { transform:translateY(-3px); box-shadow:var(--sh-md); }
+  .table-card.libre { border-color:var(--border); }
+  .table-card.ocupada { border-color:var(--or); background:linear-gradient(135deg,#fff7ed,#fff); box-shadow:0 4px 16px rgba(249,115,22,.15); }
+  .table-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:3px 8px; border-radius:999px; align-self:flex-start; }
+  .table-status.libre { background:var(--green-lt); color:#047857; }
+  .table-status.ocupada { background:var(--or-100); color:var(--or-dk); }
+  .table-num { font-size:26px; font-weight:800; font-family:var(--ff-display); }
+  .table-total { font-size:18px; font-weight:700; color:var(--or-dk); }
+  .table-meta { font-size:12px; color:var(--tx-mid); }
+
+  .list { display:flex; flex-direction:column; }
+  .list-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-soft); }
+  .list-row:last-child { border-bottom:none; }
+  .list-icon { width:36px; height:36px; border-radius:10px; background:var(--or-lt); display:grid; place-items:center; color:var(--or-dk); flex-shrink:0; font-weight:700; font-size:12px; }
+  .list-main { flex:1; min-width:0; }
+  .list-title { font-weight:600; }
+  .list-sub { font-size:12px; color:var(--tx-mid); margin-top:2px; }
+  .list-right { text-align:right; font-weight:600; }
+
+  .field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .field label { font-size:13px; font-weight:600; color:var(--tx-mid); }
+  .field input, .field select, .field textarea { padding:10px 12px; border-radius:var(--r-md); border:1px solid var(--border); background:white; transition:border-color .15s,box-shadow .15s; }
+  .field input:focus, .field select:focus, .field textarea:focus { outline:none; border-color:var(--or); box-shadow:0 0 0 3px rgba(249,115,22,.15); }
+
+  .modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.5); display:flex; align-items:center; justify-content:center; z-index:100; backdrop-filter:blur(2px); padding:20px; }
+  .modal { background:white; border-radius:var(--r-xl); max-width:540px; width:100%; max-height:90vh; overflow-y:auto; box-shadow:var(--sh-lg); }
+  .modal-header { padding:20px 24px; border-bottom:1px solid var(--border-soft); display:flex; justify-content:space-between; align-items:center; }
+  .modal-title { font-size:20px; font-weight:700; }
+  .modal-body { padding:24px; }
+  .modal-footer { padding:16px 24px; border-top:1px solid var(--border-soft); display:flex; gap:10px; justify-content:flex-end; }
+
+  .prod-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .prod-card { background:white; border:1px solid var(--border); border-radius:var(--r-md); padding:14px; cursor:pointer; transition:all .15s; display:flex; flex-direction:column; gap:6px; text-align:left; }
+  .prod-card:hover { border-color:var(--or); box-shadow:var(--sh-sm); transform:translateY(-2px); }
+  .prod-card.unavailable { opacity:.5; cursor:not-allowed; }
+  .prod-emoji { font-size:26px; line-height:1; }
+  .prod-name { font-weight:600; font-size:13px; line-height:1.3; }
+  .prod-cat { font-size:11px; color:var(--tx-lt); text-transform:uppercase; letter-spacing:0.04em; }
+  .prod-price { font-weight:700; color:var(--or-dk); margin-top:auto; }
+
+  .cart { display:flex; flex-direction:column; background:white; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
+  .cart-header { padding:16px 20px; border-bottom:1px solid var(--border-soft); display:flex; justify-content:space-between; align-items:center; }
+  .cart-items { flex:1; max-height:480px; overflow-y:auto; padding:8px 20px; }
+  .cart-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-soft); }
+  .cart-item:last-child { border-bottom:none; }
+  .cart-qty { display:flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; }
+  .cart-qty button { padding:4px 10px; font-weight:700; color:var(--tx-mid); }
+  .cart-qty button:hover { background:var(--bg); color:var(--or-dk); }
+  .cart-qty .qty { padding:4px 10px; font-weight:700; min-width:28px; text-align:center; }
+  .cart-item-name { flex:1; min-width:0; }
+  .cart-item-price { font-weight:600; color:var(--or-dk); white-space:nowrap; }
+  .cart-empty { padding:40px 20px; text-align:center; color:var(--tx-lt); }
+  .cart-footer { padding:16px 20px; border-top:1px solid var(--border-soft); background:var(--bg); }
+  .cart-total { display:flex; justify-content:space-between; margin-bottom:12px; font-size:18px; font-weight:700; }
+
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .chip { padding:7px 14px; border-radius:999px; background:white; border:1px solid var(--border); font-size:13px; font-weight:500; transition:all .15s; }
+  .chip:hover { border-color:var(--or); }
+  .chip.active { background:var(--or); color:white; border-color:var(--or); }
+
+  .bar-chart { display:flex; flex-direction:column; gap:10px; }
+  .bar-row { display:grid; grid-template-columns:140px 1fr auto; gap:12px; align-items:center; font-size:13px; }
+  .bar-track { background:var(--bg); border-radius:999px; height:10px; overflow:hidden; }
+  .bar-fill { height:100%; background:linear-gradient(90deg,var(--or),var(--or-dk)); border-radius:999px; transition:width .4s var(--ease); }
+
+  .toast-wrap { position:fixed; bottom:24px; right:24px; display:flex; flex-direction:column; gap:10px; z-index:200; }
+  .toast { background:var(--tx-dark); color:white; padding:12px 16px; border-radius:var(--r-md); font-size:13px; font-weight:500; box-shadow:var(--sh-md); animation:slidein .3s var(--ease); display:flex; align-items:center; gap:10px; }
+  .toast.success { background:var(--green); } .toast.error { background:var(--red); }
+  @keyframes slidein { from { transform:translateX(20px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+  .empty { padding:60px 20px; text-align:center; color:var(--tx-mid); }
+  .empty svg { width:56px; height:56px; color:var(--tx-lt); margin-bottom:12px; }
+  .empty h3 { font-size:18px; margin-bottom:6px; }
+
+  .data-table { width:100%; border-collapse:collapse; }
+  .data-table th { text-align:left; padding:10px 12px; font-size:12px; color:var(--tx-mid); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; border-bottom:1px solid var(--border); }
+  .data-table td { padding:12px; border-bottom:1px solid var(--border-soft); }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tr:hover td { background:var(--bg); }
+
+  .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:999px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; }
+  .badge.green { background:var(--green-lt); color:#047857; }
+  .badge.red { background:var(--red-lt); color:#b91c1c; }
+  .badge.blue { background:var(--blue-lt); color:#1d4ed8; }
+  .badge.yellow { background:var(--yellow-lt); color:#b45309; }
+  .badge.gray { background:var(--bg); color:var(--tx-mid); }
+
+  .avatar { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; color:white; font-weight:700; font-size:13px; flex-shrink:0; }
+
+  .grace-banner { background:linear-gradient(135deg,#fef3c7,#fffbeb); border:1px solid #fde68a; color:#b45309; padding:14px 18px; border-radius:12px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .grace-banner b { color:#92400e; }
+  .grace-banner a { background:var(--or-dk); color:white; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; }
+
+  /* Loader */
+  .loading { padding:60px 20px; text-align:center; color:var(--tx-mid); }
+  .loading-spinner { width:40px; height:40px; border:4px solid var(--bg); border-top-color:var(--or); border-radius:50%; animation:spin 1s linear infinite; margin:0 auto 14px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position:fixed; left:0; top:0; bottom:0; width:240px; z-index:50; transform:translateX(-100%); transition:transform .25s var(--ease); }
+    .sidebar.open { transform:translateX(0); }
+    .main { padding:16px; }
+    .mobile-menu { display:inline-flex !important; }
+  }
+  .mobile-menu { display:none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <a href="#/dashboard" class="brand">
+      <div class="brand-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="brand-name">Gest<em>iva</em></div>
+    </a>
+    <a href="#/dashboard" class="nav-item" data-route="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+      Dashboard
+    </a>
+    <a href="#/mesas" class="nav-item" data-route="mesas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18M5 8v12M19 8v12M9 8V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v3"/></svg>
+      Mesas
+    </a>
+    <a href="#/productos" class="nav-item" data-route="productos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v18l6-3 6 3V4a2 2 0 0 0-2-2z"/></svg>
+      Productos
+    </a>
+    <a href="#/caja" class="nav-item" data-route="caja">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="2.5"/></svg>
+      Caja
+    </a>
+    <a href="#/mozos" class="nav-item" data-route="mozos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+      Mozos
+    </a>
+    <a href="#/reportes" class="nav-item" data-route="reportes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
+      Reportes
+    </a>
+    <a href="#/ajustes" class="nav-item" data-route="ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Ajustes
+    </a>
+
+    <div class="sidebar-footer">
+      <div id="subPill" class="sub-pill"></div>
+      <div id="cashPill" class="cash-pill closed">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="dot"></div>
+          <div>
+            <div style="font-weight:600;">Caja</div>
+            <div id="cashStatus" style="color:var(--tx-mid);font-size:11px;">Cerrada</div>
+          </div>
+        </div>
+        <div id="cashAmount" style="font-weight:700;color:var(--or-dk);"></div>
+      </div>
+      <button class="logout-btn" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <button class="btn btn-secondary btn-sm mobile-menu" id="mobileBtn" style="margin-bottom:12px;">☰ Menú</button>
+    <div id="graceBanner"></div>
+    <div id="view"><div class="loading"><div class="loading-spinner"></div>Cargando...</div></div>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="gestiva-config.js"></script>
+<script>
+// ============================================================
+//                   GASTROPANEL APP (API-backed)
+// ============================================================
+
+const TOKEN = localStorage.getItem('gestiva_token');
+let USER = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
+if (!TOKEN || !USER) location.href = 'login.html';
+
+const $ = (s, c = document) => c.querySelector(s);
+const $$ = (s, c = document) => [...c.querySelectorAll(s)];
+const CURRENCY = () => USER?.currency || '$';
+const fmt = (n) => CURRENCY() + ' ' + Math.round(n || 0).toLocaleString('es-AR');
+const today = () => new Date().toISOString().slice(0,10);
+
+// ---------- API ----------
+async function api(path, opts = {}) {
+  const r = await fetch(window.API_URL + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + TOKEN,
+      ...(opts.headers || {})
+    }
+  });
+  const text = await r.text();
+  const data = text ? JSON.parse(text) : {};
+  if (r.status === 401) { localStorage.clear(); location.href = 'login.html'; throw new Error('unauthorized'); }
+  if (r.status === 402) { location.href = 'checkout.html'; throw new Error('subscription_required'); }
+  if (!r.ok) throw new Error(data.error || 'api_error');
+  return data;
+}
+const API = {
+  me: () => api('/auth/me'),
+  products: () => api('/api/products'),
+  productCreate: (b) => api('/api/products', { method:'POST', body: JSON.stringify(b) }),
+  productUpdate: (id, b) => api('/api/products/'+id, { method:'PUT', body: JSON.stringify(b) }),
+  productDelete: (id) => api('/api/products/'+id, { method:'DELETE' }),
+  tables: () => api('/api/tables'),
+  tableCreate: (b) => api('/api/tables', { method:'POST', body: JSON.stringify(b) }),
+  tableDelete: (id) => api('/api/tables/'+id, { method:'DELETE' }),
+  waiters: () => api('/api/waiters'),
+  waiterCreate: (b) => api('/api/waiters', { method:'POST', body: JSON.stringify(b) }),
+  waiterUpdate: (id, b) => api('/api/waiters/'+id, { method:'PUT', body: JSON.stringify(b) }),
+  waiterDelete: (id) => api('/api/waiters/'+id, { method:'DELETE' }),
+  openTables: () => api('/api/open-tables'),
+  openTable: (b) => api('/api/open-tables', { method:'POST', body: JSON.stringify(b) }),
+  updateOpenTable: (tid, b) => api('/api/open-tables/'+tid, { method:'PUT', body: JSON.stringify(b) }),
+  closeOpenTable: (tid) => api('/api/open-tables/'+tid, { method:'DELETE' }),
+  createOrder: (b) => api('/api/orders', { method:'POST', body: JSON.stringify(b) }),
+  orders: (qs = '') => api('/api/orders' + qs),
+  cash: () => api('/api/cash'),
+  cashOpen: (b) => api('/api/cash/open', { method:'POST', body: JSON.stringify(b) }),
+  cashClose: (b) => api('/api/cash/close', { method:'POST', body: JSON.stringify(b) }),
+  cashMovement: (b) => api('/api/cash/movement', { method:'POST', body: JSON.stringify(b) }),
+  dashboard: () => api('/api/dashboard'),
+  settings: (b) => api('/api/settings', { method:'PUT', body: JSON.stringify(b) }),
+};
+
+// ---------- Toasts ----------
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type || '');
+  el.textContent = msg;
+  $('#toastWrap').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
+}
+
+// ---------- Modal ----------
+function openModal(title, bodyHtml, footerHtml = '') {
+  $('#modalRoot').innerHTML = `
+    <div class="modal-backdrop" id="modalBd">
+      <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title">${title}</div>
+          <button class="btn-ghost btn-icon" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">${bodyHtml}</div>
+        ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
+      </div>
+    </div>`;
+  $('#modalBd').addEventListener('click', (e) => { if (e.target.id === 'modalBd') closeModal(); });
+}
+function closeModal() { $('#modalRoot').innerHTML = ''; }
+
+// ---------- Sidebar ----------
+function logout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  localStorage.clear(); location.href = 'login.html';
+}
+function refreshSubPill() {
+  const pill = $('#subPill');
+  const status = USER.subscriptionStatus;
+  const days = USER.daysLeft;
+  const cls = status === 'active' ? 'active' : (status === 'grace' ? 'grace' : 'other');
+  pill.className = 'sub-pill ' + cls;
+  let label = status === 'active' ? `Activa · ${days || '–'}d`
+            : status === 'grace' ? `Período de gracia`
+            : status === 'expired' ? 'Vencida'
+            : status === 'cancelled' ? 'Cancelada' : 'Pendiente';
+  pill.innerHTML = `
+    <div class="restaurant">${USER.restaurantName}</div>
+    <div class="status"><div class="dot"></div>${label}</div>
+  `;
+}
+function refreshGraceBanner() {
+  const el = $('#graceBanner');
+  if (USER.subscriptionStatus === 'grace') {
+    const days = Math.max(0, Math.ceil((new Date(USER.graceEndsAt) - new Date()) / 86400000));
+    el.innerHTML = `<div class="grace-banner">
+      <div>⚠️ <b>Tu suscripción venció</b>. Te quedan <b>${days} día${days===1?'':'s'}</b> para renovar antes que se bloquee la cuenta.</div>
+      <a href="checkout.html">Renovar ahora</a>
+    </div>`;
+  } else el.innerHTML = '';
+}
+let CASH_CACHE = null;
+async function refreshCashPill() {
+  try {
+    if (!CASH_CACHE) {
+      const c = await API.cash();
+      CASH_CACHE = c.current;
+    }
+    const pill = $('#cashPill');
+    const status = $('#cashStatus');
+    const amount = $('#cashAmount');
+    if (CASH_CACHE) {
+      const txs = CASH_CACHE.transactions || [];
+      const total = parseFloat(CASH_CACHE.opening_amount) + txs.reduce((s,t) => s + (t.type === 'in' ? t.amount : -t.amount), 0);
+      pill.className = 'cash-pill open';
+      status.textContent = 'Abierta';
+      amount.textContent = fmt(total);
+    } else {
+      pill.className = 'cash-pill closed';
+      status.textContent = 'Cerrada';
+      amount.textContent = '';
+    }
+  } catch(e) {}
+}
+
+// ---------- Router ----------
+const routes = {};
+function route(path, fn) { routes[path] = fn; }
+async function navigate() {
+  const hash = location.hash.slice(2) || 'dashboard';
+  const [path, ...params] = hash.split('/');
+  $$('.nav-item').forEach(a => a.classList.toggle('active', a.dataset.route === path));
+  const fn = routes[path] || routes['dashboard'];
+  $('#view').innerHTML = `<div class="loading"><div class="loading-spinner"></div>Cargando...</div>`;
+  try {
+    await fn(params);
+  } catch (e) {
+    if (e.message === 'subscription_required' || e.message === 'unauthorized') return;
+    $('#view').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+  await refreshCashPill();
+  $('#sidebar').classList.remove('open');
+}
+window.addEventListener('hashchange', navigate);
+
+// ============================================================
+//                        VIEWS
+// ============================================================
+
+// ---------- DASHBOARD ----------
+route('dashboard', async () => {
+  const d = await API.dashboard();
+  const totalToday = d.ordersToday.reduce((s,o) => s + parseFloat(o.total), 0);
+  const cashTotal = d.cash
+    ? parseFloat(d.cash.opening_amount) + (d.cash.transactions||[]).reduce((s,t) => s + (t.type==='in'?t.amount:-t.amount), 0)
+    : 0;
+
+  // top products today
+  const prodSales = {};
+  d.ordersToday.forEach(o => (o.items||[]).forEach(it => {
+    prodSales[it.productId] = (prodSales[it.productId] || 0) + it.qty;
+  }));
+  const top = Object.entries(prodSales).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxSale = top[0]?.[1] || 1;
+  const allProds = await API.products();
+  const prodMap = new Map(allProds.map(p => [p.id, p]));
+
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Dashboard</h1>
+        <div class="page-subtitle">Hoy · ${new Date().toLocaleDateString('es-AR', {weekday:'long',day:'numeric',month:'long'})}</div>
+      </div>
+      <a href="#/mesas" class="btn btn-primary">+ Abrir mesa</a>
+    </div>
+    <div class="grid grid-4" style="margin-bottom:24px;">
+      <div class="card"><div class="card-title">Vendido hoy</div>
+        <div class="card-value">${fmt(totalToday)}</div>
+        <div class="card-delta ${totalToday>0?'up':'neu'}">${d.ordersToday.length} órdenes</div></div>
+      <div class="card"><div class="card-title">Mesas activas</div>
+        <div class="card-value">${d.openCount} / ${d.tablesCount}</div>
+        <div class="card-delta neu">${d.tablesCount - d.openCount} libres</div></div>
+      <div class="card"><div class="card-title">En caja</div>
+        <div class="card-value">${d.cash ? fmt(cashTotal) : '—'}</div>
+        <div class="card-delta ${d.cash?'up':'down'}">${d.cash?'Caja abierta':'Caja cerrada'}</div></div>
+      <div class="card"><div class="card-title">Productos</div>
+        <div class="card-value">${d.productsAvailable}</div>
+        <div class="card-delta neu">${d.productsTotal} en catálogo</div></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:24px;">
+      <div class="card">
+        <h3 style="margin-bottom:16px;font-size:16px;">Top productos hoy</h3>
+        ${top.length === 0 ? '<div class="empty" style="padding:20px;">Sin ventas hoy</div>' : `
+          <div class="bar-chart">
+            ${top.map(([pid, qty]) => {
+              const p = prodMap.get(pid);
+              if (!p) return '';
+              return `<div class="bar-row">
+                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.emoji} ${p.name}</div>
+                <div class="bar-track"><div class="bar-fill" style="width:${(qty/maxSale)*100}%"></div></div>
+                <div style="font-weight:700;">${qty}</div></div>`;
+            }).join('')}</div>`}
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:16px;font-size:16px;">Últimas órdenes</h3>
+        ${d.ordersToday.length === 0 ? '<div class="empty" style="padding:20px;">Sin órdenes</div>' : `
+          <div class="list">
+            ${d.ordersToday.slice(0,6).map(o => `<div class="list-row">
+              <div class="list-icon">M${o.table_num||'?'}</div>
+              <div class="list-main">
+                <div class="list-title">Mesa ${o.table_num||'?'}</div>
+                <div class="list-sub">${o.waiter_name||'—'} · ${new Date(o.closed_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</div>
+              </div>
+              <div class="list-right">${fmt(o.total)}</div>
+            </div>`).join('')}</div>`}
+      </div>
+    </div>
+  `;
+});
+
+// ---------- MESAS ----------
+route('mesas', async () => {
+  const [tables, open] = await Promise.all([API.tables(), API.openTables()]);
+  const openMap = new Map(open.map(o => [o.table_id, o]));
+  const products = await API.products();
+  const prodMap = new Map(products.map(p => [p.id, p]));
+  const waiters = await API.waiters();
+  const waiterMap = new Map(waiters.map(w => [w.id, w]));
+
+  function calcTotal(items) {
+    return (items || []).reduce((s, it) => {
+      const p = prodMap.get(it.productId);
+      return s + (p ? parseFloat(p.price) * it.qty : 0);
+    }, 0);
+  }
+
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Mesas</h1>
+        <div class="page-subtitle">${open.length} ocupadas · ${tables.length - open.length} libres</div>
+      </div>
+      <button class="btn btn-secondary" onclick="addTable()">+ Agregar mesa</button>
+    </div>
+    <div class="table-grid">
+      ${tables.map(t => {
+        const ot = openMap.get(t.id);
+        const st = ot ? 'ocupada' : 'libre';
+        const total = ot ? calcTotal(ot.items) : 0;
+        const w = ot ? waiterMap.get(ot.waiter_id) : null;
+        return `<button class="table-card ${st}" onclick="location.hash='#/mesa/${t.id}'">
+          <span class="table-status ${st}">${st}</span>
+          <div class="table-num">M${t.num}</div>
+          <div class="table-meta">${t.seats} lugares</div>
+          ${ot ? `<div class="table-total">${fmt(total)}</div><div class="table-meta">${w?w.name:''} · ${(ot.items||[]).length} items</div>` : ''}
+        </button>`;
+      }).join('')}
+    </div>
+  `;
+});
+async function addTable() {
+  try { await API.tableCreate({}); navigate(); toast('Mesa agregada','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ---------- MESA INDIVIDUAL ----------
+let CURRENT_TID = null;
+let CURRENT_ITEMS = null;
+let CURRENT_CAT = 'todos';
+let CURRENT_PRODUCTS = [];
+let CURRENT_WAITERS = [];
+let CURRENT_TABLE = null;
+let CURRENT_WAITER_ID = null;
+
+route('mesa', async (params) => {
+  const tableId = params[0];
+  const tables = await API.tables();
+  const t = tables.find(t => t.id === tableId);
+  if (!t) return location.hash = '#/mesas';
+  CURRENT_TABLE = t;
+
+  const open = await API.openTables();
+  const ot = open.find(o => o.table_id === tableId);
+
+  CURRENT_TID = tableId;
+  CURRENT_WAITERS = await API.waiters();
+
+  if (!ot) {
+    if (CURRENT_WAITERS.length === 0) {
+      $('#view').innerHTML = `<div class="empty"><h3>No tenés mozos</h3><p>Creá uno primero para poder abrir mesas.</p><a href="#/mozos" class="btn btn-primary">Ir a Mozos</a></div>`;
+      return;
+    }
+    $('#view').innerHTML = `
+      <div class="page-header"><div style="display:flex;align-items:center;gap:14px;">
+        <a href="#/mesas" class="btn-ghost btn-icon">←</a>
+        <div><h1 class="page-title">Mesa ${t.num}</h1>
+          <div class="page-subtitle">${t.seats} lugares · libre</div></div>
+      </div></div>
+      <div class="card" style="text-align:center;padding:40px 20px;max-width:480px;margin:0 auto;">
+        <h3 style="margin-bottom:8px;">Abrir mesa</h3>
+        <p style="color:var(--tx-mid);margin-bottom:20px;">Seleccioná un mozo</p>
+        <div class="field"><label>Mozo</label><select id="newWaiter">${CURRENT_WAITERS.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}</select></div>
+        <button class="btn btn-primary btn-block" onclick="openTableNow('${tableId}')">Abrir mesa</button>
+      </div>`;
+    return;
+  }
+
+  CURRENT_ITEMS = ot.items || [];
+  CURRENT_WAITER_ID = ot.waiter_id;
+  CURRENT_PRODUCTS = await API.products();
+
+  $('#view').innerHTML = `
+    <div class="page-header"><div style="display:flex;align-items:center;gap:14px;">
+      <a href="#/mesas" class="btn-ghost btn-icon">←</a>
+      <div><h1 class="page-title">Mesa ${t.num}</h1>
+        <div class="page-subtitle">${t.seats} lugares · <span class="badge yellow">ocupada</span></div></div>
+    </div></div>
+    <div class="grid grid-2" style="grid-template-columns:1.4fr 1fr;align-items:start;gap:20px;">
+      <div><div class="chips" id="catChips"></div><div class="prod-grid" id="prodGrid"></div></div>
+      <div id="cartPane"></div>
+    </div>`;
+  renderTableMenu();
+});
+
+async function openTableNow(tid) {
+  try {
+    await API.openTable({ tableId: tid, waiterId: $('#newWaiter').value });
+    navigate(); toast('Mesa abierta','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function renderTableMenu() {
+  const cats = ['todos', ...new Set(CURRENT_PRODUCTS.map(p => p.cat))];
+  $('#catChips').innerHTML = cats.map(c => `<button class="chip ${c===CURRENT_CAT?'active':''}" onclick="setCat('${c}')">${c}</button>`).join('');
+  const filtered = CURRENT_PRODUCTS.filter(p => p.available && (CURRENT_CAT==='todos' || p.cat===CURRENT_CAT));
+  $('#prodGrid').innerHTML = filtered.map(p => `
+    <button class="prod-card" onclick="addItem('${p.id}')">
+      <div class="prod-emoji">${p.emoji||'🍽️'}</div>
+      <div class="prod-cat">${p.cat}</div>
+      <div class="prod-name">${p.name}</div>
+      <div class="prod-price">${fmt(p.price)}</div></button>`).join('');
+
+  const w = CURRENT_WAITERS.find(w => w.id === CURRENT_WAITER_ID);
+  const prodMap = new Map(CURRENT_PRODUCTS.map(p => [p.id, p]));
+  const total = CURRENT_ITEMS.reduce((s,it) => { const p = prodMap.get(it.productId); return s + (p ? parseFloat(p.price)*it.qty : 0); }, 0);
+
+  $('#cartPane').innerHTML = `
+    <div class="cart">
+      <div class="cart-header">
+        <div><div style="font-weight:700;font-size:15px;">Comanda</div><div style="font-size:12px;color:var(--tx-mid);">Mozo: ${w?w.name:'—'}</div></div>
+      </div>
+      <div class="cart-items">
+        ${CURRENT_ITEMS.length===0 ? '<div class="cart-empty">Comanda vacía<br><small>Tocá un producto para agregarlo</small></div>' : CURRENT_ITEMS.map((it,i) => {
+          const p = prodMap.get(it.productId); if (!p) return '';
+          return `<div class="cart-item">
+            <div class="cart-qty"><button onclick="changeQty(${i},-1)">−</button><span class="qty">${it.qty}</span><button onclick="changeQty(${i},1)">+</button></div>
+            <div class="cart-item-name"><div style="font-weight:600;">${p.emoji} ${p.name}</div><div style="font-size:12px;color:var(--tx-mid);">${fmt(p.price)} c/u</div></div>
+            <div class="cart-item-price">${fmt(p.price*it.qty)}</div>
+            <button class="btn-ghost btn-icon" onclick="removeItem(${i})">🗑️</button></div>`;
+        }).join('')}
+      </div>
+      <div class="cart-footer">
+        <div class="cart-total"><span>Total</span><span>${fmt(total)}</span></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="cancelOpen()">Cancelar</button>
+          <button class="btn btn-primary btn-sm" style="flex:2;" ${CURRENT_ITEMS.length===0?'disabled style="opacity:.5;cursor:not-allowed;"':''} onclick="chargeTable()">Cobrar ${CURRENT_ITEMS.length?'· '+fmt(total):''}</button>
+        </div>
+      </div>
+    </div>`;
+}
+function setCat(c) { CURRENT_CAT = c; renderTableMenu(); }
+async function persistItems() {
+  try { await API.updateOpenTable(CURRENT_TID, { items: CURRENT_ITEMS }); } catch(e) { toast(e.message,'error'); }
+}
+function addItem(pid) {
+  const existing = CURRENT_ITEMS.find(i => i.productId === pid);
+  if (existing) existing.qty++;
+  else CURRENT_ITEMS.push({ productId: pid, qty: 1 });
+  persistItems(); renderTableMenu();
+  const p = CURRENT_PRODUCTS.find(p => p.id===pid); toast(p.name + ' agregado','success');
+}
+function changeQty(idx, delta) {
+  CURRENT_ITEMS[idx].qty += delta;
+  if (CURRENT_ITEMS[idx].qty <= 0) CURRENT_ITEMS.splice(idx, 1);
+  persistItems(); renderTableMenu();
+}
+function removeItem(idx) { CURRENT_ITEMS.splice(idx, 1); persistItems(); renderTableMenu(); }
+async function cancelOpen() {
+  if (!confirm('¿Cancelar la mesa? Se perderá la comanda.')) return;
+  try { await API.closeOpenTable(CURRENT_TID); location.hash = '#/mesas'; toast('Mesa liberada','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function chargeTable() {
+  if (!CASH_CACHE) { toast('Abrí la caja primero','error'); return; }
+  const prodMap = new Map(CURRENT_PRODUCTS.map(p => [p.id, p]));
+  const total = CURRENT_ITEMS.reduce((s,it) => { const p = prodMap.get(it.productId); return s + (p ? parseFloat(p.price)*it.qty : 0); }, 0);
+  openModal('Cobrar Mesa ' + CURRENT_TABLE.num, `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:14px;color:var(--tx-mid);">Total a cobrar</div>
+      <div style="font-size:36px;font-weight:800;font-family:var(--ff-display);color:var(--or-dk);">${fmt(total)}</div>
+    </div>
+    <div class="field"><label>Método de pago</label>
+      <select id="payMethod"><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option><option value="mercadopago">MercadoPago</option></select></div>
+    <div class="field"><label>Notas (opcional)</label><textarea id="orderNote" rows="2"></textarea></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmCharge()">Confirmar cobro</button>`);
+}
+async function confirmCharge() {
+  try {
+    await API.createOrder({ tableId: CURRENT_TID, paymentMethod: $('#payMethod').value, note: $('#orderNote').value });
+    CASH_CACHE = null; await refreshCashPill();
+    closeModal(); location.hash = '#/mesas'; toast('Cobro registrado','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ---------- PRODUCTOS ----------
+let PROD_FILTER = 'todos';
+route('productos', async () => {
+  const list = await API.products();
+  const cats = ['todos', ...new Set(list.map(p => p.cat))];
+  const filtered = list.filter(p => PROD_FILTER==='todos' || p.cat === PROD_FILTER);
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Productos</h1>
+        <div class="page-subtitle">${list.length} productos · ${list.filter(p=>p.available).length} disponibles</div></div>
+      <button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button>
+    </div>
+    <div class="chips">${cats.map(c => `<button class="chip ${c===PROD_FILTER?'active':''}" onclick="setProdFilter('${c}')">${c}</button>`).join('')}</div>
+    <div class="prod-grid">
+      ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Creá tu primer producto para empezar a vender.</p><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div>` :
+        filtered.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
+          <div class="prod-emoji">${p.emoji||'🍽️'}</div>
+          <div class="prod-cat">${p.cat}</div>
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-price">${fmt(p.price)}</div>
+          ${!p.available?'<span class="badge red">No disponible</span>':''}
+        </div>`).join('')}
+    </div>`;
+});
+function setProdFilter(c) { PROD_FILTER = c; navigate(); }
+
+async function editProduct(id) {
+  let p = { name:'', cat:'', price:0, emoji:'🍽️', available:true };
+  if (id) { const list = await API.products(); p = list.find(p => p.id === id); }
+  const allCats = [...new Set((await API.products()).map(p => p.cat))];
+  openModal(id?'Editar producto':'Nuevo producto', `
+    <div class="field"><label>Nombre</label><input id="pName" value="${p.name||''}" placeholder="Pizza Muzzarella"/></div>
+    <div class="grid grid-2" style="gap:12px;">
+      <div class="field"><label>Categoría</label><input id="pCat" list="catList" value="${p.cat||''}" placeholder="Pizzas, Bebidas..."/>
+        <datalist id="catList">${allCats.map(c => `<option value="${c}">`).join('')}</datalist></div>
+      <div class="field"><label>Precio</label><input id="pPrice" type="number" value="${p.price||0}" min="0" step="100"/></div>
+    </div>
+    <div class="grid grid-2" style="gap:12px;">
+      <div class="field"><label>Emoji</label><input id="pEmoji" value="${p.emoji||'🍽️'}" maxlength="4"/></div>
+      <div class="field"><label>Disponible</label>
+        <select id="pAvail"><option value="1" ${p.available?'selected':''}>Sí</option><option value="0" ${!p.available?'selected':''}>No</option></select></div>
+    </div>`,
+    `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteProductCfm('${id}')">Eliminar</button>`:''}
+     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveProduct('${id||''}')">Guardar</button>`);
+}
+async function saveProduct(id) {
+  const data = { name: $('#pName').value.trim(), cat: $('#pCat').value.trim() || 'Sin categoría',
+    price: parseFloat($('#pPrice').value)||0, emoji: $('#pEmoji').value || '🍽️',
+    available: $('#pAvail').value === '1' };
+  if (!data.name) return toast('Falta el nombre','error');
+  try {
+    if (id) await API.productUpdate(id, data); else await API.productCreate(data);
+    closeModal(); navigate(); toast('Producto guardado','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+async function deleteProductCfm(id) {
+  if (!confirm('¿Eliminar producto?')) return;
+  try { await API.productDelete(id); closeModal(); navigate(); toast('Producto eliminado','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ---------- CAJA ----------
+route('caja', async () => {
+  const c = await API.cash();
+  CASH_CACHE = c.current;
+  await refreshCashPill();
+  const cur = c.current;
+  const txs = cur?.transactions || [];
+  const inSum = txs.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0);
+  const outSum = txs.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
+  const balance = cur ? parseFloat(cur.opening_amount) + inSum - outSum : 0;
+
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Caja</h1>
+        <div class="page-subtitle">${cur ? 'Abierta desde ' + new Date(cur.opened_at).toLocaleString('es-AR') : 'Cerrada'}</div></div>
+      <div style="display:flex;gap:10px;">
+        ${cur ? `<button class="btn btn-secondary" onclick="addMovement()">+ Movimiento</button><button class="btn btn-danger" onclick="closeCashUI()">Cerrar caja</button>`
+              : `<button class="btn btn-primary" onclick="openCashUI()">Abrir caja</button>`}
+      </div>
+    </div>
+    ${cur ? `
+      <div class="grid grid-4" style="margin-bottom:24px;">
+        <div class="card"><div class="card-title">Apertura</div><div class="card-value">${fmt(cur.opening_amount)}</div></div>
+        <div class="card"><div class="card-title">Ingresos</div><div class="card-value" style="color:var(--green);">${fmt(inSum)}</div></div>
+        <div class="card"><div class="card-title">Egresos</div><div class="card-value" style="color:var(--red);">${fmt(outSum)}</div></div>
+        <div class="card" style="background:linear-gradient(135deg,#fff7ed,#fff);border-color:var(--or-200);">
+          <div class="card-title">En caja</div><div class="card-value" style="color:var(--or-dk);">${fmt(balance)}</div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:16px;font-size:16px;">Movimientos (${txs.length})</h3>
+        ${txs.length===0 ? '<div class="empty">Sin movimientos</div>' : `<table class="data-table">
+          <thead><tr><th>Hora</th><th>Descripción</th><th>Método</th><th>Tipo</th><th style="text-align:right;">Monto</th></tr></thead>
+          <tbody>${[...txs].reverse().map(t => `<tr>
+            <td>${new Date(t.at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</td>
+            <td>${t.desc}</td><td>${t.method||'—'}</td>
+            <td><span class="badge ${t.type==='in'?'green':'red'}">${t.type==='in'?'Ingreso':'Egreso'}</span></td>
+            <td style="text-align:right;font-weight:700;color:${t.type==='in'?'var(--green)':'var(--red)'};">${t.type==='in'?'+':'−'} ${fmt(t.amount)}</td></tr>`).join('')}</tbody></table>`}
+      </div>` : `
+      <div class="card" style="text-align:center;padding:60px 20px;">
+        <h3>Caja cerrada</h3><p style="color:var(--tx-mid);margin-bottom:20px;">Abrila para registrar ventas.</p>
+        <button class="btn btn-primary" onclick="openCashUI()">Abrir caja</button>
+      </div>
+      ${c.history && c.history.length>0 ? `<div class="card" style="margin-top:24px;">
+        <h3 style="margin-bottom:16px;font-size:16px;">Historial</h3>
+        <table class="data-table"><thead><tr><th>Fecha</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Final</th><th>Diff</th></tr></thead>
+        <tbody>${c.history.map(h => `<tr>
+          <td>${new Date(h.closed_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${fmt(h.opening_amount)}</td><td style="color:var(--green);">${fmt(h.total_in)}</td>
+          <td style="color:var(--red);">${fmt(h.total_out)}</td>
+          <td><strong>${fmt(h.closing_amount)}</strong></td>
+          <td style="color:${parseFloat(h.diff)>=0?'var(--green)':'var(--red)'};font-weight:700;">${parseFloat(h.diff)>=0?'+':''}${fmt(h.diff)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    `}`;
+});
+function openCashUI() {
+  openModal('Abrir caja', `<p style="color:var(--tx-mid);margin-bottom:16px;">Ingresá el monto inicial.</p>
+    <div class="field"><label>Apertura</label><input id="openAmt" type="number" value="0" min="0" step="1000" autofocus/></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doOpenCash()">Abrir caja</button>`);
+}
+async function doOpenCash() {
+  try { await API.cashOpen({ openingAmount: parseFloat($('#openAmt').value)||0 }); CASH_CACHE = null; closeModal(); navigate(); toast('Caja abierta','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+function addMovement() {
+  openModal('Movimiento de caja', `
+    <div class="field"><label>Tipo</label><select id="mvType"><option value="in">Ingreso</option><option value="out">Egreso</option></select></div>
+    <div class="field"><label>Descripción</label><input id="mvDesc" placeholder="Ej: Compra insumos"/></div>
+    <div class="field"><label>Monto</label><input id="mvAmt" type="number" value="0" min="0" step="100"/></div>
+    <div class="field"><label>Método</label><select id="mvMethod"><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option></select></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doMovement()">Guardar</button>`);
+}
+async function doMovement() {
+  const amt = parseFloat($('#mvAmt').value);
+  if (!amt || amt<=0) return toast('Monto inválido','error');
+  try {
+    await API.cashMovement({ type: $('#mvType').value, amount: amt, desc: $('#mvDesc').value, method: $('#mvMethod').value });
+    CASH_CACHE = null; closeModal(); navigate(); toast('Movimiento registrado','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+async function closeCashUI() {
+  const c = await API.cash();
+  const cur = c.current;
+  const txs = cur.transactions||[];
+  const expected = parseFloat(cur.opening_amount) + txs.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0) - txs.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
+  openModal('Cerrar caja', `<p style="color:var(--tx-mid);margin-bottom:12px;">Saldo esperado: <strong>${fmt(expected)}</strong></p>
+    <div class="field"><label>Monto contado</label><input id="closeAmt" type="number" value="${expected}" min="0" step="1000" autofocus/></div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="doCloseCash()">Cerrar caja</button>`);
+}
+async function doCloseCash() {
+  try { await API.cashClose({ closingAmount: parseFloat($('#closeAmt').value)||0 }); CASH_CACHE = null; closeModal(); navigate(); toast('Caja cerrada','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ---------- MOZOS ----------
+route('mozos', async () => {
+  const [waiters, open, orders] = await Promise.all([API.waiters(), API.openTables(), API.orders('?limit=200')]);
+  const today_ = today();
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Mozos</h1><div class="page-subtitle">${waiters.length} registrados</div></div>
+      <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo mozo</button>
+    </div>
+    <div class="grid grid-3">
+      ${waiters.length===0 ? '<div class="empty" style="grid-column:1/-1;"><h3>Sin mozos</h3><button class="btn btn-primary" onclick="editWaiter()">+ Crear mozo</button></div>' : waiters.map(w => {
+        const activeTables = open.filter(ot => ot.waiter_id === w.id).length;
+        const todayOrders = orders.filter(o => o.waiter_id === w.id && o.closed_at.slice(0,10) === today_);
+        const todaySales = todayOrders.reduce((s,o) => s + parseFloat(o.total), 0);
+        return `<div class="card" style="cursor:pointer;" onclick="editWaiter('${w.id}')">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+            <div class="avatar" style="background:${w.color};width:48px;height:48px;font-size:18px;">${w.name[0].toUpperCase()}</div>
+            <div><div style="font-weight:700;font-size:17px;">${w.name}</div>
+                 <div style="color:var(--tx-mid);font-size:13px;">${activeTables} mesa${activeTables===1?'':'s'} activas</div></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--border-soft);">
+            <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Hoy</div>
+                 <div style="font-weight:700;">${todayOrders.length} órd.</div></div>
+            <div style="text-align:right;"><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Total</div>
+                 <div style="font-weight:700;color:var(--or-dk);">${fmt(todaySales)}</div></div>
+          </div></div>`;
+      }).join('')}
+    </div>`;
+});
+async function editWaiter(id) {
+  let w = { name:'', color:'#f97316' };
+  if (id) { const list = await API.waiters(); w = list.find(w => w.id === id); }
+  openModal(id?'Editar mozo':'Nuevo mozo', `
+    <div class="field"><label>Nombre</label><input id="wName" value="${w.name||''}" placeholder="Juan"/></div>
+    <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>`,
+    `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
+     <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
+}
+async function saveWaiter(id) {
+  const data = { name: $('#wName').value.trim(), color: $('#wColor').value };
+  if (!data.name) return toast('Falta el nombre','error');
+  try { if (id) await API.waiterUpdate(id, data); else await API.waiterCreate(data); closeModal(); navigate(); toast('Mozo guardado','success'); }
+  catch(e) { toast(e.message,'error'); }
+}
+async function deleteWaiterCfm(id) {
+  if (!confirm('¿Eliminar mozo?')) return;
+  try { await API.waiterDelete(id); closeModal(); navigate(); toast('Mozo eliminado','success'); }
+  catch(e) { toast(e.message==='waiter_has_open_tables'?'Tiene mesas abiertas':e.message,'error'); }
+}
+
+// ---------- REPORTES ----------
+route('reportes', async () => {
+  const orders = await API.orders('?limit=500');
+  const products = await API.products();
+  const waiters = await API.waiters();
+  const today_ = today();
+  const last7days = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  const todayOrders = orders.filter(o => o.closed_at.slice(0,10) === today_);
+  const weekOrders = orders.filter(o => o.closed_at.slice(0,10) >= last7days);
+  const totalDay = todayOrders.reduce((s,o)=>s+parseFloat(o.total),0);
+  const totalWeek = weekOrders.reduce((s,o)=>s+parseFloat(o.total),0);
+  const avgTicket = todayOrders.length ? totalDay/todayOrders.length : 0;
+
+  const prodCount = {};
+  weekOrders.forEach(o => (o.items||[]).forEach(it => { prodCount[it.productId] = (prodCount[it.productId]||0) + it.qty; }));
+  const topProds = Object.entries(prodCount).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxProd = topProds[0]?.[1] || 1;
+  const prodMap = new Map(products.map(p => [p.id, p]));
+
+  const waiterStats = waiters.map(w => {
+    const wo = weekOrders.filter(o => o.waiter_id === w.id);
+    return { name: w.name, color: w.color, orders: wo.length, total: wo.reduce((s,o)=>s+parseFloat(o.total),0) };
+  }).sort((a,b)=>b.total-a.total);
+  const maxWaiter = waiterStats[0]?.total || 1;
+
+  const methods = {};
+  weekOrders.forEach(o => { methods[o.payment_method] = (methods[o.payment_method]||0) + parseFloat(o.total); });
+  const totalMethods = Object.values(methods).reduce((s,v)=>s+v,0) || 1;
+
+  $('#view').innerHTML = `
+    <div class="page-header">
+      <div><h1 class="page-title">Reportes</h1><div class="page-subtitle">Últimos 7 días · ${weekOrders.length} órdenes</div></div>
+    </div>
+    <div class="grid grid-4" style="margin-bottom:24px;">
+      <div class="card"><div class="card-title">Hoy</div><div class="card-value">${fmt(totalDay)}</div><div class="card-delta neu">${todayOrders.length} órdenes</div></div>
+      <div class="card"><div class="card-title">Semana</div><div class="card-value">${fmt(totalWeek)}</div><div class="card-delta neu">${weekOrders.length} órdenes</div></div>
+      <div class="card"><div class="card-title">Ticket promedio</div><div class="card-value">${fmt(avgTicket)}</div><div class="card-delta neu">hoy</div></div>
+      <div class="card"><div class="card-title">Histórico</div><div class="card-value">${fmt(orders.reduce((s,o)=>s+parseFloat(o.total),0))}</div><div class="card-delta neu">${orders.length} totales</div></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:24px;">
+      <div class="card">
+        <h3 style="margin-bottom:16px;font-size:16px;">Top productos (semana)</h3>
+        ${topProds.length===0 ? '<div class="empty">Sin ventas</div>' : `<div class="bar-chart">${topProds.map(([pid,qty]) => {
+          const p = prodMap.get(pid); if (!p) return '';
+          return `<div class="bar-row"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.emoji} ${p.name}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(qty/maxProd)*100}%"></div></div>
+            <div style="font-weight:700;">${qty}</div></div>`;}).join('')}</div>`}
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:16px;font-size:16px;">Mozos · ranking</h3>
+        ${waiterStats.length===0 ? '<div class="empty">Sin datos</div>' : `<div class="bar-chart">${waiterStats.map(w => `<div class="bar-row">
+          <div style="display:flex;align-items:center;gap:8px;"><div class="avatar" style="background:${w.color};width:22px;height:22px;font-size:11px;">${w.name[0].toUpperCase()}</div>${w.name}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(w.total/maxWaiter)*100}%"></div></div>
+          <div style="font-weight:700;">${fmt(w.total)}</div></div>`).join('')}</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:16px;font-size:16px;">Métodos de pago (semana)</h3>
+      ${Object.keys(methods).length===0 ? '<div class="empty">Sin cobros</div>' : `<div class="bar-chart">
+        ${Object.entries(methods).sort((a,b)=>b[1]-a[1]).map(([m,v]) => `<div class="bar-row">
+          <div style="text-transform:capitalize;">${m}</div><div class="bar-track"><div class="bar-fill" style="width:${(v/totalMethods)*100}%"></div></div>
+          <div style="font-weight:700;">${fmt(v)} <span style="color:var(--tx-mid);font-weight:500;">(${Math.round(v/totalMethods*100)}%)</span></div></div>`).join('')}</div>`}
+    </div>`;
+});
+
+// ---------- AJUSTES ----------
+route('ajustes', async () => {
+  const me = await API.me();
+  USER = me.user; localStorage.setItem('gestiva_user', JSON.stringify(USER));
+  refreshSubPill(); refreshGraceBanner();
+
+  $('#view').innerHTML = `
+    <div class="page-header"><h1 class="page-title">Ajustes</h1></div>
+    <div class="grid grid-2" style="align-items:start;">
+      <div class="card">
+        <h3 style="margin-bottom:16px;">Datos del negocio</h3>
+        <div class="field"><label>Nombre del restaurante</label><input id="setName" value="${USER.restaurantName}"/></div>
+        <div class="field"><label>Tu nombre</label><input id="setOwner" value="${USER.ownerName||''}"/></div>
+        <div class="field"><label>Teléfono</label><input id="setPhone" value="${USER.phone||''}"/></div>
+        <div class="field"><label>Moneda</label><input id="setCurrency" value="${USER.currency||'$'}" maxlength="3"/></div>
+        <button class="btn btn-primary btn-block" onclick="saveSettings()">Guardar cambios</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:16px;">Suscripción</h3>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
+          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Estado</div>
+          <div style="font-weight:700;margin-top:4px;text-transform:capitalize;">${USER.subscriptionStatus}</div></div>
+        ${USER.subscriptionEndsAt ? `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
+          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Próximo cobro</div>
+          <div style="font-weight:700;margin-top:4px;">${new Date(USER.subscriptionEndsAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</div></div>` : ''}
+        <div style="padding:12px 0;">
+          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Plan</div>
+          <div style="font-weight:700;margin-top:4px;">$40.000 / mes</div></div>
+        <a href="checkout.html" class="btn btn-secondary btn-block">Gestionar suscripción</a>
+      </div>
+    </div>`;
+});
+async function saveSettings() {
+  try {
+    const u = await API.settings({
+      restaurantName: $('#setName').value.trim(),
+      ownerName: $('#setOwner').value.trim(),
+      phone: $('#setPhone').value.trim(),
+      currency: $('#setCurrency').value.trim() || '$'
+    });
+    USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
+    refreshSubPill(); toast('Cambios guardados','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// ---------- INIT ----------
+$('#mobileBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+(async () => {
+  try {
+    const me = await API.me();
+    USER = me.user; localStorage.setItem('gestiva_user', JSON.stringify(USER));
+    refreshSubPill();
+    refreshGraceBanner();
+    if (USER.subscriptionStatus !== 'active' && USER.subscriptionStatus !== 'grace') {
+      location.href = 'checkout.html'; return;
+    }
+    if (!location.hash) location.hash = '#/dashboard';
+    navigate();
+  } catch (e) {
+    console.error(e);
+    if (e.message === 'unauthorized') return;
+    $('#view').innerHTML = `<div class="empty"><h3>Error de conexión</h3><p>${e.message}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestiva — Sistema de Administración para Restaurantes y Bares</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--ff-body);
+      background: #fff; color: #0f172a; line-height: 1.6; overflow-x: hidden;
+    }
+    h1, h2, h3, .hero-title, .sec-title, .stat-n { font-family: var(--ff-display); }
+    :root {
+      /* brand */
+      --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed;
+      --or-100: #ffedd5; --or-200: #fed7aa;
+      /* text */
+      --tx-dark: #0f172a; --tx-mid: #475569; --tx-lt: #94a3b8;
+      /* backgrounds */
+      --bg: #f8fafc; --border: #e2e8f0;
+      /* shadows */
+      --sh-sm: 0 2px 8px rgba(0,0,0,.06);
+      --sh-md: 0 8px 32px rgba(0,0,0,.10);
+      --sh-lg: 0 20px 60px rgba(0,0,0,.14);
+      --sh-or: 0 8px 32px rgba(249,115,22,.28);
+      --sh-or-lg: 0 16px 48px rgba(249,115,22,.35);
+      /* radius */
+      --r-sm: 10px; --r-md: 16px; --r-lg: 24px; --r-xl: 32px;
+      /* typography */
+      --ff-display: 'Outfit', 'Inter', sans-serif;
+      --ff-body: 'Inter', -apple-system, sans-serif;
+      /* easing */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+      /* durations */
+      --dur-fast: 150ms;
+      --dur-base: 260ms;
+      --dur-slow: 500ms;
+      /* spacing */
+      --sp-sm: 8px; --sp-md: 16px; --sp-lg: 24px;
+      --sp-xl: 32px; --sp-2xl: 48px; --sp-3xl: 64px; --sp-4xl: 96px;
+    }
+
+    /* ── UTILITIES ── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: var(--or-100); color: var(--or-dk);
+      font-size: 12px; font-weight: 700; letter-spacing: .4px;
+      padding: 5px 13px; border-radius: 100px; margin-bottom: 18px;
+    }
+    .tag::before { content:''; width:7px; height:7px; background:var(--or); border-radius:50%; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: var(--r-sm);
+      font-size: 15px; font-weight: 600; text-decoration: none;
+      cursor: pointer; border: none;
+      transition: transform var(--dur-base) var(--ease-out),
+                  box-shadow var(--dur-base) var(--ease-out),
+                  background var(--dur-fast),
+                  color var(--dur-fast),
+                  border-color var(--dur-fast);
+      white-space: nowrap; position: relative; overflow: hidden;
+    }
+    .btn-primary { background: var(--or); color: #fff; box-shadow: var(--sh-or); }
+    .btn-primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,.18) 0%, transparent 55%);
+      opacity: 0; transition: opacity var(--dur-base);
+    }
+    .btn-primary:hover { background: var(--or-dk); transform: translateY(-2px); box-shadow: var(--sh-or-lg); }
+    .btn-primary:hover::before { opacity: 1; }
+    .btn-outline { background: transparent; color: var(--tx-dark); border: 2px solid var(--border); }
+    .btn-outline:hover { border-color: var(--or); color: var(--or); background: var(--or-lt); }
+    .btn-white { background: #fff; color: var(--tx-dark); font-weight: 700; }
+    .btn-white:hover { background: var(--or); color: #fff; transform: translateY(-2px); box-shadow: var(--sh-or); }
+    .btn-ghost-white { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+    .btn-ghost-white:hover { background: rgba(255,255,255,.2); transform: translateY(-2px); }
+    .fade { opacity: 0; transform: translateY(28px); transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out); }
+    .fade.in { opacity: 1; transform: translateY(0); }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.96); backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border); padding: 15px 0; transition: box-shadow .3s;
+    }
+    nav.scrolled { box-shadow: 0 4px 20px rgba(0,0,0,.07); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; }
+    .logo {
+      font-size: 20px; font-weight: 900; color: var(--tx-dark);
+      text-decoration: none; display: flex; align-items: center; gap: 9px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px; background: var(--or); border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo-icon svg { width: 20px; height: 20px; }
+    .logo em { color: var(--or); font-style: normal; }
+    .nav-links { display: flex; gap: 30px; list-style: none; }
+    .nav-links a { text-decoration: none; color: var(--tx-mid); font-size: 15px; font-weight: 500; transition: color .2s; }
+    .nav-links a:hover { color: var(--or); }
+    .nav-ctas { display: flex; gap: 10px; }
+    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; }
+    .hamburger span { display: block; width: 24px; height: 2px; background: var(--tx-dark); border-radius: 2px; }
+    .m-menu { display: none; position: fixed; inset: 0; background: #fff; z-index: 200; padding: 24px; flex-direction: column; gap: 20px; }
+    .m-menu.open { display: flex; }
+    .m-menu-top { display: flex; justify-content: space-between; align-items: center; }
+    .m-menu ul { list-style: none; display: flex; flex-direction: column; }
+    .m-menu ul a { display: block; padding: 15px 0; font-size: 18px; font-weight: 600; color: var(--tx-dark); text-decoration: none; border-bottom: 1px solid var(--border); }
+    .close-x { font-size: 26px; cursor: pointer; color: var(--tx-mid); line-height: 1; }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 84px 0 64px;
+      background: linear-gradient(145deg, #fff7ed 0%, #fff 45%, #f8fafc 100%);
+      position: relative; overflow: hidden;
+    }
+    .hero::after {
+      content: ''; position: absolute; top: -180px; right: -180px;
+      width: 560px; height: 560px;
+      background: radial-gradient(circle, rgba(249,115,22,.09) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 9px;
+      background: #fff; border: 1px solid var(--or-200); border-radius: 100px;
+      padding: 7px 16px 7px 7px; font-size: 13px; font-weight: 600;
+      color: var(--or-dk); margin-bottom: 26px; box-shadow: var(--sh-sm);
+    }
+    .badge-pulse {
+      width: 26px; height: 26px; background: var(--or); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      animation: pulse 2.2s infinite;
+    }
+    .badge-pulse svg { width: 13px; height: 13px; }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(249,115,22,.4); }
+      50%      { box-shadow: 0 0 0 9px rgba(249,115,22,0); }
+    }
+    .hero-title {
+      font-size: clamp(34px, 4.6vw, 58px); font-weight: 900;
+      line-height: 1.08; letter-spacing: -1.2px; color: var(--tx-dark); margin-bottom: 20px;
+    }
+    .hero-title .hl { color: var(--or); }
+    .hero-sub { font-size: 18px; color: var(--tx-mid); line-height: 1.72; margin-bottom: 36px; max-width: 470px; }
+    .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero-btns .btn { padding: 14px 28px; font-size: 16px; }
+    .hero-stats { display: flex; gap: 36px; margin-top: 52px; padding-top: 32px; border-top: 1px solid var(--border); }
+    .stat-n { font-size: 30px; font-weight: 900; color: var(--tx-dark); }
+    .stat-l { font-size: 13px; color: var(--tx-lt); font-weight: 500; margin-top: 2px; }
+
+    /* browser frame */
+    .hero-visual { position: relative; }
+    .browser {
+      background: #fff; border-radius: var(--r-lg);
+      box-shadow: var(--sh-lg), 0 0 0 1px rgba(0,0,0,.05);
+      overflow: hidden;
+      animation: float 7s ease-in-out infinite;
+      will-change: transform;
+    }
+    .browser:hover { animation-play-state: paused; }
+    @keyframes float {
+      0%,100% { transform: perspective(1400px) rotateY(-9deg) rotateX(3deg) translateY(0px); }
+      50%      { transform: perspective(1400px) rotateY(-9deg) rotateX(3deg) translateY(-16px); }
+    }
+    .b-bar { background: #f1f5f9; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+    .b-dots { display: flex; gap: 5px; }
+    .b-dots span { width: 10px; height: 10px; border-radius: 50%; }
+    .b-dots span:nth-child(1) { background: #fc6058; }
+    .b-dots span:nth-child(2) { background: #fec02f; }
+    .b-dots span:nth-child(3) { background: #2aca44; }
+    .b-url { flex: 1; background: #fff; border-radius: 6px; padding: 5px 10px; font-size: 11px; color: var(--tx-lt); border: 1px solid var(--border); }
+
+    /* mini dashboard */
+    .mini-dash { display: flex; height: 370px; font-size: 11px; }
+    .md-side { width: 148px; background: #0f172a; padding: 14px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+    .md-logo { color: #fff; font-weight: 900; font-size: 12px; margin-bottom: 14px; }
+    .md-logo em { color: var(--or); font-style: normal; }
+    .md-item { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 7px; color: rgba(255,255,255,.45); font-weight: 500; }
+    .md-item.on { background: rgba(249,115,22,.18); color: var(--or); }
+    .md-item svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .md-main { flex: 1; background: #f8fafc; padding: 13px; display: flex; flex-direction: column; gap: 11px; overflow: hidden; }
+    .md-top { display: flex; justify-content: space-between; align-items: center; }
+    .md-ttl { font-size: 13px; font-weight: 800; color: var(--tx-dark); }
+    .md-dt  { font-size: 10px; color: var(--tx-lt); }
+    .kpi4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; }
+    .kc { background: #fff; border-radius: 9px; padding: 9px; box-shadow: var(--sh-sm); }
+    .kc-l { font-size: 9px; color: var(--tx-lt); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+    .kc-v { font-size: 15px; font-weight: 900; color: var(--tx-dark); }
+    .kc-v.or { color: var(--or); }
+    .kc-v.gr { color: #10b981; }
+    .kc-ch { font-size: 9px; color: #10b981; font-weight: 700; margin-top: 2px; }
+    .tables2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; flex: 1; }
+    .tc { background: #fff; border-radius: 9px; padding: 9px; box-shadow: var(--sh-sm); }
+    .tc-ttl { font-size: 10px; font-weight: 800; color: var(--tx-dark); margin-bottom: 7px; }
+    .tgrid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+    .tcell { aspect-ratio: 1; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+    .tcell.fr { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .tcell.bu { background: #fff3e0; color: #ea580c; border: 1px solid #ffcc80; }
+    .tcell.re { background: #ede9fe; color: #7c3aed; border: 1px solid #ddd6fe; }
+    .olist { display: flex; flex-direction: column; gap: 5px; }
+    .orow { display: flex; justify-content: space-between; align-items: center; padding: 5px 7px; background: #f8fafc; border-radius: 6px; }
+    .ot { font-weight: 800; color: var(--tx-dark); font-size: 10px; }
+    .od { color: var(--tx-lt); font-size: 9px; }
+    .oa { font-weight: 900; color: var(--or); font-size: 10px; }
+
+    /* ── SECTIONS COMMON ── */
+    .sec-head { text-align: center; max-width: 620px; margin: 0 auto 60px; }
+    .sec-title { font-size: clamp(26px, 3.8vw, 44px); font-weight: 900; color: var(--tx-dark); line-height: 1.15; letter-spacing: -.5px; margin-bottom: 16px; }
+    .sec-sub { font-size: 17px; color: var(--tx-mid); line-height: 1.72; }
+
+    /* ── PROBLEM ── */
+    .s-problem { padding: 96px 0; background: var(--bg); }
+    .prob-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 22px; }
+    .prob-card { background: #fff; border-radius: var(--r-md); padding: 28px 26px; border: 1px solid var(--border); box-shadow: var(--sh-sm); transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+    .prob-card:hover { transform: translateY(-5px); box-shadow: var(--sh-md); }
+    .prob-ico { width: 48px; height: 48px; background: #fef2f2; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px; color: #ef4444; }
+    .prob-ico svg { width: 22px; height: 22px; }
+    .prob-card h3 { font-size: 16px; font-weight: 800; color: var(--tx-dark); margin-bottom: 8px; }
+    .prob-card p  { font-size: 14px; color: var(--tx-mid); line-height: 1.6; }
+
+    /* ── SOLUTION ── */
+    .s-solution { padding: 96px 0; background: #fff; }
+    .sol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+    .sol-items { display: flex; flex-direction: column; gap: 22px; margin-top: 32px; }
+    .sol-item { display: flex; gap: 16px; align-items: flex-start; }
+    .sol-ico { width: 42px; height: 42px; background: var(--or-100); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--or); }
+    .sol-ico svg { width: 20px; height: 20px; }
+    .sol-item h4 { font-size: 15px; font-weight: 800; color: var(--tx-dark); margin-bottom: 4px; }
+    .sol-item p  { font-size: 14px; color: var(--tx-mid); line-height: 1.55; }
+    .sol-visual { position: relative; padding: 24px; }
+    .pmock { background: #fff; border-radius: var(--r-lg); box-shadow: var(--sh-lg); border: 1px solid var(--border); overflow: hidden; }
+    .pmock-head { background: linear-gradient(135deg,#0f172a,#1e293b); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+    .pmock-title { color: #fff; font-size: 13px; font-weight: 700; }
+    .live-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #4ade80; font-weight: 700; }
+    .live-dot { width: 7px; height: 7px; background: #4ade80; border-radius: 50%; animation: blink 1.6s infinite; }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:.25;} }
+    .pmock-body { padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+    .mkpi3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; }
+    .mk { background: var(--bg); border-radius: 9px; padding: 11px; text-align: center; }
+    .mk-v { font-size: 19px; font-weight: 900; color: var(--tx-dark); }
+    .mk-v.or { color: var(--or); }
+    .mk-v.gr { color: #10b981; }
+    .mk-l { font-size: 10px; color: var(--tx-lt); font-weight: 600; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+    .chip { padding: 5px 10px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+    .chip.fr { background: #dcfce7; color: #15803d; }
+    .chip.bu { background: #fff3e0; color: #ea580c; }
+    .chip.re { background: #ede9fe; color: #7c3aed; }
+    .rorder { display: flex; justify-content: space-between; align-items: center; padding: 9px 11px; background: var(--bg); border-radius: 8px; font-size: 12px; }
+    .rorder + .rorder { margin-top: 6px; }
+    .rorder-l { display: flex; flex-direction: column; gap: 2px; }
+    .rorder-t { font-weight: 800; color: var(--tx-dark); }
+    .rorder-d { color: var(--tx-lt); font-size: 11px; }
+    .rorder-a { font-weight: 900; color: var(--or); font-size: 14px; }
+    .float-chip { position: absolute; background: #fff; border-radius: 12px; box-shadow: var(--sh-md); padding: 11px 15px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); font-size: 12px; will-change: transform; }
+    .float-chip .fi-wrap { width: 34px; height: 34px; border-radius: 9px; background: var(--or-100); display: flex; align-items: center; justify-content: center; color: var(--or); }
+    .float-chip .fi-wrap svg { width: 17px; height: 17px; }
+    .float-chip strong { display: block; font-size: 14px; font-weight: 900; color: var(--tx-dark); }
+    .float-chip span  { font-size: 11px; color: var(--tx-lt); }
+    .fc1 { bottom: 4px; right: 4px; animation: float-chip 5s 0.4s ease-in-out infinite; }
+    .fc2 { top: 4px; left: 4px; animation: float-chip 5s 1.6s ease-in-out infinite; }
+    @keyframes float-chip {
+      0%,100% { transform: translateY(0px); }
+      50%      { transform: translateY(-10px); }
+    }
+
+    /* ── FEATURES ── */
+    .s-features { padding: 96px 0; background: var(--bg); }
+    .feat-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 22px; }
+    .feat-card { background: #fff; border-radius: var(--r-md); padding: 26px 22px; border: 1px solid var(--border); box-shadow: var(--sh-sm); transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-fast); position: relative; overflow: hidden; }
+    .feat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--or); transform: scaleX(0); transition: transform var(--dur-base) var(--ease-out); }
+    .feat-card:hover { transform: translateY(-6px); box-shadow: var(--sh-md), 0 0 0 1px var(--or-200), 0 8px 40px rgba(249,115,22,.10); border-color: var(--or-200); }
+    .feat-card:hover::before { transform: scaleX(1); }
+    .feat-ico { width: 52px; height: 52px; background: var(--or-100); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; color: var(--or); transition: background .3s, color .3s; }
+    .feat-ico svg { width: 24px; height: 24px; }
+    .feat-card:hover .feat-ico { background: var(--or); color: #fff; }
+    .feat-card h3 { font-size: 15px; font-weight: 800; color: var(--tx-dark); margin-bottom: 8px; }
+    .feat-card p  { font-size: 13px; color: var(--tx-mid); line-height: 1.6; }
+
+    /* ── BIG DASHBOARD ── */
+    .s-dashboard { padding: 96px 0; background: linear-gradient(140deg, #0f172a 0%, #1e293b 100%); overflow: hidden; }
+    .dash-head { text-align: center; margin-bottom: 60px; }
+    .dash-head .sec-title { color: #fff; }
+    .dash-head .sec-sub   { color: rgba(255,255,255,.55); }
+    .big-frame { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-radius: var(--r-xl); padding: 18px; }
+    .big-bar { background: rgba(255,255,255,.08); border-radius: 11px; padding: 10px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .big-dots { display: flex; gap: 6px; }
+    .big-dots span { width: 12px; height: 12px; border-radius: 50%; }
+    .big-dots span:nth-child(1) { background: #fc6058; }
+    .big-dots span:nth-child(2) { background: #fec02f; }
+    .big-dots span:nth-child(3) { background: #2aca44; }
+    .big-url { flex: 1; background: rgba(255,255,255,.1); border-radius: 7px; padding: 7px 14px; font-size: 12px; color: rgba(255,255,255,.45); }
+    .big-content { display: flex; gap: 14px; height: 490px; }
+    .big-side { width: 178px; background: rgba(10,18,32,.75); border-radius: 11px; padding: 18px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+    .big-logo { color: #fff; font-weight: 900; font-size: 14px; margin-bottom: 20px; }
+    .big-logo em { color: var(--or); font-style: normal; }
+    .big-nav { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 8px; color: rgba(255,255,255,.45); font-size: 12px; font-weight: 500; }
+    .big-nav svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .big-nav.on { background: rgba(249,115,22,.18); color: var(--or); font-weight: 700; }
+    .big-main { flex: 1; display: flex; flex-direction: column; gap: 13px; overflow: hidden; }
+    .big-header { display: flex; justify-content: space-between; align-items: center; }
+    .big-header-title { color: #fff; font-size: 15px; font-weight: 800; }
+    .big-live { display: flex; align-items: center; gap: 7px; font-size: 12px; color: rgba(255,255,255,.45); }
+    .big-live-dot { width: 7px; height: 7px; background: #4ade80; border-radius: 50%; animation: blink 1.6s infinite; }
+    .big-kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 11px; }
+    .bk { background: #fff; border-radius: 11px; padding: 15px; }
+    .bk-l { font-size: 9px; color: var(--tx-lt); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+    .bk-v { font-size: 22px; font-weight: 900; color: var(--tx-dark); }
+    .bk-v.or { color: var(--or); }
+    .bk-v.gr { color: #10b981; }
+    .bk-v.pu { color: #8b5cf6; }
+    .bk-t { font-size: 10px; color: #10b981; font-weight: 700; margin-top: 4px; }
+    .bk-t.nt { color: var(--tx-lt); }
+    .big-mid { display: grid; grid-template-columns: 2fr 1fr; gap: 13px; flex: 1; overflow: hidden; }
+    .big-card { background: #fff; border-radius: 11px; padding: 15px; overflow: hidden; }
+    .big-card-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 800; color: var(--tx-dark); margin-bottom: 13px; }
+    .big-card-count { font-weight: 600; color: var(--tx-lt); }
+    .tg6 { display: grid; grid-template-columns: repeat(6,1fr); gap: 7px; }
+    .tc6 { aspect-ratio: 1; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-weight: 800; }
+    .tc6 .n { font-size: 13px; }
+    .tc6 .a { font-size: 8px; font-weight: 600; }
+    .tc6.fr { background: #dcfce7; color: #15803d; }
+    .tc6.bu { background: #fff3e0; color: #ea580c; }
+    .tc6.re { background: #ede9fe; color: #7c3aed; }
+    .legend { display: flex; gap: 14px; margin-top: 10px; }
+    .leg-i { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--tx-lt); }
+    .leg-d { width: 8px; height: 8px; border-radius: 2px; }
+    .leg-d.fr { background: #4ade80; }
+    .leg-d.bu { background: var(--or); }
+    .leg-d.re { background: #a78bfa; }
+    .prod-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+    .prod-row:last-child { border: none; }
+    .prod-name { color: var(--tx-dark); font-weight: 700; flex: 0 0 110px; }
+    .prod-bar-w { flex: 1; height: 4px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+    .prod-bar   { height: 100%; background: var(--or); border-radius: 4px; }
+    .prod-qty   { color: var(--tx-lt); font-weight: 600; flex: 0 0 26px; text-align: right; }
+
+    /* ── TYPES ── */
+    .s-types { padding: 96px 0; background: #fff; }
+    .types-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 16px; margin-top: 48px; }
+    .type-card { background: var(--bg); border-radius: var(--r-md); padding: 30px 14px; text-align: center; border: 2px solid transparent; transition: all .3s; cursor: default; }
+    .type-card:hover { border-color: var(--or); background: var(--or-lt); transform: translateY(-5px); box-shadow: var(--sh-or); }
+    .type-ico { width: 48px; height: 48px; background: #fff; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; color: var(--tx-mid); box-shadow: var(--sh-sm); transition: all .3s; }
+    .type-ico svg { width: 24px; height: 24px; }
+    .type-card:hover .type-ico { background: var(--or); color: #fff; box-shadow: none; }
+    .type-name { font-size: 13px; font-weight: 800; color: var(--tx-dark); }
+
+    /* ── BENEFITS ── */
+    .s-benefits { padding: 96px 0; background: var(--bg); }
+    .ben-grid-outer { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+    .ben-list { display: flex; flex-direction: column; gap: 16px; margin-top: 32px; }
+    .ben-list-item { display: flex; align-items: center; gap: 13px; }
+    .check { width: 26px; height: 26px; background: var(--or); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .check svg { width: 13px; height: 13px; color: #fff; }
+    .ben-list-item span { font-size: 15px; color: var(--tx-mid); }
+    .ben-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .ben-card { background: #fff; border-radius: var(--r-md); padding: 22px; box-shadow: var(--sh-sm); border: 1px solid var(--border); transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+    .ben-card:hover { transform: translateY(-3px); box-shadow: var(--sh-md); }
+    .ben-ico { width: 44px; height: 44px; background: var(--or-100); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 13px; color: var(--or); }
+    .ben-ico svg { width: 22px; height: 22px; }
+    .ben-card h4 { font-size: 14px; font-weight: 800; color: var(--tx-dark); margin-bottom: 6px; }
+    .ben-card p  { font-size: 13px; color: var(--tx-mid); line-height: 1.55; }
+
+    /* ── CTA ── */
+    .s-cta { padding: 96px 0; background: #fff; }
+    .cta-box { background: linear-gradient(140deg, #0f172a 0%, #1e293b 100%); border-radius: var(--r-xl); padding: 84px 64px; text-align: center; position: relative; overflow: hidden; }
+    .cta-box::before { content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%); width: 420px; height: 420px; background: radial-gradient(circle, rgba(249,115,22,.28) 0%, transparent 70%); pointer-events: none; }
+    .cta-box .sec-title { color: #fff; position: relative; }
+    .cta-sub { font-size: 17px; color: rgba(255,255,255,.55); margin: 16px 0 44px; position: relative; }
+    .cta-btns { display: flex; gap: 12px; justify-content: center; position: relative; }
+    .cta-btns .btn { padding: 16px 36px; font-size: 16px; border-radius: 12px; }
+
+    /* ── FOOTER ── */
+    footer { background: #0f172a; color: rgba(255,255,255,.55); padding: 56px 0 32px; }
+    .foot-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+    .foot-logo { color: #fff; font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+    .foot-logo em { color: var(--or); font-style: normal; }
+    .foot-logo-icon { width: 34px; height: 34px; background: var(--or); border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+    .foot-logo-icon svg { width: 18px; height: 18px; }
+    .foot-desc { font-size: 14px; line-height: 1.75; max-width: 270px; }
+    .foot-col-title { color: #fff; font-size: 14px; font-weight: 800; margin-bottom: 16px; }
+    .foot-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .foot-links a { color: rgba(255,255,255,.5); text-decoration: none; font-size: 14px; transition: color .2s; }
+    .foot-links a:hover { color: var(--or); }
+    .foot-bottom { border-top: 1px solid rgba(255,255,255,.08); padding-top: 24px; text-align: center; font-size: 13px; }
+
+    /* ── RESPONSIVE ── */
+    /* ── PROGRESS BAR ── */
+    #pgbar {
+      position: fixed; top: 0; left: 0; height: 3px; z-index: 1000;
+      background: linear-gradient(90deg, var(--or-dk), var(--or));
+      box-shadow: 0 0 10px rgba(249,115,22,.6);
+      width: 0%; transition: width .1s linear; pointer-events: none;
+      border-radius: 0 2px 2px 0;
+    }
+
+    /* ── TYPE CARD TRANSITION ── */
+    .type-card { transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-fast), background var(--dur-fast); }
+
+    @media (max-width: 1024px) {
+      .feat-grid  { grid-template-columns: repeat(2,1fr); }
+      .types-grid { grid-template-columns: repeat(3,1fr); }
+      .tg6 { grid-template-columns: repeat(4,1fr); }
+      .big-kpis { grid-template-columns: repeat(2,1fr); }
+    }
+    @media (max-width: 768px) {
+      .nav-links, .nav-ctas { display: none; }
+      .hamburger { display: flex; }
+      .hero-grid, .sol-grid, .ben-grid-outer { grid-template-columns: 1fr; gap: 48px; }
+      .browser { transform: none; }
+      .sol-visual { padding: 0; }
+      .fc1, .fc2 { display: none; }
+      .prob-grid { grid-template-columns: 1fr; }
+      .feat-grid { grid-template-columns: 1fr; }
+      .types-grid { grid-template-columns: repeat(3,1fr); }
+      .ben-grid { grid-template-columns: 1fr; }
+      .foot-grid { grid-template-columns: 1fr; gap: 32px; }
+      .cta-box { padding: 52px 24px; }
+      .cta-btns { flex-direction: column; align-items: center; }
+      .hero-stats { gap: 24px; flex-wrap: wrap; }
+      .big-content { flex-direction: column; height: auto; }
+      .big-side { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
+      .big-logo { width: 100%; margin-bottom: 8px; }
+      .big-kpis { grid-template-columns: repeat(2,1fr); }
+      .big-mid { grid-template-columns: 1fr; }
+      .tg6 { grid-template-columns: repeat(4,1fr); }
+    }
+    @media (max-width: 480px) {
+      .hero-btns { flex-direction: column; align-items: flex-start; }
+      .types-grid { grid-template-columns: repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- SCROLL PROGRESS -->
+<div id="pgbar"></div>
+
+<!-- MOBILE MENU -->
+<div class="m-menu" id="mMenu">
+  <div class="m-menu-top">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="2" width="6" height="6" rx="1.2"/><rect x="12" y="2" width="6" height="6" rx="1.2"/>
+          <rect x="2" y="12" width="6" height="6" rx="1.2"/><rect x="12" y="12" width="6" height="6" rx="1.2"/>
+        </svg>
+      </div>
+      Gest<em>iva</em>
+    </div>
+    <span class="close-x" onclick="toggleMenu()">&#x2715;</span>
+  </div>
+  <ul>
+    <li><a href="#problema"  onclick="toggleMenu()">El problema</a></li>
+    <li><a href="#funciones" onclick="toggleMenu()">Funciones</a></li>
+    <li><a href="#negocios"  onclick="toggleMenu()">Para tu negocio</a></li>
+    <li><a href="#beneficios" onclick="toggleMenu()">Beneficios</a></li>
+  </ul>
+  <a href="signup.html" class="btn btn-primary" onclick="toggleMenu()">Entrar al sistema →</a>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="container">
+    <div class="nav-inner">
+      <a href="#" class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="6" height="6" rx="1.2"/><rect x="12" y="2" width="6" height="6" rx="1.2"/>
+            <rect x="2" y="12" width="6" height="6" rx="1.2"/><rect x="12" y="12" width="6" height="6" rx="1.2"/>
+          </svg>
+        </div>
+        Gest<em>iva</em>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#problema">El problema</a></li>
+        <li><a href="#funciones">Funciones</a></li>
+        <li><a href="#negocios">Para tu negocio</a></li>
+        <li><a href="#beneficios">Beneficios</a></li>
+      </ul>
+      <div class="nav-ctas">
+        <a href="login.html" class="btn btn-outline">Iniciar sesión</a>
+        <a href="signup.html" class="btn btn-primary">Probar sistema</a>
+      </div>
+      <div class="hamburger" onclick="toggleMenu()">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-badge">
+          <div class="badge-pulse">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          Sistema para gastronomia &nbsp;&middot;&nbsp; 100% en la nube
+        </div>
+        <h1 class="hero-title">
+          Control total para tu <span class="hl">restaurante,<br>bar</span> o boliche
+        </h1>
+        <p class="hero-sub">
+          Administrá mesas, consumos, caja, ventas y pagos en tiempo real desde un sistema simple, rápido y moderno.
+        </p>
+        <div class="hero-btns">
+          <a href="signup.html" class="btn btn-primary">Entrar al sistema →</a>
+          <a href="#funciones" class="btn btn-outline">Ver funciones &rarr;</a>
+        </div>
+        <div class="hero-stats">
+          <div><div class="stat-n">+500</div><div class="stat-l">Negocios activos</div></div>
+          <div><div class="stat-n">99.9%</div><div class="stat-l">Disponibilidad</div></div>
+          <div><div class="stat-n">5 min</div><div class="stat-l">Para empezar</div></div>
+        </div>
+      </div>
+
+      <!-- hero dashboard mockup -->
+      <div class="hero-visual">
+        <div class="browser">
+          <div class="b-bar">
+            <div class="b-dots"><span></span><span></span><span></span></div>
+            <div class="b-url">app.gestiva.com/dashboard</div>
+          </div>
+          <div class="mini-dash">
+            <div class="md-side">
+              <div class="md-logo">Gest<em>iva</em></div>
+              <div class="md-item on">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Dashboard
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                Mesas
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>
+                Consumos
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><circle cx="12" cy="14" r="2"/></svg>
+                Caja
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><line x1="12" y1="22" x2="12" y2="12"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>
+                Productos
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Mozos
+              </div>
+              <div class="md-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="4" height="10"/><rect x="10" y="6" width="4" height="16"/><rect x="18" y="2" width="4" height="20"/></svg>
+                Reportes
+              </div>
+            </div>
+            <div class="md-main">
+              <div class="md-top">
+                <div class="md-ttl">Dashboard &middot; Hoy</div>
+                <div class="md-dt">Dom 18 May &middot; 21:34</div>
+              </div>
+              <div class="kpi4">
+                <div class="kc"><div class="kc-l">Total vendido</div><div class="kc-v or">$148.500</div><div class="kc-ch">+23% vs ayer</div></div>
+                <div class="kc"><div class="kc-l">Mesas activas</div><div class="kc-v">8 / 12</div><div class="kc-ch">4 libres</div></div>
+                <div class="kc"><div class="kc-l">En caja</div><div class="kc-v gr">$96.000</div><div class="kc-ch">Abierta 11hs</div></div>
+                <div class="kc"><div class="kc-l">Pedidos</div><div class="kc-v">47</div><div class="kc-ch">Récord</div></div>
+              </div>
+              <div class="tables2">
+                <div class="tc">
+                  <div class="tc-ttl">Estado de mesas</div>
+                  <div class="tgrid">
+                    <div class="tcell bu">M1</div><div class="tcell bu">M2</div>
+                    <div class="tcell fr">M3</div><div class="tcell bu">M4</div>
+                    <div class="tcell fr">M5</div><div class="tcell bu">M6</div>
+                    <div class="tcell re">M7</div><div class="tcell bu">M8</div>
+                    <div class="tcell fr">M9</div><div class="tcell bu">M10</div>
+                    <div class="tcell fr">M11</div><div class="tcell bu">M12</div>
+                  </div>
+                </div>
+                <div class="tc">
+                  <div class="tc-ttl">Últimos consumos</div>
+                  <div class="olist">
+                    <div class="orow"><div><div class="ot">Mesa 2</div><div class="od">Pizza + vinos</div></div><div class="oa">$12.800</div></div>
+                    <div class="orow"><div><div class="ot">Mesa 8</div><div class="od">Burger + cervezas</div></div><div class="oa">$8.400</div></div>
+                    <div class="orow"><div><div class="ot">Mesa 10</div><div class="od">Mesa completa</div></div><div class="oa">$34.200</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section class="s-problem" id="problema">
+  <div class="container">
+    <div class="sec-head fade">
+      <div class="tag">El problema</div>
+      <h2 class="sec-title">Muchos negocios pierden tiempo y plata sin darse cuenta</h2>
+      <p class="sec-sub">Sin un sistema de control, cada jornada acumula caos. Al final del mes el número no cierra y nadie sabe bien por qué.</p>
+    </div>
+    <div class="prob-grid">
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="8" y1="14" x2="16" y2="14"/></svg>
+        </div>
+        <h3>Caja imposible de controlar</h3>
+        <p>Fin del dia y no sabs exactamente cuánto ingresaste. Cierres manuales con errores, plata que "falta" sin explicacion.</p>
+      </div>
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <h3>Pedidos anotados en papel</h3>
+        <p>Comandas perdidas, ordenes equivocadas, clientes que esperan demasiado. Cada error es dinero y reputacion desperdiciados.</p>
+      </div>
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </div>
+        <h3>Sin informacion del negocio</h3>
+        <p>Que producto vende mas? Que mesa factura menos? Sin datos, tomas decisiones a ciegas.</p>
+      </div>
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3>Atencion lenta y desorganizada</h3>
+        <p>Mozos yendo y viniendo sin orden. Clientes que esperan, se impacientan y no vuelven. El caos cuesta mas de lo que parece.</p>
+      </div>
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><line x1="12" y1="22" x2="12" y2="12"/><line x1="3.27" y1="6.96" x2="12" y2="12.01"/><line x1="20.73" y1="6.96" x2="12" y2="12.01"/><line x1="8" y1="10" x2="16" y2="10"/></svg>
+        </div>
+        <h3>Stock que desaparece</h3>
+        <p>No sabs cuanto tenes, cuanto usaste ni cuanto se perdio. El stock que no se controla simplemente se evapora.</p>
+      </div>
+      <div class="prob-card fade">
+        <div class="prob-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="4" height="10"/><rect x="10" y="6" width="4" height="16"/><rect x="18" y="2" width="4" height="20"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+        </div>
+        <h3>Sin reportes ni tendencias</h3>
+        <p>No pods comparar semanas ni ver si estas creciendo. Vivis el dia a dia sin saber si el negocio avanza o retrocede.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SOLUTION -->
+<section class="s-solution" id="solucion">
+  <div class="container">
+    <div class="sol-grid">
+      <div>
+        <div class="tag fade">La solucion</div>
+        <h2 class="sec-title fade">Todo tu negocio en un solo panel, en tiempo real</h2>
+        <p class="sec-sub fade">Gestiva centraliza cada parte de tu operacion para que tengas control total desde cualquier dispositivo.</p>
+        <div class="sol-items">
+          <div class="sol-item fade">
+            <div class="sol-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </div>
+            <div>
+              <h4>Mesas activas en tiempo real</h4>
+              <p>Ve de un vistazo que mesas estan libres, ocupadas o reservadas. Sin confusiones entre el equipo.</p>
+            </div>
+          </div>
+          <div class="sol-item fade">
+            <div class="sol-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><circle cx="12" cy="14" r="2"/></svg>
+            </div>
+            <div>
+              <h4>Caja controlada al centavo</h4>
+              <p>Abris y cerras caja con registro completo. Nada desaparece sin explicacion.</p>
+            </div>
+          </div>
+          <div class="sol-item fade">
+            <div class="sol-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="4" height="10"/><rect x="10" y="6" width="4" height="16"/><rect x="18" y="2" width="4" height="20"/></svg>
+            </div>
+            <div>
+              <h4>Estadisticas del negocio</h4>
+              <p>Ves lo que vendiste por producto, mozo y horario. Informacion real para decisiones reales.</p>
+            </div>
+          </div>
+          <div class="sol-item fade">
+            <div class="sol-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><rect x="2" y="7" width="4" height="10" rx="1"/></svg>
+            </div>
+            <div>
+              <h4>Desde cualquier dispositivo</h4>
+              <p>Celular, tablet o PC. Todo sincronizado al instante. Sin instalaciones complicadas.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sol-visual fade">
+        <div class="float-chip fc2">
+          <div class="fi-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          </div>
+          <div><strong>+23% ventas</strong><span>vs. semana pasada</span></div>
+        </div>
+        <div class="pmock">
+          <div class="pmock-head">
+            <div class="pmock-title">Gestiva &middot; Panel de control</div>
+            <div class="live-badge"><div class="live-dot"></div>En vivo</div>
+          </div>
+          <div class="pmock-body">
+            <div class="mkpi3">
+              <div class="mk"><div class="mk-v or">$148.500</div><div class="mk-l">Vendido hoy</div></div>
+              <div class="mk"><div class="mk-v">8 / 12</div><div class="mk-l">Mesas activas</div></div>
+              <div class="mk"><div class="mk-v gr">$96.000</div><div class="mk-l">En caja</div></div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:800;color:var(--tx-dark);margin-bottom:8px;">Estado de mesas</div>
+              <div class="chips">
+                <div class="chip bu">M1 &middot; Ocupada</div>
+                <div class="chip bu">M2 &middot; Ocupada</div>
+                <div class="chip fr">M3 &middot; Libre</div>
+                <div class="chip re">M4 &middot; Reservada</div>
+                <div class="chip bu">M5 &middot; Ocupada</div>
+                <div class="chip fr">M6 &middot; Libre</div>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:800;color:var(--tx-dark);margin-bottom:8px;">Ultimas ordenes</div>
+              <div class="rorder">
+                <div class="rorder-l">
+                  <div class="rorder-t">Mesa 2 &middot; Mozo: Carlos</div>
+                  <div class="rorder-d">Pizza Muzzarella + 2 vinos</div>
+                </div>
+                <div class="rorder-a">$12.800</div>
+              </div>
+              <div class="rorder">
+                <div class="rorder-l">
+                  <div class="rorder-t">Mesa 8 &middot; Mozo: Lucia</div>
+                  <div class="rorder-d">Burger x2 + cervezas</div>
+                </div>
+                <div class="rorder-a">$8.400</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="float-chip fc1">
+          <div class="fi-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div><strong>Caja cuadrada</strong><span>Cierre automatico 23hs</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="s-features" id="funciones">
+  <div class="container">
+    <div class="sec-head fade">
+      <div class="tag">Funciones</div>
+      <h2 class="sec-title">Todo lo que necesitas para gestionar tu negocio</h2>
+      <p class="sec-sub">Cada funcion esta disenada para resolver un problema real de los negocios gastronomicos.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        </div>
+        <h3>Control de mesas</h3>
+        <p>Mapa visual de todas tus mesas con estado en tiempo real: libre, ocupada o reservada. Sin confusiones entre mozos.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <h3>Consumos por mesa</h3>
+        <p>Cada producto que sale de cocina se registra al instante. Sabes exactamente que tiene cada mesa y cuanto suma.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><circle cx="12" cy="14" r="2"/></svg>
+        </div>
+        <h3>Caja y cierre diario</h3>
+        <p>Abris y cerras caja con registro detallado. Informe automatico al final del dia. Sin errores ni faltantes inexplicables.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><line x1="12" y1="22" x2="12" y2="12"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>
+        </div>
+        <h3>Gestion de productos</h3>
+        <p>Cargas tu carta completa: precios, categorias, variantes. Actualizas en segundos y el cambio se refleja al instante.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <h3>Roles para empleados</h3>
+        <p>Mozos, cajeros, administradores. Cada uno accede solo a lo que le corresponde. Seguridad y orden interno.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <h3>Estadisticas en tiempo real</h3>
+        <p>Cuanto vendiste, en que horario, que producto mas. Informacion viva para que puedas tomar mejores decisiones.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg>
+        </div>
+        <h3>Menu digital QR</h3>
+        <p>Los clientes escanean un QR y ven tu carta actualizada. Sin imprimir menus, sin errores de precios.</p>
+      </div>
+      <div class="feat-card fade">
+        <div class="feat-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="4" height="10"/><rect x="10" y="6" width="4" height="16"/><rect x="18" y="2" width="4" height="20"/></svg>
+        </div>
+        <h3>Reportes de ventas</h3>
+        <p>Reportes diarios, semanales y mensuales. Comparas periodos, ves tendencias y exportas lo que necesitas.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BIG DASHBOARD -->
+<section class="s-dashboard">
+  <div class="container">
+    <div class="dash-head fade">
+      <div class="tag" style="background:rgba(249,115,22,.15);color:var(--or);">Panel de control</div>
+      <h2 class="sec-title">Tu negocio siempre visible, siempre bajo control</h2>
+      <p class="sec-sub">Un dashboard disenado para que en 3 segundos sepas exactamente como esta tu negocio.</p>
+    </div>
+    <div class="big-frame fade">
+      <div class="big-bar">
+        <div class="big-dots"><span></span><span></span><span></span></div>
+        <div class="big-url">app.gestiva.com/dashboard</div>
+      </div>
+      <div class="big-content">
+        <div class="big-side">
+          <div class="big-logo">Gest<em>iva</em></div>
+          <div class="big-nav on">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Dashboard
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Mesas
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>
+            Consumos
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><circle cx="12" cy="14" r="2"/></svg>
+            Caja
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+            Productos
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            Mozos
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="12" width="4" height="10"/><rect x="10" y="6" width="4" height="16"/><rect x="18" y="2" width="4" height="20"/></svg>
+            Reportes
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+            Menu QR
+          </div>
+          <div class="big-nav">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            Ajustes
+          </div>
+        </div>
+
+        <div class="big-main">
+          <div class="big-header">
+            <div class="big-header-title">Dashboard &middot; Domingo 18 Mayo 2026</div>
+            <div class="big-live"><div class="big-live-dot"></div>En vivo &middot; 21:34</div>
+          </div>
+          <div class="big-kpis">
+            <div class="bk"><div class="bk-l">Total vendido hoy</div><div class="bk-v or">$148.500</div><div class="bk-t">+23% vs ayer</div></div>
+            <div class="bk"><div class="bk-l">Mesas activas</div><div class="bk-v">8 / 12</div><div class="bk-t nt">4 libres &middot; 1 reservada</div></div>
+            <div class="bk"><div class="bk-l">En caja ahora</div><div class="bk-v gr">$96.000</div><div class="bk-t">Abierta 11hs &middot; Cierra 23hs</div></div>
+            <div class="bk"><div class="bk-l">Pedidos del dia</div><div class="bk-v pu">47</div><div class="bk-t">Record del mes</div></div>
+          </div>
+          <div class="big-mid">
+            <div class="big-card">
+              <div class="big-card-head">Estado de mesas<span class="big-card-count">12 mesas en total</span></div>
+              <div class="tg6">
+                <div class="tc6 bu"><div class="n">1</div><div class="a">$12.800</div></div>
+                <div class="tc6 bu"><div class="n">2</div><div class="a">$8.400</div></div>
+                <div class="tc6 fr"><div class="n">3</div><div class="a">Libre</div></div>
+                <div class="tc6 bu"><div class="n">4</div><div class="a">$34.200</div></div>
+                <div class="tc6 fr"><div class="n">5</div><div class="a">Libre</div></div>
+                <div class="tc6 bu"><div class="n">6</div><div class="a">$19.700</div></div>
+                <div class="tc6 re"><div class="n">7</div><div class="a">Reserv.</div></div>
+                <div class="tc6 bu"><div class="n">8</div><div class="a">$7.300</div></div>
+                <div class="tc6 fr"><div class="n">9</div><div class="a">Libre</div></div>
+                <div class="tc6 bu"><div class="n">10</div><div class="a">$22.100</div></div>
+                <div class="tc6 fr"><div class="n">11</div><div class="a">Libre</div></div>
+                <div class="tc6 bu"><div class="n">12</div><div class="a">$44.000</div></div>
+              </div>
+              <div class="legend">
+                <div class="leg-i"><div class="leg-d fr"></div>Libre</div>
+                <div class="leg-i"><div class="leg-d bu"></div>Ocupada</div>
+                <div class="leg-i"><div class="leg-d re"></div>Reservada</div>
+              </div>
+            </div>
+            <div class="big-card">
+              <div class="big-card-head">Mas vendidos hoy</div>
+              <div class="prod-row"><span class="prod-name">Pizza Muzzarella</span><div class="prod-bar-w"><div class="prod-bar" style="width:90%"></div></div><span class="prod-qty">x18</span></div>
+              <div class="prod-row"><span class="prod-name">Cerveza artesanal</span><div class="prod-bar-w"><div class="prod-bar" style="width:78%"></div></div><span class="prod-qty">x34</span></div>
+              <div class="prod-row"><span class="prod-name">Burger completa</span><div class="prod-bar-w"><div class="prod-bar" style="width:62%"></div></div><span class="prod-qty">x12</span></div>
+              <div class="prod-row"><span class="prod-name">Vino Malbec</span><div class="prod-bar-w"><div class="prod-bar" style="width:46%"></div></div><span class="prod-qty">x9</span></div>
+              <div class="prod-row"><span class="prod-name">Tabla picada</span><div class="prod-bar-w"><div class="prod-bar" style="width:30%"></div></div><span class="prod-qty">x7</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TYPES -->
+<section class="s-types" id="negocios">
+  <div class="container">
+    <div class="sec-head fade">
+      <div class="tag">Para tu tipo de negocio</div>
+      <h2 class="sec-title">Disenado para cualquier negocio gastronomico</h2>
+      <p class="sec-sub">Sea chico o grande, de dia o de noche. Gestiva se adapta a tu operacion.</p>
+    </div>
+    <div class="types-grid">
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="2" x2="8" y2="12"/><line x1="8" y1="16" x2="8" y2="22"/><line x1="16" y1="2" x2="16" y2="6"/><path d="M16 10a4 4 0 000 8v4"/><line x1="5" y1="12" x2="11" y2="12"/></svg>
+        </div>
+        <div class="type-name">Restaurantes</div>
+      </div>
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        </div>
+        <div class="type-name">Bares</div>
+      </div>
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <div class="type-name">Boliches</div>
+      </div>
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v6a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><path d="M6 2v2m4-2v2m4-2v2"/></svg>
+        </div>
+        <div class="type-name">Cafeterias</div>
+      </div>
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        </div>
+        <div class="type-name">Food trucks</div>
+      </div>
+      <div class="type-card fade">
+        <div class="type-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="type-name">Eventos</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFITS -->
+<section class="s-benefits" id="beneficios">
+  <div class="container">
+    <div class="ben-grid-outer">
+      <div class="fade">
+        <div class="tag">Por que Gestiva</div>
+        <h2 class="sec-title">Mas control.<br>Menos caos.<br>Mas plata.</h2>
+        <p class="sec-sub" style="margin-top:14px;">Con informacion clara en tiempo real, dejas de apagar incendios y empezas a crecer con intencion.</p>
+        <div class="ben-list">
+          <div class="ben-list-item">
+            <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <span>Sin instalaciones complicadas &mdash; todo en la nube</span>
+          </div>
+          <div class="ben-list-item">
+            <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <span>Configuracion lista en menos de 5 minutos</span>
+          </div>
+          <div class="ben-list-item">
+            <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <span>Soporte en tiempo real cuando lo necesitas</span>
+          </div>
+          <div class="ben-list-item">
+            <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <span>Funciona desde celular, tablet o PC</span>
+          </div>
+        </div>
+      </div>
+      <div class="ben-grid">
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          </div>
+          <h4>Mas control del dinero</h4>
+          <p>Cada peso que entra o sale queda registrado. Cerras el dia sabiendo exactamente cuanto facturaste.</p>
+        </div>
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h4>Menos errores</h4>
+          <p>Sin anotaciones a mano, sin pedidos perdidos, sin cuentas mal cerradas. El sistema hace el trabajo.</p>
+        </div>
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h4>Atencion mas rapida</h4>
+          <p>Los mozos operan desde el celular. Los pedidos llegan directo a cocina. El cliente espera menos.</p>
+        </div>
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 018.91 14"/></svg>
+          </div>
+          <h4>Decisiones con informacion</h4>
+          <p>Que producto conviene mas? Que dia vendes mejor? Los datos estan ahi para que los uses.</p>
+        </div>
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>
+          </div>
+          <h4>Todo en la nube</h4>
+          <p>Sin hardware caro. Sin servidores locales. Accedes desde cualquier lado, siempre actualizado.</p>
+        </div>
+        <div class="ben-card fade">
+          <div class="ben-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="10 8 16 12 10 16 10 8"/></svg>
+          </div>
+          <h4>Listo en minutos</h4>
+          <p>No necesitas tecnicos. Cargas tu negocio, productos y mesas en minutos. Ya podes empezar.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="s-cta" id="demo">
+  <div class="container">
+    <div class="cta-box fade">
+      <h2 class="sec-title">Organiza tu negocio con un<br>sistema simple y poderoso</h2>
+      <p class="cta-sub">Probalo gratis. Sin tarjeta de credito. Sin compromisos.</p>
+      <div class="cta-btns">
+        <a href="signup.html" class="btn btn-white">Entrar al sistema →</a>
+        <a href="signup.html" class="btn btn-ghost-white">Ver demo en vivo &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="container">
+    <div class="foot-grid">
+      <div>
+        <div class="foot-logo">
+          <div class="foot-logo-icon">
+            <svg viewBox="0 0 20 20" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="6" height="6" rx="1.2"/><rect x="12" y="2" width="6" height="6" rx="1.2"/>
+              <rect x="2" y="12" width="6" height="6" rx="1.2"/><rect x="12" y="12" width="6" height="6" rx="1.2"/>
+            </svg>
+          </div>
+          Gest<em>iva</em>
+        </div>
+        <p class="foot-desc">Sistema de administracion para restaurantes, bares, boliches y negocios gastronomicos. Simple, moderno y 100% en la nube.</p>
+      </div>
+      <div>
+        <div class="foot-col-title">Producto</div>
+        <ul class="foot-links">
+          <li><a href="#">Funciones</a></li>
+          <li><a href="#">Precios</a></li>
+          <li><a href="#">Demo</a></li>
+          <li><a href="#">Novedades</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="foot-col-title">Soporte</div>
+        <ul class="foot-links">
+          <li><a href="#">Ayuda</a></li>
+          <li><a href="#">Contacto</a></li>
+          <li><a href="#">WhatsApp</a></li>
+          <li><a href="#">Terminos</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">&copy; 2026 Gestiva &middot; Todos los derechos reservados</div>
+  </div>
+</footer>
+
+<script>
+  // ── mobile menu ──
+  function toggleMenu() {
+    document.getElementById('mMenu').classList.toggle('open');
+  }
+
+  // ── scroll: nav shadow + progress bar ──
+  const pgbar = document.getElementById('pgbar');
+  window.addEventListener('scroll', () => {
+    const nav = document.getElementById('nav');
+    nav.classList.toggle('scrolled', window.scrollY > 10);
+    const doc = document.documentElement;
+    const pct = (doc.scrollTop / (doc.scrollHeight - doc.clientHeight)) * 100;
+    pgbar.style.width = pct + '%';
+  }, { passive: true });
+
+  // ── fade-in on scroll with stable stagger index ──
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      // use stable index (all siblings, not only un-animated)
+      const allSiblings = [...entry.target.parentElement.querySelectorAll('.fade')];
+      const idx = allSiblings.indexOf(entry.target);
+      setTimeout(() => entry.target.classList.add('in'), idx * 90);
+      io.unobserve(entry.target);
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.fade').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

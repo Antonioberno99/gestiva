@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>Procesando pago · Gestiva</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; font-family:'Inter',sans-serif; background:linear-gradient(135deg,#fff7ed,#fafafa); min-height:100vh; display:grid; place-items:center; }
+  .box { background:white; padding:40px; border-radius:24px; box-shadow:0 12px 40px rgba(15,23,42,.1); max-width:420px; text-align:center; }
+  h1 { font-family:'Outfit',sans-serif; margin:0 0 12px; }
+  p { color:#475569; margin-bottom:20px; }
+  .btn { display:inline-block;background:linear-gradient(135deg,#f97316,#ea580c);color:white;padding:12px 24px;border-radius:12px;font-weight:600;text-decoration:none;box-shadow:0 6px 16px rgba(249,115,22,.3); }
+  .spinner { width:48px;height:48px;border:4px solid #fff7ed;border-top-color:#f97316;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+</style>
+</head>
+<body>
+<div class="box" id="box">
+  <div class="spinner"></div>
+  <h1>Procesando pago</h1>
+  <p>Esperando confirmación de MercadoPago...</p>
+</div>
+<script src="gestiva-config.js"></script>
+<script>
+const token = localStorage.getItem('gestiva_token');
+if (!token) location.href = 'login.html';
+
+async function check() {
+  try {
+    const r = await fetch(window.API_URL + '/billing/status', { headers: { Authorization: 'Bearer ' + token } });
+    const data = await r.json();
+    if (data.status === 'active') {
+      document.getElementById('box').innerHTML = `
+        <h1 style="color:#10b981;">✓ Pago confirmado</h1>
+        <p>Tu suscripción está activa hasta ${new Date(data.endsAt).toLocaleDateString('es-AR')}.</p>
+        <a href="app.html" class="btn">Ir al panel →</a>`;
+      return true;
+    }
+    return false;
+  } catch { return false; }
+}
+
+// Pollea cada 3s por hasta 60s
+let attempts = 0;
+async function poll() {
+  if (await check()) return;
+  attempts++;
+  if (attempts < 20) setTimeout(poll, 3000);
+  else {
+    document.getElementById('box').innerHTML = `
+      <h1>Estamos esperando MP</h1>
+      <p>MercadoPago aún no confirmó el pago. Probá refrescar en unos minutos o volvé al checkout.</p>
+      <a href="checkout.html" class="btn">Volver a checkout</a>`;
+  }
+}
+poll();
+</script>
+</body>
+</html>
