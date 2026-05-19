@@ -90,18 +90,14 @@ function computeDaysLeft(t) {
 }
 
 const DEFAULT_PRODUCTS = [
-  { cat: 'Entradas', name: 'Papas fritas', price: 4500, emoji: '🍟' },
-  { cat: 'Entradas', name: 'Empanada carne', price: 1200, emoji: '🥟' },
-  { cat: 'Entradas', name: 'Picada chica', price: 9500, emoji: '🧀' },
-  { cat: 'Pizzas', name: 'Pizza muzzarella', price: 9800, emoji: '🍕' },
-  { cat: 'Pizzas', name: 'Pizza especial', price: 12500, emoji: '🍕' },
-  { cat: 'Minutas', name: 'Milanesa con papas', price: 11500, emoji: '🍽️' },
-  { cat: 'Minutas', name: 'Hamburguesa completa', price: 9800, emoji: '🍔' },
-  { cat: 'Bebidas', name: 'Agua sin gas', price: 1800, emoji: '💧' },
-  { cat: 'Bebidas', name: 'Gaseosa 500ml', price: 2500, emoji: '🥤' },
-  { cat: 'Bebidas', name: 'Cerveza pinta', price: 4200, emoji: '🍺' },
-  { cat: 'Cafetería', name: 'Café', price: 1800, emoji: '☕' },
-  { cat: 'Postres', name: 'Flan casero', price: 3800, emoji: '🍮' }
+  { cat: 'Comida', name: 'Plato 1', price: 5000, emoji: '🍽️' },
+  { cat: 'Comida', name: 'Plato 2', price: 7000, emoji: '🍽️' },
+  { cat: 'Comida', name: 'Plato 3', price: 9000, emoji: '🍽️' },
+  { cat: 'Tragos', name: 'Trago 1', price: 3500, emoji: '🍹' },
+  { cat: 'Tragos', name: 'Trago 2', price: 4500, emoji: '🍸' },
+  { cat: 'Bebidas', name: 'Bebida 1', price: 1800, emoji: '🥤' },
+  { cat: 'Bebidas', name: 'Bebida 2', price: 2500, emoji: '🧃' },
+  { cat: 'Postres', name: 'Postre 1', price: 3000, emoji: '🍰' }
 ];
 
 async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
@@ -391,13 +387,9 @@ app.use('/api', apiLimiter, requireAuth, requireSubscription);
 
 // ----- PRODUCTS -----
 app.get('/api/products', async (req, res) => {
+  await seedDefaultProducts(req.tenant.id);
   const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, name', [req.tenant.id]);
   res.json(r.rows);
-});
-app.post('/api/products/seed-default', async (req, res) => {
-  const inserted = await seedDefaultProducts(req.tenant.id);
-  const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, name', [req.tenant.id]);
-  res.json({ inserted, products: r.rows });
 });
 app.post('/api/products', async (req, res) => {
   const { name, cat, price, emoji, available } = req.body || {};
