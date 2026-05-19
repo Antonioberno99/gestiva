@@ -94,6 +94,22 @@ async function refreshSubscriptionStatus(tenantId) {
   const r = await q('SELECT * FROM tenants WHERE id=$1', [tenantId]);
   if (!r.rows[0]) return null;
   const t = r.rows[0];
+
+  if (SKIP_BILLING && t.subscription_status !== 'active') {
+    const now = new Date();
+    const ends = new Date(now.getTime() + 365 * 86400000);
+    const grace = new Date(ends.getTime() + GRACE_DAYS * 86400000);
+    const updated = await q(
+      `UPDATE tenants SET subscription_status='active',
+       subscription_started_at=COALESCE(subscription_started_at, $1),
+       subscription_ends_at=COALESCE(subscription_ends_at, $2),
+       grace_ends_at=COALESCE(grace_ends_at, $3)
+       WHERE id=$4 RETURNING *`,
+      [now, ends, grace, tenantId]
+    );
+    return updated.rows[0];
+  }
+
   const now = new Date();
   let newStatus = t.subscription_status;
 

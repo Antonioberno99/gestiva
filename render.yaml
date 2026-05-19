@@ -20,6 +20,8 @@ services:
         generateValue: true
       - key: MP_TEST_MODE
         value: "1"
+      - key: SKIP_BILLING
+        value: "1"
       - key: SUB_PRICE_ARS
         value: "40000"
       - key: GRACE_DAYS
