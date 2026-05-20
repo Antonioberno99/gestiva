@@ -41,10 +41,9 @@
   .sidebar { background:#fff; border-right:1px solid var(--border); padding:20px 16px;
     display:flex; flex-direction:column; gap:4px; position:sticky; top:0; height:100vh; }
   .brand { display:flex; align-items:center; gap:10px; padding:8px 12px 20px; text-decoration:none; color:inherit; }
-  .brand-logo { width:36px; height:36px; border-radius:10px; background:#050505; display:grid; place-items:center; color:white; flex-shrink:0; box-shadow:0 4px 12px rgba(15,23,42,.18); }
-  .brand-logo img { width:29px; height:29px; object-fit:contain; display:block; }
-  .brand-name { font-family:var(--ff-display); font-weight:700; font-size:18px; }
-  .brand-name em { color: var(--or); font-style: normal; }
+  .brand-logo { width:36px; height:36px; border-radius:10px; background:#fff; display:grid; place-items:center; color:white; flex-shrink:0; box-shadow:0 4px 12px rgba(15,23,42,.08); overflow:hidden; }
+  .brand-logo img { width:34px; height:34px; object-fit:contain; display:block; }
+  .brand-name { font-family:var(--ff-display); font-weight:800; font-size:18px; color:var(--or); }
 
   .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:var(--r-md); color:var(--tx-mid); font-weight:500; transition:background .15s,color .15s; text-decoration:none; }
   .nav-item:hover { background: var(--bg); color: var(--tx-dark); }
@@ -219,7 +218,7 @@
   <aside class="sidebar" id="sidebar">
     <a href="#/dashboard" class="brand">
       <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
-      <div class="brand-name">Gest<em>iva</em></div>
+      <div class="brand-name">Gestiva</div>
     </a>
     <a href="#/dashboard" class="nav-item" data-route="dashboard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>

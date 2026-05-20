@@ -98,11 +98,12 @@
       text-decoration: none; display: flex; align-items: center; gap: 9px;
     }
     .logo-icon {
-      width: 36px; height: 36px; background: #050505; border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; background: #fff; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+      box-shadow: 0 4px 12px rgba(15,23,42,.08);
     }
-    .logo-icon img { width: 29px; height: 29px; object-fit: contain; display: block; }
-    .logo em { color: var(--or); font-style: normal; }
+    .logo-icon img { width: 34px; height: 34px; object-fit: contain; display: block; }
+    .logo { color: var(--or); }
     .nav-links { display: flex; gap: 30px; list-style: none; }
     .nav-links a { text-decoration: none; color: var(--tx-mid); font-size: 15px; font-weight: 500; transition: color .2s; }
     .nav-links a:hover { color: var(--or); }
@@ -183,7 +184,6 @@
     .mini-dash { display: flex; height: 370px; font-size: 11px; }
     .md-side { width: 148px; background: #0f172a; padding: 14px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
     .md-logo { color: #fff; font-weight: 900; font-size: 12px; margin-bottom: 14px; }
-    .md-logo em { color: var(--or); font-style: normal; }
     .md-item { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 7px; color: rgba(255,255,255,.45); font-weight: 500; }
     .md-item.on { background: rgba(249,115,22,.18); color: var(--or); }
     .md-item svg { width: 12px; height: 12px; flex-shrink: 0; }
@@ -302,7 +302,6 @@
     .big-content { display: flex; gap: 14px; height: 490px; }
     .big-side { width: 178px; background: rgba(10,18,32,.75); border-radius: 11px; padding: 18px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
     .big-logo { color: #fff; font-weight: 900; font-size: 14px; margin-bottom: 20px; }
-    .big-logo em { color: var(--or); font-style: normal; }
     .big-nav { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-radius: 8px; color: rgba(255,255,255,.45); font-size: 12px; font-weight: 500; }
     .big-nav svg { width: 14px; height: 14px; flex-shrink: 0; }
     .big-nav.on { background: rgba(249,115,22,.18); color: var(--or); font-weight: 700; }
@@ -384,8 +383,8 @@
     .team-phone { background:#0f172a; border-radius:28px; padding:18px; box-shadow:0 24px 70px rgba(15,23,42,.22); color:#fff; max-width:380px; margin-left:auto; }
     .team-phone-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:4px 4px 14px; }
     .team-phone-brand { display:flex; align-items:center; gap:10px; font-weight:900; }
-    .team-phone-logo { width:34px; height:34px; border-radius:10px; background:#050505; display:grid; place-items:center; }
-    .team-phone-logo img { width:28px; height:28px; object-fit:contain; }
+    .team-phone-logo { width:34px; height:34px; border-radius:10px; background:#fff; display:grid; place-items:center; overflow:hidden; }
+    .team-phone-logo img { width:32px; height:32px; object-fit:contain; }
     .team-screen { background:#f8fafc; color:var(--tx-dark); border-radius:20px; padding:18px; }
     .team-status { border:1px solid #bbf7d0; background:#ecfdf5; border-radius:16px; padding:14px; margin-bottom:12px; }
     .team-status b { display:block; font-size:18px; margin-top:4px; }
@@ -406,9 +405,9 @@
     footer { background: #0f172a; color: rgba(255,255,255,.55); padding: 56px 0 32px; }
     .foot-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
     .foot-logo { color: #fff; font-size: 19px; font-weight: 900; display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
-    .foot-logo em { color: var(--or); font-style: normal; }
-    .foot-logo-icon { width: 34px; height: 34px; background: #050505; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
-    .foot-logo-icon img { width: 28px; height: 28px; object-fit: contain; display: block; }
+    .foot-logo { color: var(--or); }
+    .foot-logo-icon { width: 34px; height: 34px; background: #fff; border-radius: 9px; display: flex; align-items: center; justify-content: center; overflow:hidden; }
+    .foot-logo-icon img { width: 32px; height: 32px; object-fit: contain; display: block; }
     .foot-desc { font-size: 14px; line-height: 1.75; max-width: 270px; }
     .foot-col-title { color: #fff; font-size: 14px; font-weight: 800; margin-bottom: 16px; }
     .foot-links { list-style: none; display: flex; flex-direction: column; gap: 10px; }
@@ -478,7 +477,7 @@
       <div class="logo-icon">
         <img src="assets/logo-gestiva-icon.png" alt="">
       </div>
-      Gest<em>iva</em>
+      Gestiva
     </div>
     <span class="close-x" onclick="toggleMenu()">&#x2715;</span>
   </div>
@@ -500,7 +499,7 @@
         <div class="logo-icon">
           <img src="assets/logo-gestiva-icon.png" alt="">
         </div>
-        Gest<em>iva</em>
+        Gestiva
       </a>
       <ul class="nav-links">
         <li><a href="#problema">El problema</a></li>
@@ -560,7 +559,7 @@
           </div>
           <div class="mini-dash">
             <div class="md-side">
-              <div class="md-logo">Gest<em>iva</em></div>
+              <div class="md-logo">Gestiva</div>
               <div class="md-item on">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 Dashboard
@@ -876,7 +875,7 @@
       </div>
       <div class="big-content">
         <div class="big-side">
-          <div class="big-logo">Gest<em>iva</em></div>
+          <div class="big-logo">Gestiva</div>
           <div class="big-nav on">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             Dashboard
@@ -1153,7 +1152,7 @@
           <div class="foot-logo-icon">
             <img src="assets/logo-gestiva-icon.png" alt="">
           </div>
-          Gest<em>iva</em>
+          Gestiva
         </div>
         <p class="foot-desc">Sistema de administracion para restaurantes, bares, boliches y negocios gastronomicos. Simple, moderno y 100% en la nube.</p>
       </div>
