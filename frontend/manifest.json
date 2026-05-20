@@ -2,7 +2,7 @@
   "name": "Gestiva Equipo",
   "short_name": "Gestiva",
   "description": "App de equipo para mozos, bartenders y personal del restaurante.",
-  "start_url": "mozo.html",
+  "start_url": "/mozo",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",

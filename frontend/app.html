@@ -296,7 +296,7 @@ const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
-const teamAppUrl = () => new URL('mozo.html', location.href).href;
+const teamAppUrl = () => new URL('/mozo', location.origin).href;
 
 // ---------- API ----------
 async function api(path, opts = {}) {
@@ -947,7 +947,7 @@ route('mozos', async () => {
     <div class="page-header">
       <div><h1 class="page-title">Mozos</h1><div class="page-subtitle">${waiters.length} registrados</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a class="btn btn-secondary" href="mozo.html" target="_blank">Abrir app mozos</a>
+        <a class="btn btn-secondary" href="/mozo" target="_blank">Abrir app mozos</a>
         <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo mozo</button>
       </div>
     </div>
@@ -978,7 +978,7 @@ async function editWaiter(id) {
     <div class="field"><label>Nombre</label><input id="wName" value="${w.name||''}" placeholder="Juan"/></div>
     <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>
     <div class="field"><label>PIN para app de mozos</label><input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${id ? 'Dejar vacío para no cambiar' : 'Ej: 1234'}"/></div>
-    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">El mozo entra en mozo.html con el email del restaurante y este PIN.</p>`,
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">El mozo entra en /mozo con el email del restaurante y este PIN.</p>`,
     `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
@@ -1016,7 +1016,7 @@ route('mozos', async () => {
     <div class="page-header">
       <div><h1 class="page-title">Equipo</h1><div class="page-subtitle">Mozos, bartenders, cocina y otros roles</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a class="btn btn-secondary" href="mozo.html" target="_blank">Abrir app equipo</a>
+        <a class="btn btn-secondary" href="/mozo" target="_blank">Abrir app equipo</a>
         <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo integrante</button>
       </div>
     </div>
@@ -1026,9 +1026,9 @@ route('mozos', async () => {
       <div class="card">
         <div class="card-title">App del equipo</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-          <a class="btn btn-secondary btn-sm" href="mozo.html" target="_blank">Abrir</a>
+          <a class="btn btn-secondary btn-sm" href="/mozo" target="_blank">Abrir</a>
           <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
-          <button class="btn btn-primary btn-sm" onclick="downloadTeamApk()">Descargar APK</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadTeamApk()">Instalar en celular</button>
         </div>
       </div>
     </div>
@@ -1036,12 +1036,12 @@ route('mozos', async () => {
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
         <div>
           <h3 style="font-size:16px;margin-bottom:6px;">Instalacion para celulares</h3>
-          <div style="color:var(--tx-mid);line-height:1.55;">El equipo entra con el email del restaurante y su PIN. El APK se descarga desde aca cuando este publicado como <strong>frontend/assets/gestiva-equipo.apk</strong>.</div>
+          <div style="color:var(--tx-mid);line-height:1.55;">El equipo entra con el email del restaurante y su PIN. Desde el celular se instala abriendo la app y agregandola a la pantalla de inicio.</div>
           <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${appUrl}</div>
         </div>
         <div style="min-width:220px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-          <a class="btn btn-secondary" href="mozo.html" target="_blank">Ver app</a>
-          <button class="btn btn-primary" onclick="downloadTeamApk()">Descargar APK</button>
+          <a class="btn btn-secondary" href="/mozo" target="_blank">Ver app</a>
+          <button class="btn btn-primary" onclick="downloadTeamApk()">Instalar en celular</button>
         </div>
       </div>
     </div>
@@ -1100,7 +1100,8 @@ async function downloadTeamApk() {
     if (!r.ok) throw new Error('missing');
     location.href = apk;
   } catch(e) {
-    toast('El APK todavia no esta publicado. Subi el archivo gestiva-equipo.apk a frontend/assets/.', 'error');
+    toast('Todavia no hay APK real. Abro la app instalable.', 'info');
+    location.href = '/mozo';
   }
 }
 async function editWaiter(id) {

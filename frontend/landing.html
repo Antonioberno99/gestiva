@@ -1097,8 +1097,8 @@
         <h2 class="sec-title">Mozos, bartenders y cocina trabajan desde el celular</h2>
         <p class="sec-sub">La app del equipo sirve para tomar pedidos por mesa, ver su panel personal, marcar ingreso y salida, y controlar sus horas trabajadas. Entran con el email del restaurante y el PIN que les das desde el panel central.</p>
         <div class="team-actions">
-          <a href="mozo.html" class="btn btn-primary">Abrir app para instalar</a>
-          <button class="btn btn-outline" onclick="downloadTeamApk()">Descargar APK</button>
+          <a href="/mozo" class="btn btn-primary">Abrir app para instalar</a>
+          <button class="btn btn-outline" onclick="downloadTeamApk()">Instalar en celular</button>
         </div>
         <p style="margin-top:12px;color:var(--tx-mid);font-size:14px;">Para probar todo conectado: en la computadora usa <strong>demo@gestiva.app</strong> / <strong>1234</strong>. En la app del equipo usa el mismo email y PIN <strong>1234</strong>.</p>
         <div class="team-list">
@@ -1193,7 +1193,8 @@
       if (!r.ok) throw new Error('missing');
       location.href = apk;
     } catch (e) {
-      alert('El APK todavia no esta publicado. Por ahora abri "Abrir app para instalar" desde el celular y agregala a la pantalla de inicio.');
+      alert('Todavia no hay APK real publicado. Te abro la app instalable para agregarla a la pantalla de inicio.');
+      location.href = '/mozo';
     }
   }
 
