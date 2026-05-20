@@ -28,6 +28,12 @@
   .btn:disabled{opacity:.6;cursor:not-allowed}
   .err{background:#fee2e2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none}
   .err.on{display:block}
+  .demo-box{margin-top:16px;border:1px solid #ffedd5;background:#fff7ed;border-radius:14px;padding:12px}
+  .demo-box strong{display:block;font-size:13px;margin-bottom:4px}
+  .demo-box p{margin:0 0 10px;color:var(--tx-mid);font-size:13px;line-height:1.45}
+  .demo-creds{font-size:12px;color:#9a3412;margin-bottom:10px}
+  .btn-demo{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:12px;font-weight:600;font-size:14px;font-family:inherit;cursor:pointer;background:white;color:var(--tx-dark);transition:background .15s,border-color .15s}
+  .btn-demo:hover{background:#fafafa;border-color:#fdba74}
   .alt{text-align:center;margin-top:20px;font-size:13px;color:var(--tx-mid)}
   .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
 </style>
@@ -53,6 +59,12 @@
       </div>
       <button class="btn" id="btn" type="submit">Iniciar sesión</button>
     </form>
+    <div class="demo-box">
+      <strong>Probar sistema demo</strong>
+      <p>Entra con datos ficticios para probar el panel central y la app del equipo.</p>
+      <div class="demo-creds">Usuario: demo@gestiva.app - Contraseña: 1234</div>
+      <button class="btn-demo" type="button" onclick="fillDemoLogin()">Entrar demo</button>
+    </div>
     <div class="alt">¿Sos nuevo? <a href="signup.html">Crear cuenta</a></div>
   </div>
 </div>
@@ -61,6 +73,11 @@
 const form = document.getElementById('loginForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('btn');
+function fillDemoLogin() {
+  document.getElementById('email').value = 'demo@gestiva.app';
+  document.getElementById('password').value = '1234';
+  form.requestSubmit();
+}
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errEl.classList.remove('on');

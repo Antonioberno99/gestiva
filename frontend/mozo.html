@@ -39,6 +39,10 @@
   .btn-danger { background:#fee2e2; color:#b91c1c; }
   .err { display:none; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:12px; padding:11px 12px; margin-bottom:14px; font-size:14px; }
   .err.on { display:block; }
+  .demo-box { margin-top:14px; border:1px solid var(--or-100); background:#fff7ed; border-radius:14px; padding:12px; }
+  .demo-box strong { display:block; font-size:13px; margin-bottom:4px; }
+  .demo-box p { margin:0 0 10px; color:var(--muted); font-size:13px; line-height:1.45; }
+  .demo-creds { font-size:12px; color:#9a3412; margin-bottom:10px; }
 
   .app { display:none; min-height:100vh; }
   .topbar { position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid var(--border); padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; }
@@ -113,6 +117,12 @@
       <input id="pin" name="pin" type="password" inputmode="numeric" required autocomplete="current-password" />
     </div>
     <button class="btn btn-primary" id="loginBtn" type="submit">Entrar</button>
+    <div class="demo-box">
+      <strong>Probar sin cuenta real</strong>
+      <p>Usa el mismo demo que el panel central para probar todo conectado.</p>
+      <div class="demo-creds">Usuario: demo@gestiva.app · PIN: 1234</div>
+      <button class="btn btn-secondary" type="button" onclick="enterDemoMode()">Entrar demo</button>
+    </div>
   </form>
 </section>
 
@@ -186,6 +196,9 @@ const fmtHours = (h) => {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
 
+const DEMO_EMAIL = 'demo@gestiva.app';
+const DEMO_PIN = '1234';
+
 async function api(path, opts = {}) {
   const r = await fetch(window.API_URL + path, {
     ...opts,
@@ -211,6 +224,12 @@ function showApp() {
   $('#appScreen').style.display = 'block';
 }
 
+async function enterDemoMode() {
+  $('#email').value = DEMO_EMAIL;
+  $('#pin').value = DEMO_PIN;
+  $('#loginForm').requestSubmit();
+}
+
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#loginErr');
@@ -219,9 +238,11 @@ $('#loginForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   btn.textContent = 'Entrando...';
   try {
+    const email = $('#email').value.trim().toLowerCase();
+    const pin = $('#pin').value.trim();
     const data = await api('/waiter/login', {
       method:'POST',
-      body: JSON.stringify({ email: $('#email').value.trim(), pin: $('#pin').value.trim() })
+      body: JSON.stringify({ email, pin })
     });
     token = data.token;
     localStorage.setItem('gestiva_waiter_token', token);

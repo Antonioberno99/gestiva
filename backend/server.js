@@ -120,6 +120,10 @@ const DEFAULT_PRODUCTS = [
   { cat: 'Postres', name: 'Postre 1', price: 3000, emoji: '🍰' }
 ];
 
+const DEMO_EMAIL = 'demo@gestiva.app';
+const DEMO_PASSWORD = '1234';
+const DEMO_PIN = '1234';
+
 async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
   if (onlyIfEmpty) {
     const existing = await q('SELECT count(*)::int AS n FROM products WHERE tenant_id=$1', [tenantId]);
@@ -132,6 +136,56 @@ async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
       [tenantId, p.name, p.cat, p.price, p.emoji]);
   }
   return DEFAULT_PRODUCTS.length;
+}
+
+async function ensureDemoTenant() {
+  const email = DEMO_EMAIL;
+  let tenant = (await q('SELECT * FROM tenants WHERE email=$1', [email])).rows[0];
+  const now = new Date();
+  const ends = new Date(now.getTime() + 365 * 86400000);
+  const grace = new Date(ends.getTime() + GRACE_DAYS * 86400000);
+
+  if (!tenant) {
+    const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
+    tenant = (await q(
+      `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone, currency,
+                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8,$9) RETURNING *`,
+      [email, hash, 'Restaurante Demo', 'Usuario Demo', '0000-000000', '$', now, ends, grace]
+    )).rows[0];
+  } else {
+    const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
+    tenant = (await q(
+      `UPDATE tenants SET password_hash=$1,
+                          restaurant_name=COALESCE(restaurant_name,$2),
+                          subscription_status='active',
+                          subscription_ends_at=$3,
+                          grace_ends_at=$4
+       WHERE id=$5 RETURNING *`,
+      [hash, 'Restaurante Demo', ends, grace, tenant.id]
+    )).rows[0];
+  }
+
+  const tableCount = (await q('SELECT count(*)::int AS n FROM tables WHERE tenant_id=$1', [tenant.id])).rows[0].n;
+  if (tableCount === 0) {
+    for (let i = 1; i <= 8; i++) {
+      await q('INSERT INTO tables (tenant_id, num, seats) VALUES ($1,$2,$3)', [tenant.id, i, i <= 4 ? 4 : 6]);
+    }
+  }
+
+  await seedDefaultProducts(tenant.id);
+
+  const pinHash = await bcrypt.hash(DEMO_PIN, 10);
+  const existingWaiter = (await q('SELECT * FROM waiters WHERE tenant_id=$1 ORDER BY created_at LIMIT 1', [tenant.id])).rows[0];
+  if (!existingWaiter) {
+    await q(`INSERT INTO waiters (tenant_id, name, role, color, access_pin_hash)
+             VALUES ($1,$2,$3,$4,$5)`, [tenant.id, 'Juan Demo', 'Mozo', '#f97316', pinHash]);
+  } else {
+    await q(`UPDATE waiters SET name=COALESCE(name,$1), role=COALESCE(role,$2), access_pin_hash=$3
+             WHERE id=$4 AND tenant_id=$5`, ['Juan Demo', 'Mozo', pinHash, existingWaiter.id, tenant.id]);
+  }
+
+  return (await q('SELECT * FROM tenants WHERE id=$1', [tenant.id])).rows[0];
 }
 
 // Refresca el estado de suscripción según fechas (lazy eval)
@@ -274,7 +328,13 @@ app.post('/auth/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'missing_fields' });
-    const r = await q('SELECT * FROM tenants WHERE email=$1', [email.toLowerCase().trim()]);
+    const normalizedEmail = email.toLowerCase().trim();
+    if (normalizedEmail === DEMO_EMAIL && String(password) === DEMO_PASSWORD) {
+      const demo = await ensureDemoTenant();
+      const token = signToken(demo);
+      return res.json({ token, user: publicTenant(demo) });
+    }
+    const r = await q('SELECT * FROM tenants WHERE email=$1', [normalizedEmail]);
     const t = r.rows[0];
     if (!t) return res.status(401).json({ error: 'invalid_credentials' });
     const ok = await bcrypt.compare(password, t.password_hash);
@@ -431,7 +491,11 @@ app.post('/waiter/login', authLimiter, async (req, res) => {
   try {
     const { email, pin } = req.body || {};
     if (!email || !pin) return res.status(400).json({ error: 'missing_fields' });
-    const tenant = (await q('SELECT * FROM tenants WHERE email=$1', [email.toLowerCase().trim()])).rows[0];
+    const normalizedEmail = email.toLowerCase().trim();
+    if (normalizedEmail === DEMO_EMAIL && String(pin) === DEMO_PIN) {
+      await ensureDemoTenant();
+    }
+    const tenant = (await q('SELECT * FROM tenants WHERE email=$1', [normalizedEmail])).rows[0];
     if (!tenant) return res.status(401).json({ error: 'invalid_credentials' });
 
     const waiters = (await q('SELECT * FROM waiters WHERE tenant_id=$1 AND access_pin_hash IS NOT NULL ORDER BY created_at', [tenant.id])).rows;
