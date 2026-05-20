@@ -186,6 +186,7 @@
 <script src="gestiva-config.js"></script>
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
+let WAITER_DEMO = token === 'demo-token' || localStorage.getItem('gestiva_waiter_demo') === '1';
 let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos' };
 
 const $ = (s) => document.querySelector(s);
@@ -198,8 +199,108 @@ const fmtHours = (h) => {
 
 const DEMO_EMAIL = 'demo@gestiva.app';
 const DEMO_PIN = '1234';
+const DEMO_WAITER_ID = 'demo-waiter-1';
+
+function demoRead(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+  catch(e) { return fallback; }
+}
+
+function demoWrite(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function demoId(prefix) {
+  return prefix + '-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
+function waiterDemoSeed() {
+  if (!localStorage.getItem('gestiva_demo_products')) {
+    demoWrite('gestiva_demo_products', [
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, emoji:'', available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, emoji:'', available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, emoji:'', available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, emoji:'', available:true }
+    ]);
+  }
+  if (!localStorage.getItem('gestiva_demo_tables')) {
+    demoWrite('gestiva_demo_tables', Array.from({ length: 8 }, (_, i) => ({
+      id:'demo-table-' + (i + 1), num:i + 1, seats:i < 4 ? 4 : 6, status:'free',
+      reservation_name:null, reservation_time:null
+    })));
+  }
+  if (!localStorage.getItem('gestiva_demo_waiters')) {
+    demoWrite('gestiva_demo_waiters', [
+      { id:DEMO_WAITER_ID, name:'Juan Demo', role:'Mozo', color:'#f97316', hasPin:true, created_at:new Date().toISOString() },
+      { id:'demo-waiter-2', name:'Bar Demo', role:'Bartender', color:'#8b5cf6', hasPin:true, created_at:new Date().toISOString() }
+    ]);
+  }
+}
+
+async function waiterDemoApi(path, opts = {}) {
+  waiterDemoSeed();
+  const method = opts.method || 'GET';
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  const products = demoRead('gestiva_demo_products', []).filter(p => p.available !== false);
+  const tables = demoRead('gestiva_demo_tables', []);
+  const waiters = demoRead('gestiva_demo_waiters', []);
+  const openTables = demoRead('gestiva_demo_open_tables', []);
+  const shifts = demoRead('gestiva_demo_shifts', []);
+  const waiter = waiters.find(w => w.id === DEMO_WAITER_ID) || { id:DEMO_WAITER_ID, name:'Juan Demo', role:'Mozo' };
+
+  if (path === '/waiter/login') return { token:'demo-token', waiter };
+  if (path === '/waiter/bootstrap') {
+    const activeShift = shifts.find(s => s.waiter_id === DEMO_WAITER_ID && !s.ended_at) || null;
+    const recentShifts = shifts
+      .filter(s => s.waiter_id === DEMO_WAITER_ID)
+      .sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
+    return {
+      restaurant:{ restaurantName:'Restaurante Demo' },
+      waiter,
+      tables,
+      openTables,
+      products,
+      activeShift,
+      recentShifts
+    };
+  }
+  if (path === '/waiter/open-tables' && method === 'POST') {
+    let open = openTables.find(x => x.table_id === body.tableId);
+    if (!open) {
+      open = { table_id:body.tableId, waiter_id:DEMO_WAITER_ID, items:[], opened_at:new Date().toISOString() };
+      openTables.push(open);
+    }
+    demoWrite('gestiva_demo_open_tables', openTables);
+    return open;
+  }
+  if (path.startsWith('/waiter/open-tables/') && method === 'PUT') {
+    const tableId = path.split('/').pop();
+    let open = openTables.find(x => x.table_id === tableId);
+    if (!open) {
+      open = { table_id:tableId, waiter_id:DEMO_WAITER_ID, items:[], opened_at:new Date().toISOString() };
+      openTables.push(open);
+    }
+    open.waiter_id = DEMO_WAITER_ID;
+    open.items = body.items || [];
+    demoWrite('gestiva_demo_open_tables', openTables);
+    return open;
+  }
+  if (path === '/waiter/clock' && method === 'POST') {
+    const active = shifts.find(s => s.waiter_id === DEMO_WAITER_ID && !s.ended_at);
+    if (body.action === 'in') {
+      if (!active) shifts.unshift({ id:demoId('shift'), waiter_id:DEMO_WAITER_ID, started_at:new Date().toISOString(), ended_at:null });
+    } else if (body.action === 'out') {
+      if (!active) throw new Error('shift_not_open');
+      active.ended_at = new Date().toISOString();
+    }
+    demoWrite('gestiva_demo_shifts', shifts);
+    return { ok:true };
+  }
+  throw new Error('demo_not_supported');
+}
 
 async function api(path, opts = {}) {
+  if (WAITER_DEMO) return waiterDemoApi(path, opts);
   const r = await fetch(window.API_URL + path, {
     ...opts,
     headers: {
@@ -209,7 +310,13 @@ async function api(path, opts = {}) {
     }
   });
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401) { localStorage.removeItem('gestiva_waiter_token'); showLogin(); throw new Error('Sesión vencida'); }
+  if (r.status === 401) {
+    localStorage.removeItem('gestiva_waiter_token');
+    localStorage.removeItem('gestiva_waiter_demo');
+    WAITER_DEMO = false;
+    showLogin();
+    throw new Error('Sesión vencida');
+  }
   if (!r.ok) throw new Error(data.error || 'Error');
   return data;
 }
@@ -227,7 +334,12 @@ function showApp() {
 async function enterDemoMode() {
   $('#email').value = DEMO_EMAIL;
   $('#pin').value = DEMO_PIN;
-  $('#loginForm').requestSubmit();
+  token = 'demo-token';
+  WAITER_DEMO = true;
+  localStorage.setItem('gestiva_waiter_token', token);
+  localStorage.setItem('gestiva_waiter_demo', '1');
+  await loadData();
+  showApp();
 }
 
 $('#loginForm').addEventListener('submit', async (e) => {
@@ -240,6 +352,10 @@ $('#loginForm').addEventListener('submit', async (e) => {
   try {
     const email = $('#email').value.trim().toLowerCase();
     const pin = $('#pin').value.trim();
+    if (email === DEMO_EMAIL && pin === DEMO_PIN) {
+      await enterDemoMode();
+      return;
+    }
     const data = await api('/waiter/login', {
       method:'POST',
       body: JSON.stringify({ email, pin })
@@ -435,7 +551,9 @@ async function saveOrder() {
 
 function logout() {
   localStorage.removeItem('gestiva_waiter_token');
+  localStorage.removeItem('gestiva_waiter_demo');
   token = null;
+  WAITER_DEMO = false;
   showLogin();
 }
 

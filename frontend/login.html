@@ -72,21 +72,42 @@
 const form = document.getElementById('loginForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('btn');
+const DEMO_USER = {
+  id: 'demo-tenant',
+  email: 'demo@gestiva.app',
+  restaurantName: 'Restaurante Demo',
+  ownerName: 'Usuario Demo',
+  phone: '',
+  currency: '$',
+  subscriptionStatus: 'active',
+  daysLeft: 365
+};
+function enterDemoPanel() {
+  localStorage.setItem('gestiva_token', 'gestiva_demo_token');
+  localStorage.setItem('gestiva_user', JSON.stringify(DEMO_USER));
+  location.href = 'app.html';
+}
 function fillDemoLogin() {
   document.getElementById('email').value = 'demo@gestiva.app';
   document.getElementById('password').value = '1234';
-  form.requestSubmit();
+  enterDemoPanel();
 }
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errEl.classList.remove('on');
   btn.disabled = true; btn.textContent = 'Ingresando...';
   try {
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+    if (email === 'demo@gestiva.app' && password === '1234') {
+      enterDemoPanel();
+      return;
+    }
     const r = await fetch(window.API_URL + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: document.getElementById('email').value.trim(),
-        password: document.getElementById('password').value
+        email,
+        password
       })
     });
     const data = await r.json();

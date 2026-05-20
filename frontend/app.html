@@ -296,9 +296,80 @@ const fmtHours = (h) => {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
 const teamAppUrl = () => new URL('/mozo', location.origin).href;
+const IS_DEMO = TOKEN === 'gestiva_demo_token';
+
+function demoRead(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+  catch(e) { return fallback; }
+}
+function demoWrite(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+function demoId(prefix) { return prefix + '-' + Date.now() + '-' + Math.random().toString(16).slice(2); }
+function demoSeed() {
+  if (!localStorage.getItem('gestiva_demo_products')) {
+    demoWrite('gestiva_demo_products', [
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, emoji:'🍽️', available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, emoji:'🍽️', available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, emoji:'🍹', available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, emoji:'🥤', available:true },
+      { id:'demo-prod-5', name:'Postre 1', cat:'Postres', price:3000, emoji:'🍰', available:true }
+    ]);
+  }
+  if (!localStorage.getItem('gestiva_demo_tables')) {
+    demoWrite('gestiva_demo_tables', Array.from({ length: 8 }, (_, i) => ({
+      id:'demo-table-' + (i + 1), num:i + 1, seats:i < 4 ? 4 : 6, status:'free',
+      reservation_name:null, reservation_time:null
+    })));
+  }
+  if (!localStorage.getItem('gestiva_demo_waiters')) {
+    demoWrite('gestiva_demo_waiters', [
+      { id:'demo-waiter-1', name:'Juan Demo', role:'Mozo', color:'#f97316', hasPin:true, created_at:new Date().toISOString() },
+      { id:'demo-waiter-2', name:'Bar Demo', role:'Bartender', color:'#8b5cf6', hasPin:true, created_at:new Date().toISOString() }
+    ]);
+  }
+}
+async function demoApi(path, opts = {}) {
+  demoSeed();
+  const method = opts.method || 'GET';
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  const products = demoRead('gestiva_demo_products', []);
+  const tables = demoRead('gestiva_demo_tables', []);
+  const waiters = demoRead('gestiva_demo_waiters', []);
+  const openTables = demoRead('gestiva_demo_open_tables', []);
+  const orders = demoRead('gestiva_demo_orders', []);
+  const shifts = demoRead('gestiva_demo_shifts', []);
+  const cash = demoRead('gestiva_demo_cash', null);
+  if (path === '/auth/me') return { user: USER };
+  if (path === '/api/products' && method === 'GET') return products;
+  if (path === '/api/products' && method === 'POST') { const p = { id:demoId('prod'), available:true, ...body }; products.push(p); demoWrite('gestiva_demo_products', products); return p; }
+  if (path.startsWith('/api/products/') && method === 'PUT') { const id = path.split('/').pop(); const p = products.find(x => x.id === id); Object.assign(p, body); demoWrite('gestiva_demo_products', products); return p; }
+  if (path.startsWith('/api/products/') && method === 'DELETE') { demoWrite('gestiva_demo_products', products.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
+  if (path === '/api/tables' && method === 'GET') return tables;
+  if (path === '/api/tables' && method === 'POST') { const t = { id:demoId('table'), status:'free', reservation_name:null, reservation_time:null, ...body, num:body.num || (tables.length + 1), seats:body.seats || 4 }; tables.push(t); demoWrite('gestiva_demo_tables', tables); return t; }
+  if (path.startsWith('/api/tables/') && method === 'PUT') { const id = path.split('/').pop(); const t = tables.find(x => x.id === id); Object.assign(t, { num:body.num ?? t.num, seats:body.seats ?? t.seats, status:body.status ?? t.status, reservation_name:body.reservationName ?? t.reservation_name, reservation_time:body.reservationTime ?? t.reservation_time }); demoWrite('gestiva_demo_tables', tables); return t; }
+  if (path.startsWith('/api/tables/') && method === 'DELETE') { demoWrite('gestiva_demo_tables', tables.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
+  if (path === '/api/waiters' && method === 'GET') return waiters;
+  if (path === '/api/waiters' && method === 'POST') { const w = { id:demoId('waiter'), role:'Mozo', color:'#f97316', hasPin:!!body.pin, created_at:new Date().toISOString(), ...body }; delete w.pin; waiters.push(w); demoWrite('gestiva_demo_waiters', waiters); return w; }
+  if (path.startsWith('/api/waiters/') && method === 'PUT') { const id = path.split('/').pop(); const w = waiters.find(x => x.id === id); Object.assign(w, body, { hasPin:w.hasPin || !!body.pin }); delete w.pin; demoWrite('gestiva_demo_waiters', waiters); return w; }
+  if (path.startsWith('/api/waiters/') && method === 'DELETE') { demoWrite('gestiva_demo_waiters', waiters.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
+  if (path.startsWith('/api/staff-shifts')) return shifts.map(s => ({ ...s, waiter_name:(waiters.find(w => w.id === s.waiter_id)?.name || 'Demo'), waiter_role:(waiters.find(w => w.id === s.waiter_id)?.role || 'Mozo'), waiter_color:(waiters.find(w => w.id === s.waiter_id)?.color || '#f97316') }));
+  if (path === '/api/open-tables' && method === 'GET') return openTables;
+  if (path === '/api/open-tables' && method === 'POST') { let ot = openTables.find(x => x.table_id === body.tableId); if (!ot) { ot = { table_id:body.tableId, waiter_id:body.waiterId, items:[], opened_at:new Date().toISOString() }; openTables.push(ot); } else ot.waiter_id = body.waiterId; demoWrite('gestiva_demo_open_tables', openTables); return ot; }
+  if (path.startsWith('/api/open-tables/') && method === 'PUT') { const id = path.split('/').pop(); const ot = openTables.find(x => x.table_id === id); if (body.items) ot.items = body.items; if (body.waiterId) ot.waiter_id = body.waiterId; demoWrite('gestiva_demo_open_tables', openTables); return ot; }
+  if (path.startsWith('/api/open-tables/') && method === 'DELETE') { demoWrite('gestiva_demo_open_tables', openTables.filter(x => x.table_id !== path.split('/').pop())); return { ok:true }; }
+  if (path.startsWith('/api/orders') && method === 'GET') return orders;
+  if (path === '/api/orders' && method === 'POST') { const ot = openTables.find(x => x.table_id === body.tableId); const table = tables.find(t => t.id === body.tableId); const waiter = waiters.find(w => w.id === ot?.waiter_id); const items = (ot?.items || []).map(i => { const p = products.find(pp => pp.id === i.productId); return { ...i, name:p?.name, price:p?.price, emoji:p?.emoji, subtotal:(p?.price || 0) * i.qty }; }); const order = { id:demoId('order'), table_id:body.tableId, table_num:table?.num, waiter_id:waiter?.id, waiter_name:waiter?.name, items, total:items.reduce((s,i)=>s+i.subtotal,0), payment_method:body.paymentMethod, note:body.note, opened_at:ot?.opened_at, closed_at:new Date().toISOString() }; orders.unshift(order); demoWrite('gestiva_demo_orders', orders); demoWrite('gestiva_demo_open_tables', openTables.filter(x => x.table_id !== body.tableId)); return order; }
+  if (path === '/api/cash') return { current:cash, history:demoRead('gestiva_demo_cash_history', []) };
+  if (path === '/api/cash/open') { const c = { opening_amount:body.openingAmount || 0, transactions:[], opened_at:new Date().toISOString() }; demoWrite('gestiva_demo_cash', c); return c; }
+  if (path === '/api/cash/movement') { cash.transactions.push({ id:demoId('tx'), ...body, at:new Date().toISOString() }); demoWrite('gestiva_demo_cash', cash); return { ok:true }; }
+  if (path === '/api/cash/close') { demoWrite('gestiva_demo_cash', null); return { ok:true, diff:0, expected:body.closingAmount || 0 }; }
+  if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
+  if (path === '/api/settings') { USER = { ...USER, restaurantName:body.restaurantName || USER.restaurantName, ownerName:body.ownerName || USER.ownerName, phone:body.phone || USER.phone, currency:body.currency || USER.currency }; localStorage.setItem('gestiva_user', JSON.stringify(USER)); return USER; }
+  throw new Error('demo_not_supported');
+}
 
 // ---------- API ----------
 async function api(path, opts = {}) {
+  if (IS_DEMO) return demoApi(path, opts);
   const r = await fetch(window.API_URL + path, {
     ...opts,
     headers: {
