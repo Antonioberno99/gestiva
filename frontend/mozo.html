@@ -165,7 +165,7 @@
         <div class="cart-list" id="cartList"></div>
         <div class="cart-actions">
           <button class="btn btn-danger" onclick="clearCart()">Vaciar</button>
-          <button class="btn btn-primary" onclick="saveOrder()">Enviar pedido</button>
+          <button class="btn btn-primary" onclick="saveOrder()">🔥 Enviar a cocina</button>
         </div>
       </div>
     </section>
@@ -284,6 +284,25 @@ async function waiterDemoApi(path, opts = {}) {
     open.items = body.items || [];
     demoWrite('gestiva_demo_open_tables', openTables);
     return open;
+  }
+  if (path === '/waiter/kitchen' && method === 'POST') {
+    const kitchen = demoRead('gestiva_demo_kitchen', []);
+    const table = tables.find(t => t.id === body.tableId);
+    const ticket = {
+      id: demoId('kt'),
+      tenant_id: 'demo',
+      table_id: body.tableId,
+      table_num: table?.num || null,
+      waiter_id: DEMO_WAITER_ID,
+      waiter_name: waiter.name,
+      items: body.items || [],
+      notes: body.notes || null,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    };
+    kitchen.unshift(ticket);
+    demoWrite('gestiva_demo_kitchen', kitchen);
+    return ticket;
   }
   if (path === '/waiter/clock' && method === 'POST') {
     const active = shifts.find(s => s.waiter_id === DEMO_WAITER_ID && !s.ended_at);
@@ -500,15 +519,25 @@ function renderOrder() {
 function setCat(cat) { state.cat = cat; renderOrder(); }
 
 function addItem(productId) {
-  const existing = state.items.find(i => i.productId === productId);
+  // Buscar existente NO enviado a cocina (los enviados se quedan como están)
+  const existing = state.items.find(i => i.productId === productId && !i.sentToKitchen);
   if (existing) existing.qty += 1;
-  else state.items.push({ productId, qty:1 });
+  else state.items.push({ productId, qty:1, sentToKitchen:false });
   renderCart();
 }
 
 function changeQty(index, delta) {
-  state.items[index].qty += delta;
-  if (state.items[index].qty <= 0) state.items.splice(index, 1);
+  const it = state.items[index];
+  // Si el item ya fue enviado a cocina, no se puede cambiar cantidad — solo crear uno nuevo
+  if (it.sentToKitchen && delta > 0) {
+    alert('Este item ya está en cocina. Agregalo de nuevo desde el menú para una nueva comanda.');
+    return;
+  }
+  if (it.sentToKitchen && delta < 0) {
+    if (!confirm('Este item ya fue enviado a cocina. ¿Cancelarlo igual?')) return;
+  }
+  it.qty += delta;
+  if (it.qty <= 0) state.items.splice(index, 1);
   renderCart();
 }
 
@@ -530,9 +559,12 @@ function renderCart() {
   $('#cartList').innerHTML = state.items.map((it, i) => {
     const p = prodMap.get(it.productId);
     if (p) total += Number(p.price) * it.qty;
-    return `<div class="cart-row">
-      <div><strong>${p ? p.name : 'Producto'}</strong><div class="meta">${p ? money(p.price) : ''}</div></div>
-      <div class="qty"><button onclick="changeQty(${i},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${i},1)">+</button></div>
+    const sentBadge = it.sentToKitchen
+      ? '<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;">✓ En cocina</span>'
+      : '<span style="font-size:10px;background:#fff7ed;color:#9a3412;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;">nuevo</span>';
+    return `<div class="cart-row" style="${it.sentToKitchen?'opacity:.8;background:#f8fafc;':''}">
+      <div><strong>${p ? p.name : 'Producto'}</strong>${sentBadge}<div class="meta">${p ? money(p.price) : ''}</div></div>
+      <div class="qty"><button onclick="changeQty(${i},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${i},1)" ${it.sentToKitchen?'disabled style="opacity:.4;"':''}>+</button></div>
     </div>`;
   }).join('');
   $('#cartTotal').textContent = money(total);
@@ -540,10 +572,32 @@ function renderCart() {
 
 async function saveOrder() {
   if (!state.table) return;
+  const newItems = state.items.filter(it => !it.sentToKitchen);
+  if (newItems.length === 0) {
+    alert('No hay items nuevos para enviar. Todo ya está en cocina.');
+    return;
+  }
+  const prodMap = new Map(state.products.map(p => [p.id, p]));
+  // Snapshot de items para cocina (con nombre y emoji)
+  const itemsForKitchen = newItems.map(it => {
+    const p = prodMap.get(it.productId);
+    return {
+      name: p?.name || 'Producto',
+      emoji: p?.emoji || '🍽️',
+      qty: it.qty,
+      modifiers: it.modifiers || [],
+      notes: it.notes || ''
+    };
+  });
   try {
+    // 1) Crear ticket de cocina
+    await api('/waiter/kitchen', { method:'POST', body: JSON.stringify({ tableId: state.table.id, items: itemsForKitchen }) });
+    // 2) Marcar items como enviados
+    state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
+    // 3) Persistir en open_tables
     await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
-    alert('Pedido enviado al panel.');
-    showTables();
+    alert('🔥 Pedido enviado a cocina (' + newItems.length + ' items)');
+    renderCart();
   } catch (e) {
     alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);
   }
