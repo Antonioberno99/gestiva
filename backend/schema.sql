@@ -140,10 +140,11 @@ CREATE INDEX IF NOT EXISTS idx_cash_history_tenant ON cash_history(tenant_id, cl
 -- FASE 1 — Stock, modificadores, descuentos, clientes, cocina
 -- ============================================================
 
--- Stock y modificadores por producto
+-- Stock, modificadores y foto del producto
 ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS stock INT;
 ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS low_stock_alert INT DEFAULT 5;
 ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS modifiers JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS photo_url TEXT;
 
 -- Descuentos y splits en mesas y órdenes
 ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0;

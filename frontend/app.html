@@ -136,14 +136,24 @@
   .modal-body { padding:24px; }
   .modal-footer { padding:16px 24px; border-top:1px solid var(--border-soft); display:flex; gap:10px; justify-content:flex-end; }
 
-  .prod-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
-  .prod-card { background:white; border:1px solid var(--border); border-radius:var(--r-md); padding:14px; cursor:pointer; transition:all .15s; display:flex; flex-direction:column; gap:6px; text-align:left; }
+  .prod-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap:14px; }
+  .prod-card { background:white; border:1px solid var(--border); border-radius:var(--r-md); padding:12px; cursor:pointer; transition:all .15s; display:flex; flex-direction:column; gap:8px; text-align:left; overflow:hidden; }
   .prod-card:hover { border-color:var(--or); box-shadow:var(--sh-sm); transform:translateY(-2px); }
   .prod-card.unavailable { opacity:.5; cursor:not-allowed; }
-  .prod-emoji { font-size:26px; line-height:1; }
-  .prod-name { font-weight:600; font-size:13px; line-height:1.3; }
-  .prod-cat { font-size:11px; color:var(--tx-lt); text-transform:uppercase; letter-spacing:0.04em; }
-  .prod-price { font-weight:700; color:var(--or-dk); margin-top:auto; }
+  .prod-media { width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden; background:var(--bg); display:grid; place-items:center; position:relative; }
+  .prod-media img { width:100%; height:100%; object-fit:cover; display:block; }
+  .prod-media-fallback { width:100%; height:100%; display:grid; place-items:center; font-family:var(--ff-display); font-weight:700; font-size:24px; letter-spacing:-0.02em; }
+  .prod-name { font-weight:600; font-size:13px; line-height:1.25; }
+  .prod-cat { font-size:10px; color:var(--tx-lt); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+  .prod-price { font-weight:700; color:var(--or-dk); margin-top:auto; font-size:14px; }
+  /* Paleta de fondos por categoría inicial */
+  .cat-tone-0 { background:#fef3c7; color:#b45309; }
+  .cat-tone-1 { background:#dbeafe; color:#1d4ed8; }
+  .cat-tone-2 { background:#fce7f3; color:#be185d; }
+  .cat-tone-3 { background:#d1fae5; color:#047857; }
+  .cat-tone-4 { background:#ede9fe; color:#6d28d9; }
+  .cat-tone-5 { background:#fee2e2; color:#b91c1c; }
+  .cat-tone-6 { background:#ccfbf1; color:#0f766e; }
 
   .cart { display:flex; flex-direction:column; background:white; border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
   .cart-header { padding:16px 20px; border-bottom:1px solid var(--border-soft); display:flex; justify-content:space-between; align-items:center; }
@@ -303,6 +313,20 @@ const $ = (s, c = document) => c.querySelector(s);
 const $$ = (s, c = document) => [...c.querySelectorAll(s)];
 const CURRENCY = () => USER?.currency || '$';
 const fmt = (n) => CURRENCY() + ' ' + Math.round(n || 0).toLocaleString('es-AR');
+// Visual minimalista del producto: foto si existe, sino tile coloreado con inicial.
+// Hash simple del nombre o categoría para mantener consistencia de color.
+function hashCode(s) { let h = 0; for (let i=0;i<s.length;i++) h = (h<<5) - h + s.charCodeAt(i), h |= 0; return Math.abs(h); }
+function productVisual(p, size = 'md') {
+  const sizes = { sm: '32px', md: '56px', lg: '100%' };
+  const dim = sizes[size];
+  if (p && p.photo_url) {
+    return `<div class="prod-media" style="${size!=='lg'?'width:'+dim+';height:'+dim+';aspect-ratio:unset;':''}"><img src="${p.photo_url}" alt="" loading="lazy"/></div>`;
+  }
+  const text = (p?.name || '?').trim();
+  const initial = text.slice(0, 2).toUpperCase();
+  const tone = hashCode((p?.cat || text)) % 7;
+  return `<div class="prod-media" style="${size!=='lg'?'width:'+dim+';height:'+dim+';aspect-ratio:unset;':''}"><div class="prod-media-fallback cat-tone-${tone}">${initial}</div></div>`;
+}
 const today = () => new Date().toISOString().slice(0,10);
 const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
 const fmtHours = (h) => {
@@ -321,11 +345,11 @@ function demoId(prefix) { return prefix + '-' + Date.now() + '-' + Math.random()
 function demoSeed() {
   if (!localStorage.getItem('gestiva_demo_products')) {
     demoWrite('gestiva_demo_products', [
-      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, emoji:'🍽️', available:true },
-      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, emoji:'🍽️', available:true },
-      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, emoji:'🍹', available:true },
-      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, emoji:'🥤', available:true },
-      { id:'demo-prod-5', name:'Postre 1', cat:'Postres', price:3000, emoji:'🍰', available:true }
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, available:true },
+      { id:'demo-prod-5', name:'Postre 1', cat:'Postres', price:3000, available:true }
     ]);
   }
   if (!localStorage.getItem('gestiva_demo_tables')) {
@@ -515,7 +539,7 @@ function refreshGraceBanner() {
   if (USER.subscriptionStatus === 'grace') {
     const days = Math.max(0, Math.ceil((new Date(USER.graceEndsAt) - new Date()) / 86400000));
     el.innerHTML = `<div class="grace-banner">
-      <div>⚠️ <b>Tu suscripción venció</b>. Te quedan <b>${days} día${days===1?'':'s'}</b> para renovar antes que se bloquee la cuenta.</div>
+      <div><b>Tu suscripción venció.</b> Te quedan <b>${days} día${days===1?'':'s'}</b> para renovar antes que se bloquee la cuenta.</div>
       <a href="checkout.html">Renovar ahora</a>
     </div>`;
   } else el.innerHTML = '';
@@ -612,13 +636,13 @@ route('dashboard', async () => {
     ${allProds.filter(p => p.stock !== null && p.stock !== undefined && p.stock <= (p.low_stock_alert||5)).length > 0 ? `
     <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,#fef3c7,#fffbeb);border-color:#fde68a;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="font-size:20px;">⚠️</div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         <h3 style="font-size:15px;color:#92400e;">Productos con stock bajo</h3>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${allProds.filter(p => p.stock !== null && p.stock !== undefined && p.stock <= (p.low_stock_alert||5)).map(p => `
           <a href="#/productos" style="padding:6px 12px;background:white;border-radius:999px;text-decoration:none;font-size:13px;font-weight:600;color:#92400e;">
-            ${p.emoji} ${p.name} · ${p.stock===0?'AGOTADO':p.stock+' restantes'}
+            ${p.name} · ${p.stock===0?'AGOTADO':p.stock+' restantes'}
           </a>`).join('')}
       </div>
     </div>` : ''}
@@ -632,7 +656,7 @@ route('dashboard', async () => {
               const p = prodMap.get(pid);
               if (!p) return '';
               return `<div class="bar-row">
-                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.emoji} ${p.name}</div>
+                <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
                 <div class="bar-track"><div class="bar-fill" style="width:${(qty/maxSale)*100}%"></div></div>
                 <div style="font-weight:700;">${qty}</div></div>`;
             }).join('')}</div>`}
@@ -684,8 +708,8 @@ route('mesas', async () => {
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="display:flex;gap:4px;background:white;border:1px solid var(--border);border-radius:8px;padding:3px;">
-          <button class="${MESAS_VIEW==='grid'?'btn btn-primary btn-sm':'btn-ghost'}" style="padding:5px 10px;font-size:12px;border-radius:6px;" onclick="setMesasView('grid')">📋 Lista</button>
-          <button class="${MESAS_VIEW==='salon'?'btn btn-primary btn-sm':'btn-ghost'}" style="padding:5px 10px;font-size:12px;border-radius:6px;" onclick="setMesasView('salon')">🏠 Salón</button>
+          <button class="${MESAS_VIEW==='grid'?'btn btn-primary btn-sm':'btn-ghost'}" style="padding:5px 10px;font-size:12px;border-radius:6px;" onclick="setMesasView('grid')">Lista</button>
+          <button class="${MESAS_VIEW==='salon'?'btn btn-primary btn-sm':'btn-ghost'}" style="padding:5px 10px;font-size:12px;border-radius:6px;" onclick="setMesasView('salon')">Salón</button>
         </div>
         <button class="btn btn-secondary" onclick="addTable()">+ Agregar mesa</button>
       </div>
@@ -721,7 +745,7 @@ route('mesas', async () => {
 function renderSalon(tables, openMap, waiterMap, calcTotal) {
   return `
     <div style="background:linear-gradient(135deg,#f0f9ff,#fff);border:2px dashed var(--border);border-radius:16px;padding:20px;margin-bottom:16px;">
-      <div style="font-size:13px;color:var(--tx-mid);margin-bottom:12px;">💡 Arrastrá las mesas para acomodar el salón como en tu local. Tocá una mesa para abrirla.</div>
+      <div style="font-size:13px;color:var(--tx-mid);margin-bottom:12px;">Arrastrá las mesas para acomodar el salón como en tu local. Tocá una mesa para abrirla.</div>
       <div id="salonCanvas" style="position:relative;height:600px;background:white;border-radius:12px;border:1px solid var(--border);overflow:auto;">
         ${tables.map((t, i) => {
           const ot = openMap.get(t.id);
@@ -928,7 +952,7 @@ function renderTableMenu() {
     const outOfStock = p.stock === 0;
     return `
     <button class="prod-card${outOfStock?' unavailable':''}" onclick="${outOfStock?'':'addItem(\''+p.id+'\')'}">
-      <div class="prod-emoji">${p.emoji||'🍽️'}</div>
+      ${productVisual(p, 'lg')}
       <div class="prod-cat">${p.cat}</div>
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${fmt(p.price)}</div>
@@ -950,7 +974,7 @@ function renderTableMenu() {
     <div class="cart">
       <div class="cart-header">
         <div><div style="font-weight:700;font-size:15px;">Comanda</div><div style="font-size:12px;color:var(--tx-mid);">Mozo: ${w?w.name:'—'}</div></div>
-        ${pendingItemsToSend > 0 ? `<button class="btn btn-secondary btn-sm" onclick="sendToKitchen()" title="Mandar items a cocina">🔥 Enviar a cocina (${pendingItemsToSend})</button>` : ''}
+        ${pendingItemsToSend > 0 ? `<button class="btn btn-secondary btn-sm" onclick="sendToKitchen()" title="Mandar items a cocina">Enviar a cocina (${pendingItemsToSend})</button>` : ''}
       </div>
       <div class="cart-items">
         ${CURRENT_ITEMS.length===0 ? '<div class="cart-empty">Comanda vacía<br><small>Tocá un producto para agregarlo</small></div>' : CURRENT_ITEMS.map((it,i) => {
@@ -961,19 +985,22 @@ function renderTableMenu() {
           return `<div class="cart-item" style="flex-direction:column;align-items:stretch;gap:6px;border-bottom:1px solid var(--border-soft);padding:10px 0;">
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="cart-qty"><button onclick="changeQty(${i},-1)">−</button><span class="qty">${it.qty}</span><button onclick="changeQty(${i},1)">+</button></div>
+              ${productVisual(p, 'sm')}
               <div class="cart-item-name" style="flex:1;min-width:0;">
-                <div style="font-weight:600;display:flex;align-items:center;gap:6px;">${p.emoji} ${p.name} ${it.sentToKitchen?'<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:1px 6px;border-radius:999px;">enviado</span>':''}</div>
+                <div style="font-weight:600;display:flex;align-items:center;gap:6px;">${p.name} ${it.sentToKitchen?'<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:1px 6px;border-radius:999px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">en cocina</span>':''}</div>
                 <div style="font-size:12px;color:var(--tx-mid);">${fmt(unitWithMods)} c/u${it.discount?' · −'+fmt(it.discount):''}</div>
                 ${modText ? `<div style="font-size:11px;color:var(--or-dk);">${modText}</div>` : ''}
-                ${it.notes ? `<div style="font-size:11px;color:var(--tx-mid);font-style:italic;">📝 ${it.notes}</div>` : ''}
+                ${it.notes ? `<div style="font-size:11px;color:var(--tx-mid);font-style:italic;">${it.notes}</div>` : ''}
               </div>
               <div class="cart-item-price">${fmt(lineTotal)}</div>
-              <button class="btn-ghost btn-icon" onclick="removeItem(${i})" title="Eliminar">🗑️</button>
+              <button class="btn-ghost btn-icon" onclick="removeItem(${i})" title="Eliminar" style="color:var(--red);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              ${(p.modifiers||[]).length > 0 ? `<button class="btn-ghost" style="font-size:11px;padding:4px 8px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemMods(${i})">+ Modificadores</button>` : ''}
-              <button class="btn-ghost" style="font-size:11px;padding:4px 8px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemNote(${i})">📝 Nota</button>
-              <button class="btn-ghost" style="font-size:11px;padding:4px 8px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemDiscount(${i})">% Descuento</button>
+              ${(p.modifiers||[]).length > 0 ? `<button class="btn-ghost" style="font-size:11px;padding:4px 10px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemMods(${i})">Modificadores</button>` : ''}
+              <button class="btn-ghost" style="font-size:11px;padding:4px 10px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemNote(${i})">Nota</button>
+              <button class="btn-ghost" style="font-size:11px;padding:4px 10px;border:1px solid var(--border-soft);border-radius:6px;" onclick="editItemDiscount(${i})">Descuento</button>
             </div>
           </div>`;
         }).join('')}
@@ -1116,13 +1143,13 @@ async function sendToKitchen() {
   const prodMap = new Map(CURRENT_PRODUCTS.map(p => [p.id, p]));
   const itemsForKitchen = pending.map(it => {
     const p = prodMap.get(it.productId);
-    return { name: p?.name, emoji: p?.emoji, qty: it.qty, modifiers: it.modifiers||[], notes: it.notes||'' };
+    return { name: p?.name, qty: it.qty, modifiers: it.modifiers||[], notes: it.notes||'' };
   });
   try {
     await API.kitchenCreate({ tableId: CURRENT_TID, items: itemsForKitchen });
     CURRENT_ITEMS.forEach(it => { if (!it.sentToKitchen) it.sentToKitchen = true; });
     persistItems(); renderTableMenu();
-    toast('Enviado a cocina 🔥','success');
+    toast('Enviado a cocina','success');
   } catch(e) { toast(e.message,'error'); }
 }
 async function chargeTable() {
@@ -1209,7 +1236,7 @@ function updateSplitBalance() {
   const total = window.__total;
   const diff = total - sum;
   $('#splitBalance').innerHTML = diff === 0
-    ? `<span style="color:var(--green);">✓ Coincide con el total</span>`
+    ? `<span style="color:var(--green);">Coincide con el total</span>`
     : `<span style="color:${diff>0?'var(--red)':'var(--yellow)'};">${diff>0?'Falta':'Excede'}: ${fmt(Math.abs(diff))}</span>`;
 }
 async function quickAddCustomer() {
@@ -1287,8 +1314,8 @@ route('pedidos', async (params) => {
       <div><h1 class="page-title">Pedidos</h1>
         <div class="page-subtitle">${pendings.length} activos · delivery y take away</div></div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-secondary" onclick="newPending('takeaway')">📦 Nuevo Take Away</button>
-        <button class="btn btn-primary" onclick="newPending('delivery')">🛵 Nuevo Delivery</button>
+        <button class="btn btn-secondary" onclick="newPending('takeaway')">Nuevo Take Away</button>
+        <button class="btn btn-primary" onclick="newPending('delivery')">Nuevo Delivery</button>
       </div>
     </div>
     <div class="grid grid-4" style="margin-bottom:24px;">
@@ -1299,8 +1326,8 @@ route('pedidos', async (params) => {
     </div>
     ${pendings.length === 0 ? `<div class="empty"><h3>Sin pedidos activos</h3><p>Creá un take away o delivery para empezar.</p>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
-        <button class="btn btn-secondary" onclick="newPending('takeaway')">📦 Take Away</button>
-        <button class="btn btn-primary" onclick="newPending('delivery')">🛵 Delivery</button>
+        <button class="btn btn-secondary" onclick="newPending('takeaway')">Take Away</button>
+        <button class="btn btn-primary" onclick="newPending('delivery')">Delivery</button>
       </div></div>` : `
     <div class="grid grid-3">
       ${pendings.map(p => {
@@ -1311,13 +1338,13 @@ route('pedidos', async (params) => {
         return `<div class="card" style="cursor:pointer;border-left:4px solid var(--${statusColor==='or'?'or':statusColor});" onclick="location.hash='#/pedidos/${p.id}'">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
             <div>
-              <div style="font-weight:700;font-size:16px;">${p.kind === 'delivery' ? '🛵' : '📦'} ${p.customer_name || (p.kind==='delivery'?'Delivery':'Take away')}</div>
+              <div style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;"><span class="badge ${p.kind === 'delivery' ? 'blue' : 'gray'}" style="font-size:10px;">${p.kind === 'delivery' ? 'Delivery' : 'Take away'}</span>${p.customer_name || ''}</div>
               <div style="font-size:12px;color:var(--tx-mid);margin-top:2px;">${p.customer_phone || ''}</div>
             </div>
             <span class="badge ${statusColor==='yellow'?'yellow':statusColor==='blue'?'blue':statusColor==='green'?'green':'gray'}">${statusLabel}</span>
           </div>
-          ${p.delivery_address ? `<div style="font-size:12px;color:var(--tx-mid);margin-bottom:6px;">📍 ${p.delivery_address}</div>` : ''}
-          ${p.delivery_eta ? `<div style="font-size:12px;color:var(--tx-mid);margin-bottom:6px;">⏰ ${p.delivery_eta}</div>` : ''}
+          ${p.delivery_address ? `<div style="font-size:12px;color:var(--tx-mid);margin-bottom:6px;">Dirección: ${p.delivery_address}</div>` : ''}
+          ${p.delivery_eta ? `<div style="font-size:12px;color:var(--tx-mid);margin-bottom:6px;">ETA: ${p.delivery_eta}</div>` : ''}
           <div style="font-size:12px;color:var(--tx-mid);">${(p.items||[]).length} items · hace ${elapsedMin} min</div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-soft);">
             <div style="font-weight:700;color:var(--or-dk);">${fmt(total)}</div>
@@ -1346,18 +1373,18 @@ async function renderPedidoDetail(id) {
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:14px;">
         <a href="#/pedidos" class="btn-ghost btn-icon">←</a>
-        <div><h1 class="page-title">${p.kind === 'delivery' ? '🛵 Delivery' : '📦 Take Away'}</h1>
+        <div><h1 class="page-title">${p.kind === 'delivery' ? 'Delivery' : 'Take Away'}</h1>
           <div class="page-subtitle">${p.customer_name || 'Sin nombre'} · ${p.customer_phone || 'sin teléfono'}</div></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${nextStatus && nextStatus !== 'delivered' ? `<button class="btn btn-secondary" onclick="advancePending('${nextStatus}')">${nextLabel} →</button>` : ''}
-        <button class="btn btn-primary" onclick="chargePending()">💵 Cobrar</button>
+        <button class="btn btn-primary" onclick="chargePending()">Cobrar</button>
       </div>
     </div>
     ${p.delivery_address ? `<div class="card" style="margin-bottom:16px;background:#dbeafe;border-color:#93c5fd;">
-      <div style="font-size:13px;color:#1d4ed8;font-weight:600;">📍 Dirección de entrega</div>
+      <div style="font-size:13px;color:#1d4ed8;font-weight:600;">Dirección de entrega</div>
       <div style="margin-top:4px;">${p.delivery_address}</div>
-      ${p.delivery_eta ? `<div style="font-size:13px;color:var(--tx-mid);margin-top:4px;">⏰ ETA: ${p.delivery_eta}</div>` : ''}
+      ${p.delivery_eta ? `<div style="font-size:13px;color:var(--tx-mid);margin-top:4px;">ETA: ${p.delivery_eta}</div>` : ''}
     </div>` : ''}
     <div class="grid grid-2" style="grid-template-columns:1.4fr 1fr;align-items:start;gap:20px;">
       <div>
@@ -1378,7 +1405,7 @@ function renderPedidoMenu(prodMap) {
   const filtered = products.filter(p => p.available && (window.__pCAT==='todos' || p.cat===window.__pCAT));
   $('#pProdGrid').innerHTML = filtered.map(p => `
     <button class="prod-card" onclick="addPendingItem('${p.id}')">
-      <div class="prod-emoji">${p.emoji||'🍽️'}</div>
+      ${productVisual(p, 'lg')}
       <div class="prod-cat">${p.cat}</div>
       <div class="prod-name">${p.name}</div>
       <div class="prod-price">${fmt(p.price)}</div></button>`).join('');
@@ -1398,9 +1425,12 @@ function renderPedidoMenu(prodMap) {
           const p = prodMap.get(it.productId); if (!p) return '';
           return `<div class="cart-item">
             <div class="cart-qty"><button onclick="changePendingQty(${i},-1)">−</button><span class="qty">${it.qty}</span><button onclick="changePendingQty(${i},1)">+</button></div>
-            <div class="cart-item-name"><div style="font-weight:600;">${p.emoji} ${p.name}</div></div>
+            ${productVisual(p, 'sm')}
+            <div class="cart-item-name"><div style="font-weight:600;">${p.name}</div></div>
             <div class="cart-item-price">${fmt(p.price*it.qty)}</div>
-            <button class="btn-ghost btn-icon" onclick="window.__pendingItems.splice(${i},1);persistPending();renderPedidoMenu(window.__prodMap);">🗑️</button>
+            <button class="btn-ghost btn-icon" onclick="window.__pendingItems.splice(${i},1);persistPending();renderPedidoMenu(window.__prodMap);" style="color:var(--red);">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
           </div>`;
         }).join('')}
       </div>
@@ -1528,7 +1558,7 @@ route('productos', async () => {
     <div class="prod-grid">
       ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Agregá un producto para que aparezca como botón al abrir una mesa y armar una comanda.</p><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div>` :
         filtered.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
-          <div class="prod-emoji">${p.emoji||'🍽️'}</div>
+          ${productVisual(p, 'lg')}
           <div class="prod-cat">${p.cat}</div>
           <div class="prod-name">${p.name}</div>
           <div class="prod-price">${fmt(p.price)}</div>
@@ -1539,7 +1569,7 @@ route('productos', async () => {
 function setProdFilter(c) { PROD_FILTER = c; navigate(); }
 
 async function editProduct(id) {
-  let p = { name:'', cat:'', price:0, emoji:'🍽️', available:true, stock:null, low_stock_alert:5, modifiers:[] };
+  let p = { name:'', cat:'', price:0, photo_url:'', available:true, stock:null, low_stock_alert:5, modifiers:[] };
   if (id) { const list = await API.products(); p = list.find(p => p.id === id) || p; }
   const allCats = [...new Set([...PRODUCT_TYPES, ...(await API.products()).map(p => p.cat).filter(Boolean)])];
   window.__editingMods = JSON.parse(JSON.stringify(p.modifiers || []));
@@ -1550,20 +1580,22 @@ async function editProduct(id) {
         <datalist id="catList">${allCats.map(c => `<option value="${c}">`).join('')}</datalist></div>
       <div class="field"><label>Precio</label><input id="pPrice" type="number" value="${p.price||0}" min="0" step="100"/></div>
     </div>
-    <div class="grid grid-2" style="gap:12px;">
-      <div class="field"><label>Emoji</label><input id="pEmoji" value="${p.emoji||'🍽️'}" maxlength="4"/></div>
-      <div class="field"><label>Disponible</label>
-        <select id="pAvail"><option value="1" ${p.available?'selected':''}>Sí</option><option value="0" ${!p.available?'selected':''}>No</option></select></div>
+    <div class="field">
+      <label>Foto del producto (URL opcional)</label>
+      <input id="pPhoto" value="${p.photo_url||''}" placeholder="https://... (opcional)"/>
+      <p style="font-size:11px;color:var(--tx-mid);margin-top:4px;">Si lo dejás vacío se muestra un tile con las iniciales y color de categoría.</p>
     </div>
+    <div class="field"><label>Disponible</label>
+      <select id="pAvail"><option value="1" ${p.available?'selected':''}>Sí</option><option value="0" ${!p.available?'selected':''}>No</option></select></div>
     <details style="margin-top:8px;border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;">
-      <summary style="cursor:pointer;font-weight:600;font-size:13px;">📦 Stock e inventario</summary>
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;">Stock e inventario</summary>
       <div class="grid grid-2" style="gap:12px;margin-top:12px;">
         <div class="field"><label>Stock actual (vacío = sin control)</label><input id="pStock" type="number" min="0" step="1" value="${p.stock??''}"/></div>
         <div class="field"><label>Alerta cuando queden</label><input id="pAlert" type="number" min="0" step="1" value="${p.low_stock_alert||5}"/></div>
       </div>
     </details>
     <details style="margin-top:8px;border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;">
-      <summary style="cursor:pointer;font-weight:600;font-size:13px;">⚙️ Modificadores (ej: sin sal, extra queso)</summary>
+      <summary style="cursor:pointer;font-weight:600;font-size:13px;">Modificadores (ej: sin sal, extra queso)</summary>
       <div id="modsEdit" style="margin-top:12px;"></div>
       <button class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="addModRow()">+ Agregar modificador</button>
     </details>`,
@@ -1587,7 +1619,8 @@ function addModRow() {
 async function saveProduct(id) {
   const stockVal = $('#pStock').value;
   const data = { name: $('#pName').value.trim(), cat: $('#pCat').value.trim() || 'Sin categoría',
-    price: parseFloat($('#pPrice').value)||0, emoji: $('#pEmoji').value || '🍽️',
+    price: parseFloat($('#pPrice').value)||0,
+    photoUrl: $('#pPhoto').value.trim(),
     available: $('#pAvail').value === '1',
     stock: stockVal === '' ? null : parseInt(stockVal),
     lowStockAlert: parseInt($('#pAlert').value)||5,
@@ -2002,7 +2035,7 @@ route('reportes', async () => {
   $('#view').innerHTML = `
     <div class="page-header">
       <div><h1 class="page-title">Reportes</h1><div class="page-subtitle">Últimos 7 días · ${weekOrders.length} órdenes</div></div>
-      <button class="btn btn-secondary" onclick="exportOrdersCSV()">📊 Exportar Excel</button>
+      <button class="btn btn-secondary" onclick="exportOrdersCSV()">Exportar Excel</button>
     </div>
     <div class="grid grid-4" style="margin-bottom:24px;">
       <div class="card"><div class="card-title">Hoy</div><div class="card-value">${fmt(totalDay)}</div><div class="card-delta neu">${todayOrders.length} órdenes</div></div>
@@ -2016,7 +2049,7 @@ route('reportes', async () => {
         <h3 style="margin-bottom:16px;font-size:16px;">Top productos (semana)</h3>
         ${topProds.length===0 ? '<div class="empty">Sin ventas</div>' : `<div class="bar-chart">${topProds.map(([pid,qty]) => {
           const p = prodMap.get(pid); if (!p) return '';
-          return `<div class="bar-row"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.emoji} ${p.name}</div>
+          return `<div class="bar-row"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
             <div class="bar-track"><div class="bar-fill" style="width:${(qty/maxProd)*100}%"></div></div>
             <div style="font-weight:700;">${qty}</div></div>`;}).join('')}</div>`}
       </div>
@@ -2082,7 +2115,7 @@ route('ajustes', async () => {
     <div class="page-header"><h1 class="page-title">Ajustes</h1></div>
     <div class="grid grid-2" style="align-items:start;">
       <div class="card" style="grid-column:1/-1;">
-        <h3 style="margin-bottom:8px;">📱 Carta digital QR</h3>
+        <h3 style="margin-bottom:8px;">Carta digital QR</h3>
         <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Imprimí este QR y ponelo en cada mesa. Los clientes lo escanean y ven el menú actualizado al instante (sin descargar nada).</p>
         <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
           <div style="background:white;padding:14px;border-radius:14px;border:1px solid var(--border);">

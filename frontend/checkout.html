@@ -140,7 +140,7 @@ function renderPayBlock() {
       Pagar con <span class="mp-logo">MercadoPago</span> →
     </button>
     <button class="btn btn-test" id="testBtn">
-      🧪 Simular pago (modo TEST)
+      Simular pago (modo TEST)
     </button>
     <p style="font-size:11px;color:var(--tx-lt);margin-top:12px;">
       Se cobra automáticamente el mismo día de cada mes. Podés cancelar desde MercadoPago.
@@ -185,7 +185,7 @@ async function bindPayBtn() {
       location.reload();
     } catch (e) {
       alert('Error: ' + e.message);
-      testBtn.disabled = false; testBtn.textContent = '🧪 Simular pago (modo TEST)';
+      testBtn.disabled = false; testBtn.textContent = 'Simular pago (modo TEST)';
     }
   };
 }

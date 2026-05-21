@@ -60,10 +60,20 @@
     align-items: flex-start;
   }
   .item:last-child { border-bottom: none; }
-  .item-emoji {
-    width: 56px; height: 56px; background: var(--or-lt); border-radius: 14px;
-    display: grid; place-items: center; font-size: 30px; flex-shrink: 0;
+  .item-img {
+    width: 64px; height: 64px; border-radius: 14px; flex-shrink: 0;
+    overflow: hidden; display: grid; place-items: center; background: var(--soft);
   }
+  .item-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .item-img-fb { width: 100%; height: 100%; display: grid; place-items: center;
+    font-family: var(--ff-display); font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+  .cat-tone-0 { background:#fef3c7; color:#b45309; }
+  .cat-tone-1 { background:#dbeafe; color:#1d4ed8; }
+  .cat-tone-2 { background:#fce7f3; color:#be185d; }
+  .cat-tone-3 { background:#d1fae5; color:#047857; }
+  .cat-tone-4 { background:#ede9fe; color:#6d28d9; }
+  .cat-tone-5 { background:#fee2e2; color:#b91c1c; }
+  .cat-tone-6 { background:#ccfbf1; color:#0f766e; }
   .item-info { flex: 1; min-width: 0; }
   .item-name { font-weight: 700; font-size: 16px; margin: 0 0 4px; }
   .item-desc { color: var(--tx-mid); font-size: 13px; line-height: 1.4; margin: 0; }
@@ -90,7 +100,8 @@
   @media (max-width: 480px) {
     .header { padding: 28px 20px 50px; }
     .header h1 { font-size: 26px; }
-    .item-emoji { width: 50px; height: 50px; font-size: 26px; }
+    .item-img { width: 56px; height: 56px; }
+    .item-img-fb { font-size: 18px; }
   }
 </style>
 </head>
@@ -131,7 +142,7 @@ function render(data) {
 
   document.getElementById('root').innerHTML = `
     <div class="header">
-      <div class="tag">🍽️ Menú digital</div>
+      <div class="tag">Menú digital</div>
       <h1>${data.restaurant.name}</h1>
       <p>Tocá una categoría para filtrar</p>
     </div>
@@ -143,18 +154,24 @@ function render(data) {
         ${cats.map(c => `
           <div class="category" data-cat="${c.name}">
             <h2 class="category-title">${c.name}</h2>
-            ${c.items.map(it => `
-              <div class="item">
-                <div class="item-emoji">${it.emoji || '🍽️'}</div>
+            ${c.items.map(it => {
+              const init = (it.name||'?').slice(0,2).toUpperCase();
+              const tone = (function(s){let h=0;for(let i=0;i<s.length;i++)h=(h<<5)-h+s.charCodeAt(i),h|=0;return Math.abs(h);})(c.name||'') % 7;
+              const img = it.photo_url
+                ? `<img src="${it.photo_url}" alt="" loading="lazy"/>`
+                : `<div class="item-img-fb cat-tone-${tone}">${init}</div>`;
+              return `<div class="item">
+                <div class="item-img">${img}</div>
                 <div class="item-info">
                   <p class="item-name">${it.name}</p>
                 </div>
                 <div class="item-price">${fmt(it.price)}</div>
-              </div>`).join('')}
+              </div>`;
+            }).join('')}
           </div>`).join('')}
       </div>
       <div class="footer">
-        ${data.restaurant.phone ? `📞 ${data.restaurant.phone} · ` : ''}
+        ${data.restaurant.phone ? `Tel: ${data.restaurant.phone} · ` : ''}
         Gestionado con <a href="/landing.html" target="_blank">Gestiva</a>
       </div>
     </div>`;

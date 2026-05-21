@@ -71,7 +71,16 @@
   .tab.on { background:var(--or); color:#fff; border-color:var(--or); }
   .product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(138px,1fr)); gap:10px; margin-bottom:16px; }
   .product { min-height:102px; background:#fff; border:1px solid var(--border); border-radius:16px; padding:12px; text-align:left; display:flex; flex-direction:column; gap:5px; }
-  .product .emoji { font-size:24px; line-height:1; }
+  .product .pmedia { width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden; background:var(--soft); display:grid; place-items:center; margin-bottom:6px; }
+  .product .pmedia img { width:100%; height:100%; object-fit:cover; display:block; }
+  .product .pmedia-fb { width:100%; height:100%; display:grid; place-items:center; font-family:var(--display); font-weight:800; font-size:20px; letter-spacing:-0.02em; }
+  .cat-tone-0 { background:#fef3c7; color:#b45309; }
+  .cat-tone-1 { background:#dbeafe; color:#1d4ed8; }
+  .cat-tone-2 { background:#fce7f3; color:#be185d; }
+  .cat-tone-3 { background:#d1fae5; color:#047857; }
+  .cat-tone-4 { background:#ede9fe; color:#6d28d9; }
+  .cat-tone-5 { background:#fee2e2; color:#b91c1c; }
+  .cat-tone-6 { background:#ccfbf1; color:#0f766e; }
   .product .name { font-weight:800; line-height:1.2; }
   .product .price { color:var(--or-dk); font-weight:800; margin-top:auto; }
   .cart { background:#fff; border:1px solid var(--border); border-radius:18px; overflow:hidden; }
@@ -165,7 +174,7 @@
         <div class="cart-list" id="cartList"></div>
         <div class="cart-actions">
           <button class="btn btn-danger" onclick="clearCart()">Vaciar</button>
-          <button class="btn btn-primary" onclick="saveOrder()">🔥 Enviar a cocina</button>
+          <button class="btn btn-primary" onclick="saveOrder()">Enviar a cocina</button>
         </div>
       </div>
     </section>
@@ -191,6 +200,13 @@ let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[
 
 const $ = (s) => document.querySelector(s);
 const money = (n) => new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', maximumFractionDigits:0 }).format(Number(n||0));
+function _hash(s) { let h = 0; for (let i=0;i<s.length;i++) h = (h<<5) - h + s.charCodeAt(i), h |= 0; return Math.abs(h); }
+function pVisual(p) {
+  if (p && p.photo_url) return `<div class="pmedia"><img src="${p.photo_url}" alt="" loading="lazy"/></div>`;
+  const init = (p?.name || '?').slice(0,2).toUpperCase();
+  const tone = _hash(p?.cat || p?.name || '') % 7;
+  return `<div class="pmedia"><div class="pmedia-fb cat-tone-${tone}">${init}</div></div>`;
+}
 const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
 const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
@@ -217,10 +233,10 @@ function demoId(prefix) {
 function waiterDemoSeed() {
   if (!localStorage.getItem('gestiva_demo_products')) {
     demoWrite('gestiva_demo_products', [
-      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, emoji:'', available:true },
-      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, emoji:'', available:true },
-      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, emoji:'', available:true },
-      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, emoji:'', available:true }
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, available:true }
     ]);
   }
   if (!localStorage.getItem('gestiva_demo_tables')) {
@@ -509,7 +525,7 @@ function renderOrder() {
   $('#catTabs').innerHTML = cats.map(c => `<button class="tab ${state.cat===c?'on':''}" onclick="setCat('${c}')">${c}</button>`).join('');
   const filtered = state.products.filter(p => state.cat === 'todos' || p.cat === state.cat);
   $('#productGrid').innerHTML = filtered.map(p => `<button class="product" onclick="addItem('${p.id}')">
-    <span class="emoji">${p.emoji || '🍽️'}</span>
+    ${pVisual(p)}
     <span class="name">${p.name}</span>
     <span class="price">${money(p.price)}</span>
   </button>`).join('');
@@ -560,8 +576,8 @@ function renderCart() {
     const p = prodMap.get(it.productId);
     if (p) total += Number(p.price) * it.qty;
     const sentBadge = it.sentToKitchen
-      ? '<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;">✓ En cocina</span>'
-      : '<span style="font-size:10px;background:#fff7ed;color:#9a3412;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;">nuevo</span>';
+      ? '<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">en cocina</span>'
+      : '<span style="font-size:10px;background:#fff7ed;color:#9a3412;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">nuevo</span>';
     return `<div class="cart-row" style="${it.sentToKitchen?'opacity:.8;background:#f8fafc;':''}">
       <div><strong>${p ? p.name : 'Producto'}</strong>${sentBadge}<div class="meta">${p ? money(p.price) : ''}</div></div>
       <div class="qty"><button onclick="changeQty(${i},-1)">−</button><span>${it.qty}</span><button onclick="changeQty(${i},1)" ${it.sentToKitchen?'disabled style="opacity:.4;"':''}>+</button></div>
@@ -578,12 +594,11 @@ async function saveOrder() {
     return;
   }
   const prodMap = new Map(state.products.map(p => [p.id, p]));
-  // Snapshot de items para cocina (con nombre y emoji)
+  // Snapshot de items para cocina (solo nombre, sin emoji)
   const itemsForKitchen = newItems.map(it => {
     const p = prodMap.get(it.productId);
     return {
       name: p?.name || 'Producto',
-      emoji: p?.emoji || '🍽️',
       qty: it.qty,
       modifiers: it.modifiers || [],
       notes: it.notes || ''
@@ -596,7 +611,7 @@ async function saveOrder() {
     state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
     // 3) Persistir en open_tables
     await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
-    alert('🔥 Pedido enviado a cocina (' + newItems.length + ' items)');
+    alert('Pedido enviado a cocina (' + newItems.length + ' items)');
     renderCart();
   } catch (e) {
     alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);

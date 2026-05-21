@@ -129,7 +129,7 @@
 
 <div id="loginView" class="login">
   <div class="login-card">
-    <h1>🍳 Cocina</h1>
+    <h1>Cocina</h1>
     <p>Iniciá sesión con la cuenta del restaurante para ver los pedidos en tiempo real.</p>
     <div class="err" id="loginErr"></div>
     <div class="field"><label>Email del restaurante</label><input id="loginEmail" type="email" autocomplete="email" placeholder="demo@gestiva.app"/></div>
@@ -272,7 +272,7 @@ function updateStats(tickets) {
 
 function renderBoard(tickets) {
   if (tickets.length === 0) {
-    $('#board').innerHTML = `<div class="empty"><h2>🍳 Cocina al día</h2><p>No hay pedidos pendientes ahora</p></div>`;
+    $('#board').innerHTML = `<div class="empty"><h2>Cocina al día</h2><p>No hay pedidos pendientes ahora</p></div>`;
     return;
   }
   const now = new Date();
@@ -292,18 +292,18 @@ function renderBoard(tickets) {
           <div class="ticket-item">
             <div class="ticket-item-main">
               <div class="qty">${it.qty}×</div>
-              <div>${it.emoji||''} ${it.name}</div>
+              <div>${it.name}</div>
             </div>
             ${(it.modifiers||[]).length ? `<div class="ticket-mods">+ ${it.modifiers.map(m=>m.name).join(', ')}</div>` : ''}
-            ${it.notes ? `<div class="ticket-note">📝 ${it.notes}</div>` : ''}
+            ${it.notes ? `<div class="ticket-note">Nota: ${it.notes}</div>` : ''}
           </div>`).join('')}
       </div>
-      ${t.notes ? `<div style="font-size:13px;color:var(--yellow);font-style:italic;">📝 ${t.notes}</div>` : ''}
+      ${t.notes ? `<div style="font-size:13px;color:var(--yellow);font-style:italic;">${t.notes}</div>` : ''}
       <div class="ticket-status"><span class="${t.status}">${t.status==='pending'?'Pendiente':t.status==='preparing'?'En cocina':'Listo para entregar'}</span></div>
       <div class="actions">
-        ${t.status === 'pending' ? `<button class="btn btn-prep" onclick="setStatus('${t.id}','preparing')">▶ Empezar</button>` : ''}
-        ${t.status === 'preparing' ? `<button class="btn btn-ready" onclick="setStatus('${t.id}','ready')">✓ Listo</button>` : ''}
-        ${t.status === 'ready' ? `<button class="btn btn-delivered" onclick="setStatus('${t.id}','delivered')">📤 Entregado</button>` : ''}
+        ${t.status === 'pending' ? `<button class="btn btn-prep" onclick="setStatus('${t.id}','preparing')">Empezar</button>` : ''}
+        ${t.status === 'preparing' ? `<button class="btn btn-ready" onclick="setStatus('${t.id}','ready')">Marcar listo</button>` : ''}
+        ${t.status === 'ready' ? `<button class="btn btn-delivered" onclick="setStatus('${t.id}','delivered')">Entregado</button>` : ''}
       </div>
     </div>`;
   }).join('');

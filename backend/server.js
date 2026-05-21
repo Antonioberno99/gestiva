@@ -111,14 +111,14 @@ function computeDaysLeft(t) {
 }
 
 const DEFAULT_PRODUCTS = [
-  { cat: 'Comida', name: 'Plato 1', price: 5000, emoji: '🍽️' },
-  { cat: 'Comida', name: 'Plato 2', price: 7000, emoji: '🍽️' },
-  { cat: 'Comida', name: 'Plato 3', price: 9000, emoji: '🍽️' },
-  { cat: 'Tragos', name: 'Trago 1', price: 3500, emoji: '🍹' },
-  { cat: 'Tragos', name: 'Trago 2', price: 4500, emoji: '🍸' },
-  { cat: 'Bebidas', name: 'Bebida 1', price: 1800, emoji: '🥤' },
-  { cat: 'Bebidas', name: 'Bebida 2', price: 2500, emoji: '🧃' },
-  { cat: 'Postres', name: 'Postre 1', price: 3000, emoji: '🍰' }
+  { cat: 'Comida', name: 'Plato 1', price: 5000 },
+  { cat: 'Comida', name: 'Plato 2', price: 7000 },
+  { cat: 'Comida', name: 'Plato 3', price: 9000 },
+  { cat: 'Tragos', name: 'Trago 1', price: 3500 },
+  { cat: 'Tragos', name: 'Trago 2', price: 4500 },
+  { cat: 'Bebidas', name: 'Bebida 1', price: 1800 },
+  { cat: 'Bebidas', name: 'Bebida 2', price: 2500 },
+  { cat: 'Postres', name: 'Postre 1', price: 3000 }
 ];
 
 const DEMO_EMAIL = 'demo@gestiva.app';
@@ -132,9 +132,9 @@ async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
   }
 
   for (const p of DEFAULT_PRODUCTS) {
-    await q(`INSERT INTO products (tenant_id, name, cat, price, emoji, available)
-             VALUES ($1,$2,$3,$4,$5,true)`,
-      [tenantId, p.name, p.cat, p.price, p.emoji]);
+    await q(`INSERT INTO products (tenant_id, name, cat, price, available)
+             VALUES ($1,$2,$3,$4,true)`,
+      [tenantId, p.name, p.cat, p.price]);
   }
   return DEFAULT_PRODUCTS.length;
 }
@@ -625,22 +625,23 @@ app.get('/api/products', async (req, res) => {
   res.json(r.rows);
 });
 app.post('/api/products', async (req, res) => {
-  const { name, cat, price, emoji, available, stock, lowStockAlert, modifiers } = req.body || {};
+  const { name, cat, price, available, stock, lowStockAlert, modifiers, photoUrl } = req.body || {};
   if (!name || price == null) return res.status(400).json({ error: 'missing_fields' });
-  const r = await q(`INSERT INTO products (tenant_id, name, cat, price, emoji, available, stock, low_stock_alert, modifiers)
+  const r = await q(`INSERT INTO products (tenant_id, name, cat, price, available, stock, low_stock_alert, modifiers, photo_url)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-    [req.tenant.id, name, cat || 'Sin categoría', price, emoji || '🍽️',
-     available !== false, stock ?? null, lowStockAlert || 5, JSON.stringify(modifiers || [])]);
+    [req.tenant.id, name, cat || 'Sin categoría', price,
+     available !== false, stock ?? null, lowStockAlert || 5, JSON.stringify(modifiers || []), photoUrl || null]);
   res.json(r.rows[0]);
 });
 app.put('/api/products/:id', async (req, res) => {
-  const { name, cat, price, emoji, available, stock, lowStockAlert, modifiers } = req.body || {};
-  const r = await q(`UPDATE products SET name=$1, cat=$2, price=$3, emoji=$4, available=$5,
-                     stock=$6, low_stock_alert=COALESCE($7, low_stock_alert),
-                     modifiers=COALESCE($8::jsonb, modifiers)
+  const { name, cat, price, available, stock, lowStockAlert, modifiers, photoUrl } = req.body || {};
+  const r = await q(`UPDATE products SET name=$1, cat=$2, price=$3, available=$4,
+                     stock=$5, low_stock_alert=COALESCE($6, low_stock_alert),
+                     modifiers=COALESCE($7::jsonb, modifiers),
+                     photo_url=COALESCE($8, photo_url)
                      WHERE id=$9 AND tenant_id=$10 RETURNING *`,
-    [name, cat, price, emoji, available, stock ?? null, lowStockAlert || null,
-     modifiers ? JSON.stringify(modifiers) : null, req.params.id, req.tenant.id]);
+    [name, cat, price, available, stock ?? null, lowStockAlert || null,
+     modifiers ? JSON.stringify(modifiers) : null, photoUrl ?? null, req.params.id, req.tenant.id]);
   if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(r.rows[0]);
 });
@@ -1232,7 +1233,7 @@ app.get('/public/menu/:tenantId', async (req, res) => {
   try {
     const t = (await q('SELECT id, restaurant_name, currency, phone FROM tenants WHERE id=$1', [req.params.tenantId])).rows[0];
     if (!t) return res.status(404).json({ error: 'not_found' });
-    const products = (await q(`SELECT id, name, cat, price, emoji, available FROM products
+    const products = (await q(`SELECT id, name, cat, price, photo_url, available FROM products
                                WHERE tenant_id=$1 AND available=true ORDER BY cat, name`, [t.id])).rows;
     // Agrupar por categoría
     const grouped = {};
