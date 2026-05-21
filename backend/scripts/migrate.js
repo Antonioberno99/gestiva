@@ -8,7 +8,7 @@ const { Pool } = require('pg');
   if (!url) { console.error('[migrate] DATABASE_URL missing'); process.exit(1); }
   const pool = new Pool({
     connectionString: url,
-    ssl: url.includes('render.com') || url.includes('amazonaws') ? { rejectUnauthorized: false } : false
+    ssl: url.includes('render.com') || url.includes('amazonaws') || url.includes('neon.tech') ? { rejectUnauthorized: false } : false
   });
   try {
     const sql = fs.readFileSync(path.join(__dirname, '..', 'schema.sql'), 'utf8');

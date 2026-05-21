@@ -38,7 +38,7 @@ else if (!MP_TOKEN) console.warn('[mp] MP_ACCESS_TOKEN missing — billing endpo
 const dbUrl = process.env.DATABASE_URL;
 const pool = new Pool({
   connectionString: dbUrl,
-  ssl: dbUrl && (dbUrl.includes('render.com') || dbUrl.includes('amazonaws')) ? { rejectUnauthorized: false } : false
+  ssl: dbUrl && (dbUrl.includes('render.com') || dbUrl.includes('amazonaws') || dbUrl.includes('neon.tech')) ? { rejectUnauthorized: false } : false
 });
 pool.on('error', (e) => console.error('[pg] pool error', e));
 
