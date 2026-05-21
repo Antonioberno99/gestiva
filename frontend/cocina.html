@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cocina · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-dark: #0f172a; --bg-card: #1e293b; --bg-card-light: #334155;
+    --text: #f1f5f9; --text-mid: #94a3b8;
+    --or: #f97316; --or-dk: #ea580c;
+    --yellow: #f59e0b; --yellow-dark: #d97706;
+    --blue: #3b82f6; --blue-dark: #2563eb;
+    --green: #10b981; --green-dark: #059669;
+    --red: #ef4444;
+    --ff-display: 'Outfit','Inter',sans-serif;
+    --ff-body: 'Inter',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; font-family: var(--ff-body); background: var(--bg-dark); color: var(--text);
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    background: #020617; padding: 14px 24px; display:flex; justify-content:space-between;
+    align-items:center; border-bottom: 1px solid #334155;
+  }
+  .brand { display:flex; align-items:center; gap:10px; font-family: var(--ff-display); font-weight:800; font-size:22px; }
+  .brand img { width:36px; height:36px; object-fit:contain; }
+  .brand span { color: var(--or); }
+  .clock { font-family: var(--ff-display); font-size:18px; font-weight:700; color: var(--text-mid); }
+  .stats { display:flex; gap:18px; }
+  .stat { background: var(--bg-card); padding:10px 16px; border-radius:10px; }
+  .stat-label { font-size:11px; color:var(--text-mid); text-transform:uppercase; letter-spacing:0.05em; }
+  .stat-value { font-size:20px; font-weight:800; font-family: var(--ff-display); }
+  .stat.pending .stat-value { color: var(--yellow); }
+  .stat.preparing .stat-value { color: var(--blue); }
+  .stat.ready .stat-value { color: var(--green); }
+
+  .board { padding: 20px; display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .empty { text-align:center; padding: 80px 20px; color: var(--text-mid); grid-column: 1/-1; }
+  .empty h2 { font-family: var(--ff-display); font-size:28px; margin-bottom:8px; }
+
+  .ticket {
+    background: var(--bg-card); border-radius: 14px; border-left: 6px solid var(--yellow);
+    padding: 16px; display:flex; flex-direction:column; gap:12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    animation: slideIn .3s ease-out;
+  }
+  .ticket.preparing { border-left-color: var(--blue); background: var(--bg-card-light); }
+  .ticket.ready { border-left-color: var(--green); background: linear-gradient(135deg, #064e3b, var(--bg-card-light)); }
+
+  @keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  .ticket-head { display:flex; justify-content:space-between; align-items:center; }
+  .ticket-table { font-family: var(--ff-display); font-size: 28px; font-weight: 800; }
+  .ticket-waiter { font-size:12px; color: var(--text-mid); margin-top:2px; }
+  .timer { font-family: var(--ff-display); font-size: 24px; font-weight:700; padding: 4px 10px; border-radius:8px; }
+  .timer.fresh { color: var(--green); background: rgba(16,185,129,.15); }
+  .timer.warn { color: var(--yellow); background: rgba(245,158,11,.15); }
+  .timer.urgent { color: var(--red); background: rgba(239,68,68,.15); animation: pulse 1s infinite; }
+
+  .ticket-items { display:flex; flex-direction:column; gap:6px; }
+  .ticket-item { padding: 10px 12px; background: rgba(0,0,0,.2); border-radius:8px; }
+  .ticket-item-main { display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px; }
+  .qty { background: var(--or); color:white; min-width:30px; height:30px; border-radius:8px; display:grid; place-items:center; font-weight:800; }
+  .ticket-mods { font-size:13px; color: var(--or); margin-top: 5px; }
+  .ticket-note { font-size:13px; color: var(--yellow); margin-top: 5px; font-style: italic; }
+
+  .ticket-status { display:flex; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; }
+  .ticket-status span { padding: 4px 10px; border-radius:999px; }
+  .ticket-status .pending { background: rgba(245,158,11,.2); color: var(--yellow); }
+  .ticket-status .preparing { background: rgba(59,130,246,.2); color: var(--blue); }
+  .ticket-status .ready { background: rgba(16,185,129,.2); color: var(--green); }
+
+  .actions { display:flex; gap:8px; }
+  .btn {
+    flex:1; padding: 12px 14px; border-radius: 10px; border:none;
+    font-weight: 700; font-size:14px; cursor: pointer;
+    transition: transform .1s, box-shadow .15s;
+    font-family: inherit;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-prep { background: var(--blue); color:white; }
+  .btn-prep:hover { background: var(--blue-dark); }
+  .btn-ready { background: var(--green); color:white; }
+  .btn-ready:hover { background: var(--green-dark); }
+  .btn-delivered { background: var(--or); color:white; }
+  .btn-delivered:hover { background: var(--or-dk); }
+  .btn-back { background: transparent; color: var(--text-mid); border: 1px solid #475569; }
+
+  .login {
+    min-height: 100vh; display:grid; place-items:center; padding: 22px;
+  }
+  .login-card {
+    background: var(--bg-card); border-radius: 18px; padding: 32px; max-width: 420px; width: 100%;
+    border: 1px solid #334155;
+  }
+  .login-card h1 { font-family: var(--ff-display); margin: 0 0 8px; font-size: 26px; }
+  .login-card p { color: var(--text-mid); margin: 0 0 22px; }
+  .field { margin-bottom: 14px; }
+  .field label { display:block; font-size: 13px; font-weight: 600; color: var(--text-mid); margin-bottom: 6px; }
+  .field input {
+    width:100%; padding: 11px 14px; border-radius: 10px; background: var(--bg-dark);
+    border: 1px solid #475569; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .field input:focus { outline: none; border-color: var(--or); }
+  .login-btn {
+    width:100%; padding: 13px 16px; border-radius: 10px; border: none;
+    background: var(--or); color: white; font-weight: 700; font-size: 15px; cursor: pointer;
+    font-family: inherit;
+  }
+  .login-btn:hover { background: var(--or-dk); }
+  .err { background: rgba(239,68,68,.15); color: #fca5a5; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display:none; }
+  .err.on { display: block; }
+
+  @media (max-width: 600px) {
+    .stats { display:none; }
+    .topbar { padding: 12px 14px; }
+    .board { padding: 12px; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login">
+  <div class="login-card">
+    <h1>🍳 Cocina</h1>
+    <p>Iniciá sesión con la cuenta del restaurante para ver los pedidos en tiempo real.</p>
+    <div class="err" id="loginErr"></div>
+    <div class="field"><label>Email del restaurante</label><input id="loginEmail" type="email" autocomplete="email"/></div>
+    <div class="field"><label>Contraseña</label><input id="loginPass" type="password"/></div>
+    <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar a cocina</button>
+    <p style="font-size:12px;margin-top:14px;color:var(--text-mid);">Usá las mismas credenciales del panel administrador.</p>
+  </div>
+</div>
+
+<div id="appView" style="display:none;">
+  <div class="topbar">
+    <div class="brand"><img src="assets/logo-gestiva-icon.png" alt=""/> Cocina <span style="color:var(--text-mid);font-size:14px;font-weight:500;" id="restoName"></span></div>
+    <div class="stats">
+      <div class="stat pending"><div class="stat-label">Pendientes</div><div class="stat-value" id="cnt-pending">0</div></div>
+      <div class="stat preparing"><div class="stat-label">En cocina</div><div class="stat-value" id="cnt-preparing">0</div></div>
+      <div class="stat ready"><div class="stat-label">Listos</div><div class="stat-value" id="cnt-ready">0</div></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div class="clock" id="clock"></div>
+      <button class="btn btn-back" style="padding:8px 14px;" onclick="logout()">Salir</button>
+    </div>
+  </div>
+  <div id="board" class="board"><div class="empty"><h2>Cargando...</h2></div></div>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+
+function getToken() { return localStorage.getItem('gestiva_token'); }
+function logout() { localStorage.removeItem('gestiva_token'); localStorage.removeItem('gestiva_user'); location.reload(); }
+
+async function doLogin() {
+  const btn = $('#loginBtn'); const err = $('#loginErr');
+  err.classList.remove('on');
+  btn.disabled = true; btn.textContent = 'Ingresando...';
+  try {
+    const email = $('#loginEmail').value.trim().toLowerCase();
+    const password = $('#loginPass').value;
+    const r = await fetch(window.API_URL + '/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : data.error);
+    localStorage.setItem('gestiva_token', data.token);
+    localStorage.setItem('gestiva_user', JSON.stringify(data.user));
+    showApp();
+  } catch(e) {
+    err.textContent = e.message; err.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Entrar a cocina';
+  }
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(window.API_URL + path, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+getToken(), ...(opts.headers||{}) }
+  });
+  if (r.status === 401) { logout(); throw new Error('unauthorized'); }
+  const text = await r.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!r.ok) throw new Error(data.error || 'api_error');
+  return data;
+}
+
+function fmtTime(ms) {
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+function timerClass(ms) {
+  const min = ms / 60000;
+  return min < 10 ? 'fresh' : min < 20 ? 'warn' : 'urgent';
+}
+
+async function loadKitchen() {
+  try {
+    const tickets = await api('/api/kitchen');
+    renderBoard(tickets);
+    updateStats(tickets);
+  } catch(e) {
+    console.error('[kitchen]', e);
+    if (e.message === 'unauthorized') return;
+    $('#board').innerHTML = `<div class="empty"><h2>Error de conexión</h2><p>${e.message}</p></div>`;
+  }
+}
+
+function updateStats(tickets) {
+  $('#cnt-pending').textContent = tickets.filter(t => t.status==='pending').length;
+  $('#cnt-preparing').textContent = tickets.filter(t => t.status==='preparing').length;
+  $('#cnt-ready').textContent = tickets.filter(t => t.status==='ready').length;
+}
+
+function renderBoard(tickets) {
+  if (tickets.length === 0) {
+    $('#board').innerHTML = `<div class="empty"><h2>🍳 Cocina al día</h2><p>No hay pedidos pendientes ahora</p></div>`;
+    return;
+  }
+  const now = new Date();
+  $('#board').innerHTML = tickets.map(t => {
+    const elapsed = now - new Date(t.created_at);
+    const items = Array.isArray(t.items) ? t.items : [];
+    return `<div class="ticket ${t.status}">
+      <div class="ticket-head">
+        <div>
+          <div class="ticket-table">${t.table_num ? 'Mesa '+t.table_num : 'Take away'}</div>
+          ${t.waiter_name ? `<div class="ticket-waiter">${t.waiter_name}</div>` : ''}
+        </div>
+        <div class="timer ${timerClass(elapsed)}">${fmtTime(elapsed)}</div>
+      </div>
+      <div class="ticket-items">
+        ${items.map(it => `
+          <div class="ticket-item">
+            <div class="ticket-item-main">
+              <div class="qty">${it.qty}×</div>
+              <div>${it.emoji||''} ${it.name}</div>
+            </div>
+            ${(it.modifiers||[]).length ? `<div class="ticket-mods">+ ${it.modifiers.map(m=>m.name).join(', ')}</div>` : ''}
+            ${it.notes ? `<div class="ticket-note">📝 ${it.notes}</div>` : ''}
+          </div>`).join('')}
+      </div>
+      ${t.notes ? `<div style="font-size:13px;color:var(--yellow);font-style:italic;">📝 ${t.notes}</div>` : ''}
+      <div class="ticket-status"><span class="${t.status}">${t.status==='pending'?'Pendiente':t.status==='preparing'?'En cocina':'Listo para entregar'}</span></div>
+      <div class="actions">
+        ${t.status === 'pending' ? `<button class="btn btn-prep" onclick="setStatus('${t.id}','preparing')">▶ Empezar</button>` : ''}
+        ${t.status === 'preparing' ? `<button class="btn btn-ready" onclick="setStatus('${t.id}','ready')">✓ Listo</button>` : ''}
+        ${t.status === 'ready' ? `<button class="btn btn-delivered" onclick="setStatus('${t.id}','delivered')">📤 Entregado</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function setStatus(id, status) {
+  try { await api('/api/kitchen/'+id, { method:'PUT', body: JSON.stringify({ status }) }); await loadKitchen(); }
+  catch(e) { alert('Error: ' + e.message); }
+}
+
+function tickClock() {
+  const now = new Date();
+  $('#clock').textContent = now.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+async function showApp() {
+  $('#loginView').style.display = 'none';
+  $('#appView').style.display = '';
+  try {
+    const me = await api('/auth/me');
+    $('#restoName').textContent = '· ' + me.user.restaurantName;
+  } catch(e) {}
+  await loadKitchen();
+  setInterval(loadKitchen, 5000);
+  tickClock();
+  setInterval(tickClock, 1000);
+  // refrescar timers (sin recargar tickets) cada segundo
+  setInterval(() => {
+    document.querySelectorAll('.ticket').forEach((el, i) => {
+      const timer = el.querySelector('.timer');
+      // no-op: ya se rerender cada 5s, el timer se ve fluido si recargamos.
+    });
+  }, 1000);
+}
+
+// Init
+if (getToken()) showApp();
+</script>
+</body>
+</html>

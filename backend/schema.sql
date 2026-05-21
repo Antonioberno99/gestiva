@@ -136,6 +136,68 @@ CREATE TABLE IF NOT EXISTS cash_history (
 );
 CREATE INDEX IF NOT EXISTS idx_cash_history_tenant ON cash_history(tenant_id, closed_at DESC);
 
+-- ============================================================
+-- FASE 1 — Stock, modificadores, descuentos, clientes, cocina
+-- ============================================================
+
+-- Stock y modificadores por producto
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS stock INT;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS low_stock_alert INT DEFAULT 5;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS modifiers JSONB DEFAULT '[]'::jsonb;
+
+-- Descuentos y splits en mesas y órdenes
+ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS discount_type TEXT;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS subtotal NUMERIC(12,2);
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS discount_type TEXT;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_id UUID;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS splits JSONB DEFAULT '[]'::jsonb;
+
+-- CLIENTES (cuenta corriente / fiados)
+CREATE TABLE IF NOT EXISTS customers (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  phone       TEXT,
+  email       TEXT,
+  notes       TEXT,
+  balance     NUMERIC(12,2) DEFAULT 0,  -- positivo = nos debe, negativo = saldo a favor
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_customers_tenant ON customers(tenant_id);
+
+CREATE TABLE IF NOT EXISTS customer_transactions (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,   -- 'charge' (consumo a cuenta) | 'payment' (pago de deuda)
+  amount      NUMERIC(12,2) NOT NULL,
+  order_id    UUID,
+  method      TEXT,
+  note        TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_cust_tx_customer ON customer_transactions(customer_id, created_at DESC);
+
+-- TICKETS DE COCINA (KDS - Kitchen Display System)
+CREATE TABLE IF NOT EXISTS kitchen_tickets (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  table_id    UUID,
+  table_num   INT,
+  waiter_id   UUID,
+  waiter_name TEXT,
+  items       JSONB NOT NULL,
+  status      TEXT DEFAULT 'pending',  -- pending | preparing | ready | delivered
+  notes       TEXT,
+  started_at  TIMESTAMPTZ,
+  ready_at    TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kitchen_tenant_status ON kitchen_tickets(tenant_id, status, created_at);
+
 -- SUBSCRIPTION PAYMENTS
 CREATE TABLE IF NOT EXISTS subscription_payments (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
