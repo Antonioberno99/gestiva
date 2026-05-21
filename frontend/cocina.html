@@ -132,10 +132,11 @@
     <h1>🍳 Cocina</h1>
     <p>Iniciá sesión con la cuenta del restaurante para ver los pedidos en tiempo real.</p>
     <div class="err" id="loginErr"></div>
-    <div class="field"><label>Email del restaurante</label><input id="loginEmail" type="email" autocomplete="email"/></div>
-    <div class="field"><label>Contraseña</label><input id="loginPass" type="password"/></div>
+    <div class="field"><label>Email del restaurante</label><input id="loginEmail" type="email" autocomplete="email" placeholder="demo@gestiva.app"/></div>
+    <div class="field"><label>Contraseña</label><input id="loginPass" type="password" placeholder="1234"/></div>
     <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar a cocina</button>
-    <p style="font-size:12px;margin-top:14px;color:var(--text-mid);">Usá las mismas credenciales del panel administrador.</p>
+    <button style="width:100%;padding:11px 16px;border-radius:10px;border:1px solid #475569;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;margin-top:10px;font-family:inherit;" onclick="enterDemo()">Probar modo demo</button>
+    <p style="font-size:12px;margin-top:14px;color:var(--text-mid);">Demo: demo@gestiva.app / 1234 · O las credenciales reales del restaurante.</p>
   </div>
 </div>
 
@@ -160,15 +161,33 @@
 const $ = (s) => document.querySelector(s);
 
 function getToken() { return localStorage.getItem('gestiva_token'); }
+function isDemo() { return getToken() === 'gestiva_demo_token'; }
 function logout() { localStorage.removeItem('gestiva_token'); localStorage.removeItem('gestiva_user'); location.reload(); }
+
+function enterDemo() {
+  // Mismo flow que login.html para mantener compatibilidad con app.html y datos demo
+  const demoUser = {
+    id: 'demo-tenant', email: 'demo@gestiva.app',
+    restaurantName: 'Restaurante Demo', ownerName: 'Usuario Demo',
+    phone: '', currency: '$', subscriptionStatus: 'active', daysLeft: 365
+  };
+  localStorage.setItem('gestiva_token', 'gestiva_demo_token');
+  localStorage.setItem('gestiva_user', JSON.stringify(demoUser));
+  showApp();
+}
 
 async function doLogin() {
   const btn = $('#loginBtn'); const err = $('#loginErr');
   err.classList.remove('on');
+  const email = $('#loginEmail').value.trim().toLowerCase();
+  const password = $('#loginPass').value;
+  // Si es el demo, bypass al backend (igual que login.html)
+  if (email === 'demo@gestiva.app' && password === '1234') {
+    enterDemo();
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Ingresando...';
   try {
-    const email = $('#loginEmail').value.trim().toLowerCase();
-    const password = $('#loginPass').value;
     const r = await fetch(window.API_URL + '/auth/login', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ email, password })
@@ -184,7 +203,34 @@ async function doLogin() {
   }
 }
 
+// Demo API: lee/escribe tickets de cocina en localStorage compartido con app.html
+function demoApi(path, opts = {}) {
+  const method = opts.method || 'GET';
+  const body = opts.body ? JSON.parse(opts.body) : {};
+  let kitchen = JSON.parse(localStorage.getItem('gestiva_demo_kitchen') || '[]');
+  if (path === '/auth/me') {
+    return Promise.resolve({ user: JSON.parse(localStorage.getItem('gestiva_user') || 'null') });
+  }
+  if (path === '/api/kitchen' && method === 'GET') {
+    return Promise.resolve(kitchen.filter(k => ['pending','preparing','ready'].includes(k.status)));
+  }
+  if (path.match(/^\/api\/kitchen\/[^/]+$/) && method === 'PUT') {
+    const id = path.split('/').pop();
+    const k = kitchen.find(x => x.id === id);
+    if (k) {
+      k.status = body.status;
+      if (body.status === 'preparing') k.started_at = new Date().toISOString();
+      if (body.status === 'ready') k.ready_at = new Date().toISOString();
+      if (body.status === 'delivered') k.delivered_at = new Date().toISOString();
+      localStorage.setItem('gestiva_demo_kitchen', JSON.stringify(kitchen));
+    }
+    return Promise.resolve(k);
+  }
+  return Promise.reject(new Error('demo_not_supported'));
+}
+
 async function api(path, opts = {}) {
+  if (isDemo()) return demoApi(path, opts);
   const r = await fetch(window.API_URL + path, {
     ...opts,
     headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+getToken(), ...(opts.headers||{}) }
