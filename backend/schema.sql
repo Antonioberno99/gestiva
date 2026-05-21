@@ -198,6 +198,35 @@ CREATE TABLE IF NOT EXISTS kitchen_tickets (
 );
 CREATE INDEX IF NOT EXISTS idx_kitchen_tenant_status ON kitchen_tickets(tenant_id, status, created_at);
 
+-- ============================================================
+-- FASE 2 — Delivery/takeaway, plano visual, comisiones, QR menu
+-- ============================================================
+
+-- Posición visual de las mesas en el salón (drag & drop)
+ALTER TABLE IF EXISTS tables ADD COLUMN IF NOT EXISTS pos_x INT;
+ALTER TABLE IF EXISTS tables ADD COLUMN IF NOT EXISTS pos_y INT;
+
+-- Comisión por mozo
+ALTER TABLE IF EXISTS waiters ADD COLUMN IF NOT EXISTS commission_percent NUMERIC(5,2) DEFAULT 0;
+
+-- Pedidos para llevar y delivery (sin mesa física)
+CREATE TABLE IF NOT EXISTS pending_orders (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  kind            TEXT NOT NULL,  -- 'takeaway' | 'delivery'
+  customer_id     UUID,
+  customer_name   TEXT,
+  customer_phone  TEXT,
+  delivery_address TEXT,
+  delivery_eta    TEXT,           -- "30 min", "20:30"
+  waiter_id       UUID,
+  items           JSONB DEFAULT '[]'::jsonb,
+  status          TEXT DEFAULT 'pending',  -- pending | preparing | ready | dispatched | delivered | cancelled
+  notes           TEXT,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_pending_orders_tenant ON pending_orders(tenant_id, status, created_at DESC);
+
 -- SUBSCRIPTION PAYMENTS
 CREATE TABLE IF NOT EXISTS subscription_payments (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

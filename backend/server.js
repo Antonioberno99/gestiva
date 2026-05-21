@@ -98,6 +98,7 @@ function publicWaiter(w) {
     role: w.role || 'Mozo',
     color: w.color,
     hasPin: !!w.access_pin_hash,
+    commissionPercent: parseFloat(w.commission_percent) || 0,
     created_at: w.created_at
   };
 }
@@ -703,23 +704,26 @@ app.get('/api/waiters', async (req, res) => {
   res.json(r.rows.map(publicWaiter));
 });
 app.post('/api/waiters', async (req, res) => {
-  const { name, role, color, pin } = req.body || {};
+  const { name, role, color, pin, commissionPercent } = req.body || {};
   if (!name) return res.status(400).json({ error: 'missing_name' });
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
-  const r = await q(`INSERT INTO waiters (tenant_id, name, role, color, access_pin_hash) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [req.tenant.id, name, role || 'Mozo', color || '#f97316', hash]);
+  const r = await q(`INSERT INTO waiters (tenant_id, name, role, color, access_pin_hash, commission_percent)
+                     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [req.tenant.id, name, role || 'Mozo', color || '#f97316', hash, parseFloat(commissionPercent)||0]);
   res.json(publicWaiter(r.rows[0]));
 });
 app.put('/api/waiters/:id', async (req, res) => {
-  const { name, role, color, pin } = req.body || {};
+  const { name, role, color, pin, commissionPercent } = req.body || {};
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
   const r = await q(`UPDATE waiters SET
                        name=COALESCE($1,name),
                        role=COALESCE($2,role),
                        color=COALESCE($3,color),
-                       access_pin_hash=COALESCE($4,access_pin_hash)
-                     WHERE id=$5 AND tenant_id=$6 RETURNING *`,
-    [name, role, color, hash, req.params.id, req.tenant.id]);
+                       access_pin_hash=COALESCE($4,access_pin_hash),
+                       commission_percent=COALESCE($5, commission_percent)
+                     WHERE id=$6 AND tenant_id=$7 RETURNING *`,
+    [name, role, color, hash, commissionPercent != null ? parseFloat(commissionPercent) : null,
+     req.params.id, req.tenant.id]);
   if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(publicWaiter(r.rows[0]));
 });
@@ -1044,6 +1048,142 @@ app.post('/api/cash/close', async (req, res) => {
   res.json({ ok: true, diff, expected });
 });
 
+// ----- PENDING ORDERS (delivery + takeaway) -----
+app.get('/api/pending-orders', async (req, res) => {
+  const includeDone = req.query.includeDone === '1';
+  const sql = includeDone
+    ? 'SELECT * FROM pending_orders WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200'
+    : `SELECT * FROM pending_orders WHERE tenant_id=$1 AND status NOT IN ('delivered','cancelled')
+       ORDER BY created_at DESC`;
+  const r = await q(sql, [req.tenant.id]);
+  res.json(r.rows);
+});
+
+app.post('/api/pending-orders', async (req, res) => {
+  const { kind, customerId, customerName, customerPhone, deliveryAddress, deliveryEta,
+          waiterId, items, notes } = req.body || {};
+  if (!['takeaway','delivery'].includes(kind)) return res.status(400).json({ error: 'invalid_kind' });
+  const r = await q(`INSERT INTO pending_orders (tenant_id, kind, customer_id, customer_name, customer_phone,
+                     delivery_address, delivery_eta, waiter_id, items, notes)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    [req.tenant.id, kind, customerId || null, customerName || null, customerPhone || null,
+     deliveryAddress || null, deliveryEta || null, waiterId || null,
+     JSON.stringify(items || []), notes || null]);
+  // Crear ticket de cocina automáticamente si hay items
+  if (items && items.length > 0) {
+    const itemsForKitchen = items.map(it => ({
+      name: it.name, emoji: it.emoji, qty: it.qty, modifiers: it.modifiers||[], notes: it.notes||''
+    }));
+    await q(`INSERT INTO kitchen_tickets (tenant_id, items, notes, status, waiter_name)
+             VALUES ($1,$2,$3,'pending',$4)`,
+      [req.tenant.id, JSON.stringify(itemsForKitchen),
+       kind === 'delivery' ? '🛵 Delivery' : '📦 Take away', customerName || null]);
+  }
+  res.json(r.rows[0]);
+});
+
+app.put('/api/pending-orders/:id', async (req, res) => {
+  const { status, items, notes, deliveryEta } = req.body || {};
+  const r = await q(`UPDATE pending_orders SET
+                     status=COALESCE($1,status),
+                     items=COALESCE($2::jsonb, items),
+                     notes=COALESCE($3,notes),
+                     delivery_eta=COALESCE($4,delivery_eta)
+                     WHERE id=$5 AND tenant_id=$6 RETURNING *`,
+    [status, items ? JSON.stringify(items) : null, notes, deliveryEta, req.params.id, req.tenant.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json(r.rows[0]);
+});
+
+// Cobrar un pedido pending y convertirlo en orden
+app.post('/api/pending-orders/:id/charge', async (req, res) => {
+  const { paymentMethod, splits, discount, discountType, customerId } = req.body || {};
+  const po = (await q('SELECT * FROM pending_orders WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id])).rows[0];
+  if (!po) return res.status(404).json({ error: 'not_found' });
+
+  const products = (await q('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
+  const prodMap = new Map(products.map(p => [p.id, p]));
+
+  let subtotal = 0;
+  const items = (po.items || []).map(it => {
+    const p = prodMap.get(it.productId);
+    if (!p) return it;
+    const modSum = (it.modifiers || []).reduce((s,m) => s + (parseFloat(m.price)||0), 0);
+    const unit = parseFloat(p.price) + modSum;
+    const itemSubtotal = unit * it.qty - (it.discount||0);
+    subtotal += itemSubtotal;
+    return { ...it, name: p.name, price: p.price, emoji: p.emoji, subtotal: itemSubtotal };
+  });
+
+  let discountAmount = 0;
+  if (discount > 0) {
+    discountAmount = discountType === 'percent' ? subtotal*(discount/100) : parseFloat(discount);
+  }
+  const total = Math.max(0, subtotal - discountAmount);
+
+  const useSplits = Array.isArray(splits) && splits.length > 0;
+  if (useSplits) {
+    const sumSplits = splits.reduce((s, sp) => s + parseFloat(sp.amount||0), 0);
+    if (Math.abs(sumSplits - total) > 0.5) return res.status(400).json({ error: 'splits_mismatch', expected: total });
+  }
+  const payMethod = useSplits ? splits.map(s => s.method).join('+') : (paymentMethod || 'efectivo');
+
+  const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
+  const allOnAccount = payMethod === 'cuenta_corriente' && (customerId || po.customer_id);
+  if (!allOnAccount && !cash) return res.status(400).json({ error: 'cash_not_open' });
+
+  const order = (await q(`INSERT INTO orders (tenant_id, waiter_id, waiter_name, items, subtotal,
+                          discount, discount_type, total, payment_method, note, customer_id, splits, closed_at)
+                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now()) RETURNING *`,
+    [req.tenant.id, po.waiter_id, null, JSON.stringify(items), subtotal,
+     discountAmount, discountType || null, total, payMethod,
+     po.kind === 'delivery' ? '🛵 Delivery: ' + (po.delivery_address||'') : '📦 Take away',
+     customerId || po.customer_id || null,
+     JSON.stringify(useSplits ? splits : [])])).rows[0];
+
+  // Descuento stock
+  for (const it of items) {
+    const p = prodMap.get(it.productId);
+    if (p && p.stock !== null && p.stock !== undefined) {
+      await q('UPDATE products SET stock=GREATEST(0, stock-$1) WHERE id=$2 AND tenant_id=$3',
+        [it.qty, it.productId, req.tenant.id]);
+    }
+  }
+
+  // Caja
+  if (cash && !allOnAccount) {
+    const txs = cash.transactions || [];
+    const desc = (po.kind === 'delivery' ? 'Delivery ' : 'Take away ') + (po.customer_name||'');
+    if (useSplits) {
+      for (const sp of splits) {
+        if (sp.method === 'cuenta_corriente') continue;
+        txs.push({ id: uuid(), type:'in', amount: parseFloat(sp.amount), method: sp.method, desc, at: new Date().toISOString() });
+      }
+    } else {
+      txs.push({ id: uuid(), type:'in', amount: total, method: payMethod, desc, at: new Date().toISOString() });
+    }
+    await q('UPDATE current_cash SET transactions=$1 WHERE tenant_id=$2', [JSON.stringify(txs), req.tenant.id]);
+  }
+
+  // Cuenta corriente
+  const cid = customerId || po.customer_id;
+  if (cid) {
+    const amountToAccount = useSplits
+      ? (splits.find(s => s.method === 'cuenta_corriente')?.amount || 0)
+      : (payMethod === 'cuenta_corriente' ? total : 0);
+    if (amountToAccount > 0) {
+      await q('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3', [amountToAccount, cid, req.tenant.id]);
+      await q(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, order_id, method, note)
+               VALUES ($1,$2,'charge',$3,$4,'cuenta_corriente',$5)`,
+        [req.tenant.id, cid, amountToAccount, order.id, po.kind]);
+    }
+  }
+
+  // Marcar pending_order como entregado y delivered
+  await q(`UPDATE pending_orders SET status='delivered' WHERE id=$1`, [po.id]);
+  res.json(order);
+});
+
 // ----- DASHBOARD -----
 app.get('/api/dashboard', async (req, res) => {
   const tid = req.tenant.id;
@@ -1086,6 +1226,40 @@ app.put('/api/settings', async (req, res) => {
 // ============================================================
 //                       Health
 // ============================================================
+
+// ----- MENÚ PÚBLICO (QR carta digital, sin auth) -----
+app.get('/public/menu/:tenantId', async (req, res) => {
+  try {
+    const t = (await q('SELECT id, restaurant_name, currency, phone FROM tenants WHERE id=$1', [req.params.tenantId])).rows[0];
+    if (!t) return res.status(404).json({ error: 'not_found' });
+    const products = (await q(`SELECT id, name, cat, price, emoji, available FROM products
+                               WHERE tenant_id=$1 AND available=true ORDER BY cat, name`, [t.id])).rows;
+    // Agrupar por categoría
+    const grouped = {};
+    for (const p of products) {
+      const cat = p.cat || 'Otros';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(p);
+    }
+    res.json({
+      restaurant: { id: t.id, name: t.restaurant_name, currency: t.currency, phone: t.phone },
+      categories: Object.entries(grouped).map(([name, items]) => ({ name, items }))
+    });
+  } catch (e) {
+    console.error('[public-menu]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// PUT mesa con posición visual ya soportado por endpoint existente — solo agregamos pos_x/pos_y al PUT
+// (el endpoint existente ya hace COALESCE en cada campo)
+app.put('/api/tables/:id/position', requireAuth, requireSubscription, async (req, res) => {
+  const { x, y } = req.body || {};
+  const r = await q(`UPDATE tables SET pos_x=$1, pos_y=$2 WHERE id=$3 AND tenant_id=$4 RETURNING *`,
+    [parseInt(x)||0, parseInt(y)||0, req.params.id, req.tenant.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json(r.rows[0]);
+});
 
 app.get('/', (req, res) => res.json({ ok: true, service: 'gestiva-backend', time: new Date().toISOString() }));
 app.get('/health', async (req, res) => {

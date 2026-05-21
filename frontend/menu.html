@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Menú · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed; --or-100: #ffedd5;
+    --tx: #0f172a; --tx-mid: #475569; --tx-lt: #94a3b8;
+    --bg: #fafafa; --border: #e2e8f0; --soft: #f1f5f9;
+    --ff-display: 'Outfit','Inter',sans-serif;
+    --ff: 'Inter',-apple-system,sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--ff); background: var(--bg); color: var(--tx); -webkit-font-smoothing: antialiased; }
+  .header {
+    background: linear-gradient(135deg, var(--or), var(--or-dk));
+    color: white; padding: 36px 24px 60px;
+    text-align: center; position: relative;
+  }
+  .header::after {
+    content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 32px;
+    background: var(--bg); border-radius: 32px 32px 0 0;
+  }
+  .header h1 { font-family: var(--ff-display); font-size: 32px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .header p { margin: 0; opacity: .9; font-size: 14px; }
+  .header .tag {
+    display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,.2);
+    padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-bottom: 14px;
+  }
+  .wrap { max-width: 720px; margin: -24px auto 0; padding: 0 20px 80px; position: relative; z-index: 1; }
+  .chips {
+    display: flex; gap: 8px; padding: 10px 0; margin-bottom: 14px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    position: sticky; top: 0; background: var(--bg); z-index: 10; padding-top: 14px;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    white-space: nowrap; padding: 9px 16px; border-radius: 999px;
+    background: white; border: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; color: var(--tx-mid); cursor: pointer;
+    transition: all .15s;
+  }
+  .chip.active { background: var(--or); color: white; border-color: var(--or); }
+
+  .category {
+    background: white; border-radius: 16px; padding: 18px;
+    margin-bottom: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.04);
+  }
+  .category-title {
+    font-family: var(--ff-display); font-size: 22px; font-weight: 800;
+    margin: 0 0 14px; color: var(--or-dk); letter-spacing: -0.02em;
+  }
+  .item {
+    display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--soft);
+    align-items: flex-start;
+  }
+  .item:last-child { border-bottom: none; }
+  .item-emoji {
+    width: 56px; height: 56px; background: var(--or-lt); border-radius: 14px;
+    display: grid; place-items: center; font-size: 30px; flex-shrink: 0;
+  }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-weight: 700; font-size: 16px; margin: 0 0 4px; }
+  .item-desc { color: var(--tx-mid); font-size: 13px; line-height: 1.4; margin: 0; }
+  .item-price {
+    font-family: var(--ff-display); font-weight: 800; font-size: 18px;
+    color: var(--or-dk); white-space: nowrap;
+  }
+
+  .footer {
+    text-align: center; padding: 30px 20px; color: var(--tx-lt); font-size: 12px;
+  }
+  .footer a { color: var(--or-dk); text-decoration: none; font-weight: 600; }
+
+  .loading, .error {
+    text-align: center; padding: 80px 20px; color: var(--tx-mid);
+  }
+  .loading h2, .error h2 { font-family: var(--ff-display); font-size: 22px; }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--soft); border-top-color: var(--or);
+    border-radius: 50%; margin: 0 auto 16px; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 480px) {
+    .header { padding: 28px 20px 50px; }
+    .header h1 { font-size: 26px; }
+    .item-emoji { width: 50px; height: 50px; font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="root">
+  <div class="loading">
+    <div class="spinner"></div>
+    <h2>Cargando menú...</h2>
+  </div>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const tenantId = params.get('id');
+
+(async () => {
+  if (!tenantId) {
+    document.getElementById('root').innerHTML = `<div class="error"><h2>Link inválido</h2><p>Pedí el link correcto al restaurante.</p></div>`;
+    return;
+  }
+  try {
+    const r = await fetch(window.API_URL + '/public/menu/' + tenantId);
+    if (!r.ok) throw new Error('No se pudo cargar el menú');
+    const data = await r.json();
+    render(data);
+  } catch(e) {
+    document.getElementById('root').innerHTML = `<div class="error"><h2>Menú no disponible</h2><p>${e.message}</p></div>`;
+  }
+})();
+
+function render(data) {
+  const cur = data.restaurant.currency || '$';
+  const fmt = (n) => cur + ' ' + Math.round(parseFloat(n)).toLocaleString('es-AR');
+  const cats = data.categories;
+  const all = [{ name: 'todos' }, ...cats];
+
+  document.getElementById('root').innerHTML = `
+    <div class="header">
+      <div class="tag">🍽️ Menú digital</div>
+      <h1>${data.restaurant.name}</h1>
+      <p>Tocá una categoría para filtrar</p>
+    </div>
+    <div class="wrap">
+      <div class="chips" id="chips">
+        ${all.map(c => `<button class="chip ${c.name==='todos'?'active':''}" data-cat="${c.name}">${c.name === 'todos' ? 'Todos' : c.name}</button>`).join('')}
+      </div>
+      <div id="menu">
+        ${cats.map(c => `
+          <div class="category" data-cat="${c.name}">
+            <h2 class="category-title">${c.name}</h2>
+            ${c.items.map(it => `
+              <div class="item">
+                <div class="item-emoji">${it.emoji || '🍽️'}</div>
+                <div class="item-info">
+                  <p class="item-name">${it.name}</p>
+                </div>
+                <div class="item-price">${fmt(it.price)}</div>
+              </div>`).join('')}
+          </div>`).join('')}
+      </div>
+      <div class="footer">
+        ${data.restaurant.phone ? `📞 ${data.restaurant.phone} · ` : ''}
+        Gestionado con <a href="/landing.html" target="_blank">Gestiva</a>
+      </div>
+    </div>`;
+
+  document.querySelectorAll('.chip').forEach(c => {
+    c.onclick = () => {
+      document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      const cat = c.dataset.cat;
+      document.querySelectorAll('.category').forEach(el => {
+        el.style.display = (cat === 'todos' || el.dataset.cat === cat) ? '' : 'none';
+      });
+    };
+  });
+}
+</script>
+</body>
+</html>
