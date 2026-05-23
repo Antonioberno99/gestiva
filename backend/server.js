@@ -827,10 +827,13 @@ app.post('/api/orders', async (req, res) => {
   const table = (await q('SELECT num FROM tables WHERE id=$1', [tableId])).rows[0];
   const waiter = ot.waiter_id ? (await q('SELECT name FROM waiters WHERE id=$1', [ot.waiter_id])).rows[0] : null;
 
-  // Caja: requerida salvo cuando el cobro entero va a cuenta corriente
-  const allOnAccount = payMethod === 'cuenta_corriente' && customerId;
+  // Caja: solo se requiere si algún pago va a un método que afecta caja (no cuenta_corriente)
+  const needsCash = useSplits
+    ? splits.some(s => s.method !== 'cuenta_corriente')
+    : (payMethod !== 'cuenta_corriente');
   const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  if (!allOnAccount && !cash) return res.status(400).json({ error: 'cash_not_open' });
+  if (needsCash && !cash) return res.status(400).json({ error: 'cash_not_open' });
+  const allOnAccount = !needsCash && customerId;
 
   // Insertar orden
   const order = (await q(`INSERT INTO orders (tenant_id, table_id, table_num, waiter_id, waiter_name,
@@ -872,10 +875,11 @@ app.post('/api/orders', async (req, res) => {
       [JSON.stringify(txs), req.tenant.id]);
   }
 
-  // Si hay cliente y se cobra a cuenta corriente (total o split), cargar el balance
+  // Si hay cliente y se cobra a cuenta corriente (total o split), cargar el balance.
+  // Si hay múltiples splits a cuenta_corriente, los sumamos.
   if (customerId) {
     const amountToAccount = useSplits
-      ? (splits.find(s => s.method === 'cuenta_corriente')?.amount || 0)
+      ? splits.filter(s => s.method === 'cuenta_corriente').reduce((sum, s) => sum + parseFloat(s.amount||0), 0)
       : (payMethod === 'cuenta_corriente' ? total : 0);
     if (amountToAccount > 0) {
       await q('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3',
@@ -1130,8 +1134,11 @@ app.post('/api/pending-orders/:id/charge', async (req, res) => {
   const payMethod = useSplits ? splits.map(s => s.method).join('+') : (paymentMethod || 'efectivo');
 
   const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  const allOnAccount = payMethod === 'cuenta_corriente' && (customerId || po.customer_id);
-  if (!allOnAccount && !cash) return res.status(400).json({ error: 'cash_not_open' });
+  const needsCash = useSplits
+    ? splits.some(s => s.method !== 'cuenta_corriente')
+    : (payMethod !== 'cuenta_corriente');
+  if (needsCash && !cash) return res.status(400).json({ error: 'cash_not_open' });
+  const allOnAccount = !needsCash && (customerId || po.customer_id);
 
   const order = (await q(`INSERT INTO orders (tenant_id, waiter_id, waiter_name, items, subtotal,
                           discount, discount_type, total, payment_method, note, customer_id, splits, closed_at)
@@ -1170,7 +1177,7 @@ app.post('/api/pending-orders/:id/charge', async (req, res) => {
   const cid = customerId || po.customer_id;
   if (cid) {
     const amountToAccount = useSplits
-      ? (splits.find(s => s.method === 'cuenta_corriente')?.amount || 0)
+      ? splits.filter(s => s.method === 'cuenta_corriente').reduce((sum, s) => sum + parseFloat(s.amount||0), 0)
       : (payMethod === 'cuenta_corriente' ? total : 0);
     if (amountToAccount > 0) {
       await q('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3', [amountToAccount, cid, req.tenant.id]);

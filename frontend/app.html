@@ -410,7 +410,24 @@ async function demoApi(path, opts = {}) {
   if (path === '/api/customers' && method === 'POST') { const c = { id: demoId('cust'), balance: 0, created_at: new Date().toISOString(), ...body }; customers.push(c); demoWrite('gestiva_demo_customers', customers); return c; }
   if (path.match(/^\/api\/customers\/[^/]+$/) && method === 'PUT') { const id = path.split('/').pop(); const c = customers.find(x => x.id === id); Object.assign(c, body); demoWrite('gestiva_demo_customers', customers); return c; }
   if (path.match(/^\/api\/customers\/[^/]+$/) && method === 'DELETE') { demoWrite('gestiva_demo_customers', customers.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
-  if (path.match(/^\/api\/customers\/[^/]+\/payment$/)) { const id = path.split('/')[3]; const c = customers.find(x => x.id === id); c.balance = (parseFloat(c.balance)||0) - parseFloat(body.amount); custTx.unshift({ id: demoId('ctx'), customer_id: id, type:'payment', amount: parseFloat(body.amount), method: body.method, note: body.note, created_at: new Date().toISOString() }); demoWrite('gestiva_demo_customers', customers); demoWrite('gestiva_demo_cust_tx', custTx); return { ok:true }; }
+  if (path.match(/^\/api\/customers\/[^/]+\/payment$/)) {
+    const id = path.split('/')[3];
+    const c = customers.find(x => x.id === id);
+    const amt = parseFloat(body.amount);
+    c.balance = (parseFloat(c.balance)||0) - amt;
+    custTx.unshift({ id: demoId('ctx'), customer_id: id, type:'payment', amount: amt, method: body.method, note: body.note, created_at: new Date().toISOString() });
+    demoWrite('gestiva_demo_customers', customers);
+    demoWrite('gestiva_demo_cust_tx', custTx);
+    // Sumar a caja demo si está abierta y el método no es cuenta_corriente
+    const dCash = demoRead('gestiva_demo_cash', null);
+    if (dCash && body.method !== 'cuenta_corriente') {
+      dCash.transactions = dCash.transactions || [];
+      dCash.transactions.push({ id: demoId('tx'), type:'in', amount: amt, method: body.method || 'efectivo',
+        desc: 'Pago cuenta: ' + c.name, at: new Date().toISOString() });
+      demoWrite('gestiva_demo_cash', dCash);
+    }
+    return { ok:true };
+  }
   // Kitchen
   const kitchen = demoRead('gestiva_demo_kitchen', []);
   if (path === '/api/kitchen' && method === 'GET') return kitchen.filter(k => ['pending','preparing','ready'].includes(k.status));
@@ -1158,7 +1175,8 @@ async function chargeTable() {
   const discAmount = CURRENT_DISCOUNT_TYPE === 'percent' ? subtotal*(CURRENT_DISCOUNT/100) : Math.min(CURRENT_DISCOUNT, subtotal);
   const total = Math.max(0, subtotal - discAmount);
 
-  const customers = await API.customers();
+  let customers = [];
+  try { customers = await API.customers(); } catch(e) { /* sin clientes → modal igual abre, cuenta_corriente fallará si la eligen */ }
 
   openModal('Cobrar Mesa ' + CURRENT_TABLE.num, `
     <div style="text-align:center;margin-bottom:18px;">
@@ -1174,20 +1192,13 @@ async function chargeTable() {
 
     <div id="paySimple">
       <div class="field"><label>Método de pago</label>
-        <select id="payMethod" onchange="onPayMethodChange()">
+        <select id="payMethod" onchange="updateCustVisibility()">
           <option value="efectivo">Efectivo</option>
           <option value="tarjeta">Tarjeta</option>
           <option value="transferencia">Transferencia</option>
           <option value="mercadopago">MercadoPago</option>
           <option value="cuenta_corriente">Cuenta corriente</option>
         </select></div>
-      <div class="field" id="custBlock" style="display:none;"><label>Cliente</label>
-        <select id="custSel">
-          <option value="">— Elegir cliente —</option>
-          ${customers.map(c => `<option value="${c.id}">${c.name}${parseFloat(c.balance)>0?` (debe ${fmt(c.balance)})`:''}</option>`).join('')}
-        </select>
-        <div style="margin-top:6px;"><a onclick="quickAddCustomer()" style="font-size:12px;color:var(--or-dk);cursor:pointer;">+ Crear cliente nuevo</a></div>
-      </div>
     </div>
 
     <div id="paySplit" style="display:none;">
@@ -1195,6 +1206,15 @@ async function chargeTable() {
       <div id="splitRows"></div>
       <button class="btn btn-secondary btn-sm" onclick="addSplitRow()" style="margin-top:8px;">+ Agregar pago</button>
       <div id="splitBalance" style="margin-top:10px;font-size:13px;font-weight:600;"></div>
+    </div>
+
+    <div class="field" id="custBlock" style="display:none;margin-top:14px;padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;">
+      <label style="color:var(--or-dk);">Cliente (cuenta corriente)</label>
+      <select id="custSel">
+        <option value="">— Elegir cliente —</option>
+        ${customers.map(c => `<option value="${c.id}">${c.name}${parseFloat(c.balance||0)>0?` (debe ${fmt(c.balance)})`:''}</option>`).join('')}
+      </select>
+      <div style="margin-top:6px;"><a onclick="quickAddCustomer()" style="font-size:12px;color:var(--or-dk);cursor:pointer;">+ Crear cliente nuevo</a></div>
     </div>
 
     <div class="field" style="margin-top:14px;"><label>Notas (opcional)</label><textarea id="orderNote" rows="2"></textarea></div>`,
@@ -1208,9 +1228,20 @@ function setPayMode(mode) {
   $('#paySimple').style.display = mode==='simple' ? '' : 'none';
   $('#paySplit').style.display = mode==='split' ? '' : 'none';
   if (mode==='split' && $('#splitRows').children.length === 0) addSplitRow();
+  updateCustVisibility();
 }
-function onPayMethodChange() {
-  $('#custBlock').style.display = $('#payMethod').value === 'cuenta_corriente' ? '' : 'none';
+// Muestra el select de cliente cuando se necesita (modo simple con cuenta_corriente,
+// o modo split con al menos un split de cuenta_corriente)
+function updateCustVisibility() {
+  const block = $('#custBlock'); if (!block) return;
+  const isSplit = document.getElementById('modeSplit')?.classList.contains('active');
+  let needsCust = false;
+  if (isSplit) {
+    needsCust = [...document.querySelectorAll('.splitMethod')].some(s => s.value === 'cuenta_corriente');
+  } else {
+    needsCust = $('#payMethod')?.value === 'cuenta_corriente';
+  }
+  block.style.display = needsCust ? '' : 'none';
 }
 function addSplitRow() {
   const rows = $('#splitRows');
@@ -1218,7 +1249,7 @@ function addSplitRow() {
   const div = document.createElement('div');
   div.style.cssText = 'display:grid;grid-template-columns:1.2fr 1fr auto;gap:6px;margin-bottom:6px;align-items:center;';
   div.innerHTML = `
-    <select class="splitMethod">
+    <select class="splitMethod" onchange="updateCustVisibility()">
       <option value="efectivo">Efectivo</option>
       <option value="tarjeta">Tarjeta</option>
       <option value="transferencia">Transferencia</option>
@@ -1226,9 +1257,10 @@ function addSplitRow() {
       <option value="cuenta_corriente">Cuenta corriente</option>
     </select>
     <input class="splitAmount" type="number" min="0" step="100" placeholder="Monto" oninput="updateSplitBalance()"/>
-    <button class="btn-ghost btn-icon" onclick="this.parentNode.remove();updateSplitBalance();">✕</button>`;
+    <button class="btn-ghost btn-icon" onclick="this.parentNode.remove();updateSplitBalance();updateCustVisibility();">✕</button>`;
   rows.appendChild(div);
   updateSplitBalance();
+  updateCustVisibility();
 }
 function updateSplitBalance() {
   const inputs = document.querySelectorAll('.splitAmount');
