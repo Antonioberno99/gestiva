@@ -28,6 +28,12 @@ CREATE TABLE IF NOT EXISTS tenants (
 
 CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email);
 
+-- Soporte para login con Google (Google Identity Services)
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS google_id TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS google_picture TEXT;
+ALTER TABLE IF EXISTS tenants ALTER COLUMN password_hash DROP NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tenants_google ON tenants(google_id);
+
 -- PRODUCTS
 CREATE TABLE IF NOT EXISTS products (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

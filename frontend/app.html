@@ -2143,8 +2143,14 @@ route('ajustes', async () => {
   USER = me.user; localStorage.setItem('gestiva_user', JSON.stringify(USER));
   refreshSubPill(); refreshGraceBanner();
 
+  // Si vino por Google y aún tiene "Mi restaurante" → banner pidiendo que personalice
+  const needsSetup = USER.hasGoogle && USER.restaurantName === 'Mi restaurante';
+
   $('#view').innerHTML = `
     <div class="page-header"><h1 class="page-title">Ajustes</h1></div>
+    ${needsSetup ? `<div class="grace-banner" style="background:linear-gradient(135deg,#dbeafe,#fff);border-color:#93c5fd;color:#1e40af;">
+      <div>Bienvenido a Gestiva. Ponele el nombre real a tu restaurante abajo para que aparezca en el sidebar y la carta digital.</div>
+    </div>` : ''}
     <div class="grid grid-2" style="align-items:start;">
       <div class="card" style="grid-column:1/-1;">
         <h3 style="margin-bottom:8px;">Carta digital QR</h3>

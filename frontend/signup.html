@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed;
@@ -37,6 +38,10 @@
   .err.on { display:block; }
   .alt { text-align:center; margin-top:20px; font-size:13px; color:var(--tx-mid); }
   .alt a { color:var(--or-dk); font-weight:600; text-decoration:none; }
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  #gBtn{display:flex;justify-content:center;}
+  #gBtn:empty{display:none;}
   .price-pill { display:inline-flex; align-items:center; gap:8px; background:var(--or-lt); color:var(--or-dk); padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600; margin-bottom:20px; }
   .feat-list { background:var(--bg); border-radius:12px; padding:14px 18px; margin:20px 0; font-size:13px; color:var(--tx-mid); }
   .feat-list ul { margin:0; padding:0; list-style:none; }
@@ -60,6 +65,8 @@
     <p class="sub">Empezá a usar Gestiva hoy. Tu data se guarda segura en la nube.</p>
 
     <div class="err" id="err"></div>
+    <div id="gBtn"></div>
+    <div class="divider" id="gDivider" style="display:none;">o con email</div>
     <form id="signupForm">
       <div class="field">
         <label>Nombre del restaurante / bar</label>
@@ -101,6 +108,53 @@
 const form = document.getElementById('signupForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('submitBtn');
+
+// Google Sign-In: solo renderiza si hay GOOGLE_CLIENT_ID configurado
+function initGoogleSignIn() {
+  if (!window.GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return;
+  window.google.accounts.id.initialize({
+    client_id: window.GOOGLE_CLIENT_ID,
+    callback: handleGoogleSignIn,
+    auto_select: false, context: 'signup'
+  });
+  window.google.accounts.id.renderButton(document.getElementById('gBtn'), {
+    type: 'standard', theme: 'outline', size: 'large', text: 'signup_with',
+    shape: 'rectangular', logo_alignment: 'center', width: 380
+  });
+  document.getElementById('gDivider').style.display = '';
+}
+async function handleGoogleSignIn(response) {
+  errEl.classList.remove('on');
+  try {
+    const r = await fetch(window.API_URL + '/auth/google', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de registro'));
+    localStorage.setItem('gestiva_token', data.token);
+    localStorage.setItem('gestiva_user', JSON.stringify(data.user));
+    if (data.isNew) {
+      // Usuario nuevo via Google: lo mandamos a ajustes para que defina el nombre del restaurante
+      location.href = 'app.html#/ajustes';
+    } else if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+      location.href = 'app.html';
+    } else {
+      location.href = 'checkout.html';
+    }
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.add('on');
+  }
+}
+window.addEventListener('load', () => {
+  let attempts = 0;
+  const t = setInterval(() => {
+    attempts++;
+    if (window.google?.accounts?.id) { clearInterval(t); initGoogleSignIn(); }
+    else if (attempts > 50) clearInterval(t);
+  }, 200);
+});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();

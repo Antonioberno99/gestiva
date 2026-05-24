@@ -27,6 +27,8 @@ const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '40000');
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
+// Si está vacío, el endpoint /auth/google rechaza pedidos
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 // SKIP_BILLING=1 desactiva todo cobro: registros quedan 'active' por 1 año.
 // Útil mientras no esté integrado el banco. Para activar cobro real, poner SKIP_BILLING=0.
 const SKIP_BILLING = process.env.SKIP_BILLING === '1' || !MP_TOKEN;
@@ -82,6 +84,8 @@ function publicTenant(t) {
     ownerName: t.owner_name,
     phone: t.phone,
     currency: t.currency,
+    googlePicture: t.google_picture || null,
+    hasGoogle: !!t.google_id,
     subscriptionStatus: t.subscription_status,
     subscriptionEndsAt: t.subscription_ends_at,
     graceEndsAt: t.grace_ends_at,
@@ -352,6 +356,92 @@ app.post('/auth/login', authLimiter, async (req, res) => {
 
 app.get('/auth/me', requireAuth, async (req, res) => {
   res.json({ user: publicTenant(req.tenant) });
+});
+
+// Login / Signup con Google Identity Services.
+// El frontend envía el `credential` (JWT firmado por Google) que devuelve el botón
+// de Google. Lo verificamos llamando al endpoint público de tokeninfo de Google.
+// - Si el email ya existe (con o sin password) → linkeamos google_id y log in.
+// - Si no existe → creamos tenant nuevo con restaurant_name placeholder.
+app.post('/auth/google', authLimiter, async (req, res) => {
+  try {
+    if (!GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'google_not_configured' });
+    const { credential } = req.body || {};
+    if (!credential) return res.status(400).json({ error: 'missing_credential' });
+
+    // Verificar el ID token con Google
+    const verifyRes = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+    if (!verifyRes.ok) return res.status(401).json({ error: 'invalid_credential' });
+    const info = await verifyRes.json();
+
+    // Validar audience (debe coincidir con NUESTRO client_id) y que el email esté verificado
+    const aud = Array.isArray(info.aud) ? info.aud : [info.aud];
+    if (!aud.includes(GOOGLE_CLIENT_ID)) {
+      return res.status(401).json({ error: 'invalid_audience' });
+    }
+    if (info.email_verified !== 'true' && info.email_verified !== true) {
+      return res.status(401).json({ error: 'email_not_verified' });
+    }
+
+    const email = (info.email || '').toLowerCase().trim();
+    const googleId = info.sub;
+    const name = info.name || '';
+    const picture = info.picture || null;
+    if (!email || !googleId) return res.status(400).json({ error: 'invalid_payload' });
+
+    // Buscar tenant existente por google_id o email
+    const r = await q('SELECT * FROM tenants WHERE google_id=$1 OR email=$2 LIMIT 1', [googleId, email]);
+    let t = r.rows[0];
+    let isNew = false;
+
+    if (t) {
+      // Linkear google_id y picture si no estaban
+      const updates = [];
+      const params = [];
+      let idx = 1;
+      if (!t.google_id) { updates.push(`google_id=$${idx++}`); params.push(googleId); }
+      if (!t.google_picture) { updates.push(`google_picture=$${idx++}`); params.push(picture); }
+      if (updates.length > 0) {
+        params.push(t.id);
+        const upd = await q(`UPDATE tenants SET ${updates.join(', ')} WHERE id=$${idx} RETURNING *`, params);
+        t = upd.rows[0];
+      }
+      await refreshSubscriptionStatus(t.id);
+      const fresh = await q('SELECT * FROM tenants WHERE id=$1', [t.id]);
+      t = fresh.rows[0];
+    } else {
+      // Crear tenant nuevo
+      isNew = true;
+      let initialStatus = 'pending';
+      let endsAt = null, graceEndsAt = null, startedAt = null;
+      if (SKIP_BILLING) {
+        initialStatus = 'active';
+        startedAt = new Date();
+        endsAt = new Date(startedAt.getTime() + 365 * 86400000);
+        graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+      }
+      const ins = await q(
+        `INSERT INTO tenants (email, google_id, google_picture, restaurant_name, owner_name,
+                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt]
+      );
+      t = ins.rows[0];
+      // Seed inicial: 12 mesas, 1 mozo, productos por defecto
+      for (let i = 1; i <= 12; i++) {
+        await q('INSERT INTO tables (tenant_id, num, seats) VALUES ($1,$2,$3)', [t.id, i, 4]);
+      }
+      await q('INSERT INTO waiters (tenant_id, name, color) VALUES ($1,$2,$3)',
+        [t.id, name || 'Mozo 1', '#f97316']);
+      await seedDefaultProducts(t.id);
+    }
+
+    const token = signToken(t);
+    return res.json({ token, user: publicTenant(t), isNew });
+  } catch (e) {
+    console.error('[auth-google]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ============================================================

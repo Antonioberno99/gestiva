@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--tx-dark:#0f172a;--tx-mid:#475569;--bg:#f8fafc;--border:#e2e8f0;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
   *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed,#fafafa);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased}
@@ -35,6 +36,10 @@
   .btn-demo:hover{background:#fafafa;border-color:#fdba74}
   .alt{text-align:center;margin-top:20px;font-size:13px;color:var(--tx-mid)}
   .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  #gBtn{display:flex;justify-content:center;}
+  #gBtn:empty{display:none;}
 </style>
 </head>
 <body>
@@ -47,6 +52,8 @@
     <h1>Iniciar sesión</h1>
     <p class="sub">Accedé a tu sistema Gestiva</p>
     <div class="err" id="err"></div>
+    <div id="gBtn"></div>
+    <div class="divider" id="gDivider" style="display:none;">o con email</div>
     <form id="loginForm">
       <div class="field">
         <label>Email</label>
@@ -92,6 +99,55 @@ function fillDemoLogin() {
   document.getElementById('password').value = '1234';
   enterDemoPanel();
 }
+// Google Sign-In: solo renderiza si hay client_id configurado
+function initGoogleSignIn() {
+  if (!window.GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return;
+  window.google.accounts.id.initialize({
+    client_id: window.GOOGLE_CLIENT_ID,
+    callback: handleGoogleSignIn,
+    auto_select: false,
+    context: 'signin'
+  });
+  window.google.accounts.id.renderButton(document.getElementById('gBtn'), {
+    type: 'standard', theme: 'outline', size: 'large', text: 'signin_with',
+    shape: 'rectangular', logo_alignment: 'center', width: 340
+  });
+  document.getElementById('gDivider').style.display = '';
+}
+async function handleGoogleSignIn(response) {
+  errEl.classList.remove('on');
+  try {
+    const r = await fetch(window.API_URL + '/auth/google', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de login'));
+    localStorage.setItem('gestiva_token', data.token);
+    localStorage.setItem('gestiva_user', JSON.stringify(data.user));
+    if (data.isNew) {
+      // Usuario nuevo: lo mandamos a Ajustes para que ponga el nombre del restaurante
+      location.href = 'app.html#/ajustes';
+    } else if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+      location.href = 'app.html';
+    } else {
+      location.href = 'checkout.html';
+    }
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.add('on');
+  }
+}
+// Esperar a que cargue la lib de Google y inicializar (se inicializa cuando responde el script async)
+window.addEventListener('load', () => {
+  let attempts = 0;
+  const t = setInterval(() => {
+    attempts++;
+    if (window.google?.accounts?.id) { clearInterval(t); initGoogleSignIn(); }
+    else if (attempts > 50) clearInterval(t); // ~10s, sin lib disponible
+  }, 200);
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errEl.classList.remove('on');

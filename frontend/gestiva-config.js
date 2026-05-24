@@ -11,4 +11,13 @@
     // Cambiá esto cuando despliegues en Render:
     window.API_URL = 'https://gestiva-backend.onrender.com';
   }
+
+  // ----------------------------------------------------------
+  // Login con Google (Google Identity Services)
+  // Si está vacío, el botón "Iniciar sesión con Google" no se muestra.
+  // Para activarlo, pegá acá el Client ID web de Google Cloud Console:
+  // https://console.cloud.google.com/apis/credentials
+  // (ver instrucciones en docs/GOOGLE_OAUTH_SETUP.md)
+  // ----------------------------------------------------------
+  window.GOOGLE_CLIENT_ID = '';  // ej: "1234567890-abc...apps.googleusercontent.com"
 })();
