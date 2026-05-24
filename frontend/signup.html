@@ -18,8 +18,10 @@
     --ff-display: 'Outfit','Inter',sans-serif; --ff-body: 'Inter',sans-serif;
   }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: var(--ff-body); background: linear-gradient(135deg, #fff7ed, #fafafa); min-height: 100vh; color: var(--tx-dark); -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 480px; margin: 0 auto; padding: 40px 20px; }
+  body { margin:0; font-family: var(--ff-body); background: linear-gradient(135deg, #fff7ed 0%, #fafafa 50%, #fff7ed 100%); min-height: 100vh; color: var(--tx-dark); -webkit-font-smoothing: antialiased; display:flex; align-items:center; justify-content:center; padding: 24px; position: relative; overflow-x: hidden; }
+  body::before { content:''; position:absolute; top:-200px; right:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.12), transparent 70%); border-radius:50%; pointer-events:none; }
+  body::after { content:''; position:absolute; bottom:-200px; left:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.08), transparent 70%); border-radius:50%; pointer-events:none; }
+  .wrap { max-width: 500px; width:100%; position: relative; z-index: 1; }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:32px; text-decoration:none; color:inherit; }
   .brand-logo { width:40px; height:40px; border-radius:11px; background:#fff; display:grid; place-items:center; color:white; box-shadow:0 6px 16px rgba(15,23,42,.08); overflow:hidden; }
   .brand-logo img { width:38px; height:38px; object-fit:contain; display:block; }

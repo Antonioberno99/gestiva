@@ -48,7 +48,8 @@
     }
 
     /* ── UTILITIES ── */
-    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 0 32px; }
+    @media (max-width: 768px) { .container { padding: 0 20px; } }
     .tag {
       display: inline-flex; align-items: center; gap: 7px;
       background: var(--or-100); color: var(--or-dk);
@@ -129,7 +130,8 @@
       background: radial-gradient(circle, rgba(249,115,22,.09) 0%, transparent 70%);
       pointer-events: none;
     }
-    .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 56px; align-items: center; }
+    .hero-grid > * { min-width: 0; }
     .hero-badge {
       display: inline-flex; align-items: center; gap: 9px;
       background: #fff; border: 1px solid var(--or-200); border-radius: 100px;
@@ -151,7 +153,8 @@
       line-height: 1.08; letter-spacing: -1.2px; color: var(--tx-dark); margin-bottom: 20px;
     }
     .hero-title .hl { color: var(--or); }
-    .hero-sub { font-size: 18px; color: var(--tx-mid); line-height: 1.72; margin-bottom: 36px; max-width: 470px; }
+    .hero-sub { font-size: 18px; color: var(--tx-mid); line-height: 1.72; margin-bottom: 36px; max-width: 470px; word-wrap: break-word; overflow-wrap: break-word; }
+    @media (max-width: 768px) { .hero-sub { max-width: 100%; font-size: 16px; } }
     .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
     .hero-btns .btn { padding: 14px 28px; font-size: 16px; }
     .hero-stats { display: flex; gap: 36px; margin-top: 52px; padding-top: 32px; border-top: 1px solid var(--border); }
@@ -229,7 +232,8 @@
 
     /* ── SOLUTION ── */
     .s-solution { padding: 96px 0; background: #fff; }
-    .sol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+    .sol-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 72px; align-items: center; }
+    .sol-grid > * { min-width: 0; }
     .sol-items { display: flex; flex-direction: column; gap: 22px; margin-top: 32px; }
     .sol-item { display: flex; gap: 16px; align-items: flex-start; }
     .sol-ico { width: 42px; height: 42px; background: var(--or-100); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--or); }
@@ -355,7 +359,8 @@
 
     /* ── BENEFITS ── */
     .s-benefits { padding: 96px 0; background: var(--bg); }
-    .ben-grid-outer { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+    .ben-grid-outer { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 72px; align-items: center; }
+    .ben-grid-outer > * { min-width: 0; }
     .ben-list { display: flex; flex-direction: column; gap: 16px; margin-top: 32px; }
     .ben-list-item { display: flex; align-items: center; gap: 13px; }
     .check { width: 26px; height: 26px; background: var(--or); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -372,7 +377,8 @@
     /* ── CTA ── */
     /* Team app */
     .s-team-app { padding: 96px 0; background: #fff; }
-    .team-app-layout { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(300px,.95fr); gap: 52px; align-items: center; }
+    .team-app-layout { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,.95fr); gap: 52px; align-items: center; }
+    .team-app-layout > * { min-width: 0; }
     .team-copy .sec-title { text-align: left; }
     .team-copy .sec-sub { max-width: 560px; }
     .team-actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:28px; }
@@ -437,7 +443,7 @@
     @media (max-width: 768px) {
       .nav-links, .nav-ctas { display: none; }
       .hamburger { display: flex; }
-      .hero-grid, .sol-grid, .ben-grid-outer, .team-app-layout { grid-template-columns: 1fr; gap: 48px; }
+      .hero-grid, .sol-grid, .ben-grid-outer, .team-app-layout { grid-template-columns: minmax(0,1fr); gap: 48px; }
       .browser { transform: none; }
       .sol-visual { padding: 0; }
       .fc1, .fc2 { display: none; }
