@@ -19,5 +19,5 @@
   // https://console.cloud.google.com/apis/credentials
   // (ver instrucciones en docs/GOOGLE_OAUTH_SETUP.md)
   // ----------------------------------------------------------
-  window.GOOGLE_CLIENT_ID = '';  // ej: "1234567890-abc...apps.googleusercontent.com"
+  window.GOOGLE_CLIENT_ID = '677561332180-cjtc8rv31p8dfggnemb1b9r00onl530n.apps.googleusercontent.com';
 })();
