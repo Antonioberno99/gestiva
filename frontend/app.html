@@ -397,11 +397,112 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith('/api/open-tables/') && method === 'PUT') { const id = path.split('/').pop(); const ot = openTables.find(x => x.table_id === id); if (body.items) ot.items = body.items; if (body.waiterId) ot.waiter_id = body.waiterId; demoWrite('gestiva_demo_open_tables', openTables); return ot; }
   if (path.startsWith('/api/open-tables/') && method === 'DELETE') { demoWrite('gestiva_demo_open_tables', openTables.filter(x => x.table_id !== path.split('/').pop())); return { ok:true }; }
   if (path.startsWith('/api/orders') && method === 'GET') return orders;
-  if (path === '/api/orders' && method === 'POST') { const ot = openTables.find(x => x.table_id === body.tableId); const table = tables.find(t => t.id === body.tableId); const waiter = waiters.find(w => w.id === ot?.waiter_id); const items = (ot?.items || []).map(i => { const p = products.find(pp => pp.id === i.productId); return { ...i, name:p?.name, price:p?.price, emoji:p?.emoji, subtotal:(p?.price || 0) * i.qty }; }); const order = { id:demoId('order'), table_id:body.tableId, table_num:table?.num, waiter_id:waiter?.id, waiter_name:waiter?.name, items, total:items.reduce((s,i)=>s+i.subtotal,0), payment_method:body.paymentMethod, note:body.note, opened_at:ot?.opened_at, closed_at:new Date().toISOString() }; orders.unshift(order); demoWrite('gestiva_demo_orders', orders); demoWrite('gestiva_demo_open_tables', openTables.filter(x => x.table_id !== body.tableId)); return order; }
+  if (path === '/api/orders' && method === 'POST') {
+    const ot = openTables.find(x => x.table_id === body.tableId);
+    const table = tables.find(t => t.id === body.tableId);
+    const waiter = waiters.find(w => w.id === ot?.waiter_id);
+    const items = (ot?.items || []).map(i => {
+      const p = products.find(pp => pp.id === i.productId);
+      const unitBase = (p?.price || 0);
+      const modSum = (i.modifiers || i.mods || []).reduce((s,m) => s + (parseFloat(m.price)||0), 0);
+      const unit = unitBase + modSum - (parseFloat(i.discount)||0);
+      return { ...i, productId: i.productId, name:p?.name, price:unitBase, modifiers: i.modifiers || i.mods || [], subtotal: unit * i.qty };
+    });
+    const subtotal = items.reduce((s,i)=>s+i.subtotal,0);
+    // Aplicar descuento global
+    let discount = parseFloat(body.discount) || 0;
+    if (body.discountType === 'percent') discount = subtotal * (discount/100);
+    const total = Math.max(0, subtotal - discount);
+
+    // Cobro: simple o con splits
+    let primaryMethod = body.paymentMethod || 'efectivo';
+    const splits = Array.isArray(body.splits) ? body.splits.filter(s => s && parseFloat(s.amount)>0) : [];
+    const needsCash = splits.length
+      ? splits.some(s => s.method !== 'cuenta_corriente')
+      : (primaryMethod !== 'cuenta_corriente');
+    if (needsCash && !cash) throw new Error('cash_not_open');
+
+    // Validar splits sumen al total
+    if (splits.length) {
+      const sum = splits.reduce((s,x) => s + parseFloat(x.amount), 0);
+      if (Math.abs(sum - total) > 1) throw new Error('splits_mismatch');
+      primaryMethod = splits.length === 1 ? splits[0].method : 'mixto';
+    }
+
+    // Cuenta corriente: sumar deuda al cliente
+    const amountToAccount = splits.length
+      ? splits.filter(s => s.method === 'cuenta_corriente').reduce((sum,s) => sum + parseFloat(s.amount||0), 0)
+      : (primaryMethod === 'cuenta_corriente' ? total : 0);
+    if (amountToAccount > 0) {
+      if (!body.customerId) throw new Error('missing_customer');
+      const customers2 = demoRead('gestiva_demo_customers', []);
+      const cust = customers2.find(c => c.id === body.customerId);
+      if (cust) {
+        cust.balance = (parseFloat(cust.balance)||0) + amountToAccount;
+        const ctxs = demoRead('gestiva_demo_cust_tx', []);
+        ctxs.unshift({ id:demoId('ctx'), customer_id:cust.id, type:'charge',
+          amount:amountToAccount, note:'Mesa ' + (table?.num||''), created_at:new Date().toISOString() });
+        demoWrite('gestiva_demo_customers', customers2);
+        demoWrite('gestiva_demo_cust_tx', ctxs);
+      }
+    }
+
+    // Registrar ingresos en caja por cada método NO cuenta corriente
+    if (cash) {
+      const cashRows = splits.length
+        ? splits.filter(s => s.method !== 'cuenta_corriente')
+        : (primaryMethod !== 'cuenta_corriente' ? [{ method: primaryMethod, amount: total }] : []);
+      cashRows.forEach(r => {
+        cash.transactions.push({ id:demoId('tx'), type:'in', amount: parseFloat(r.amount),
+          method: r.method, desc: 'Mesa ' + (table?.num || ''), at:new Date().toISOString() });
+      });
+      demoWrite('gestiva_demo_cash', cash);
+    }
+
+    const order = {
+      id:demoId('order'), table_id:body.tableId, table_num:table?.num,
+      waiter_id:waiter?.id, waiter_name:waiter?.name, items, subtotal, discount,
+      total, payment_method:primaryMethod, splits: splits.length? splits: null,
+      note:body.note, opened_at:ot?.opened_at, closed_at:new Date().toISOString()
+    };
+    orders.unshift(order);
+    demoWrite('gestiva_demo_orders', orders);
+    demoWrite('gestiva_demo_open_tables', openTables.filter(x => x.table_id !== body.tableId));
+    return order;
+  }
   if (path === '/api/cash') return { current:cash, history:demoRead('gestiva_demo_cash_history', []) };
-  if (path === '/api/cash/open') { const c = { opening_amount:body.openingAmount || 0, transactions:[], opened_at:new Date().toISOString() }; demoWrite('gestiva_demo_cash', c); return c; }
-  if (path === '/api/cash/movement') { cash.transactions.push({ id:demoId('tx'), ...body, at:new Date().toISOString() }); demoWrite('gestiva_demo_cash', cash); return { ok:true }; }
-  if (path === '/api/cash/close') { demoWrite('gestiva_demo_cash', null); return { ok:true, diff:0, expected:body.closingAmount || 0 }; }
+  if (path === '/api/cash/open') {
+    if (cash) throw new Error('cash_already_open');
+    const c = { opening_amount: parseFloat(body.openingAmount) || 0, transactions:[], opened_at:new Date().toISOString() };
+    demoWrite('gestiva_demo_cash', c);
+    return c;
+  }
+  if (path === '/api/cash/movement') {
+    if (!cash) throw new Error('cash_not_open');
+    if (!body.amount || parseFloat(body.amount)<=0) throw new Error('invalid_amount');
+    cash.transactions.push({ id:demoId('tx'), ...body, amount: parseFloat(body.amount), at:new Date().toISOString() });
+    demoWrite('gestiva_demo_cash', cash);
+    return { ok:true };
+  }
+  if (path === '/api/cash/close') {
+    if (!cash) throw new Error('cash_not_open');
+    const txs = cash.transactions || [];
+    const totalIn = txs.filter(t=>t.type==='in').reduce((s,t)=>s+parseFloat(t.amount),0);
+    const totalOut = txs.filter(t=>t.type==='out').reduce((s,t)=>s+parseFloat(t.amount),0);
+    const expected = parseFloat(cash.opening_amount) + totalIn - totalOut;
+    const closing = parseFloat(body.closingAmount)||0;
+    const diff = closing - expected;
+    // Guardar en historial demo
+    const history = demoRead('gestiva_demo_cash_history', []);
+    history.unshift({
+      opened_at:cash.opened_at, closed_at:new Date().toISOString(),
+      opening_amount:cash.opening_amount, closing_amount:closing,
+      total_in:totalIn, total_out:totalOut, diff
+    });
+    demoWrite('gestiva_demo_cash_history', history.slice(0,30));
+    demoWrite('gestiva_demo_cash', null);
+    return { ok:true, diff, expected };
+  }
   if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
   if (path === '/api/settings') { USER = { ...USER, restaurantName:body.restaurantName || USER.restaurantName, ownerName:body.ownerName || USER.ownerName, phone:body.phone || USER.phone, currency:body.currency || USER.currency }; localStorage.setItem('gestiva_user', JSON.stringify(USER)); return USER; }
   // Customers
@@ -2040,8 +2141,9 @@ route('reportes', async () => {
   const waiters = await API.waiters();
   const today_ = today();
   const last7days = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
-  const todayOrders = orders.filter(o => o.closed_at.slice(0,10) === today_);
-  const weekOrders = orders.filter(o => o.closed_at.slice(0,10) >= last7days);
+  const safeDate = (o) => (o.closed_at || o.created_at || '').slice(0,10);
+  const todayOrders = orders.filter(o => safeDate(o) === today_);
+  const weekOrders = orders.filter(o => safeDate(o) >= last7days);
   const totalDay = todayOrders.reduce((s,o)=>s+parseFloat(o.total),0);
   const totalWeek = weekOrders.reduce((s,o)=>s+parseFloat(o.total),0);
   const avgTicket = todayOrders.length ? totalDay/todayOrders.length : 0;
@@ -2063,7 +2165,10 @@ route('reportes', async () => {
   const totalCommissions = waiterStats.reduce((s,w) => s + w.commission, 0);
 
   const methods = {};
-  weekOrders.forEach(o => { methods[o.payment_method] = (methods[o.payment_method]||0) + parseFloat(o.total); });
+  weekOrders.forEach(o => {
+    const m = o.payment_method || 'desconocido';
+    methods[m] = (methods[m]||0) + parseFloat(o.total||0);
+  });
   const totalMethods = Object.values(methods).reduce((s,v)=>s+v,0) || 1;
 
   $('#view').innerHTML = `
@@ -2116,7 +2221,7 @@ async function exportOrdersCSV() {
     ['Fecha','Hora','Mesa','Mozo','Subtotal','Descuento','Total','Método','Notas']
   ];
   orders.forEach(o => {
-    const d = new Date(o.closed_at);
+    const d = new Date(o.closed_at || o.created_at || Date.now());
     rows.push([
       d.toLocaleDateString('es-AR'),
       d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
@@ -2125,7 +2230,7 @@ async function exportOrdersCSV() {
       o.subtotal ?? o.total,
       o.discount || 0,
       o.total,
-      o.payment_method,
+      o.payment_method || '',
       (o.note||'').replace(/[\n\r,;]/g, ' ')
     ]);
   });
@@ -2221,7 +2326,8 @@ async function saveSettings() {
 }
 
 async function changePlan(plan) {
-  if (!confirm('¿Querés cambiar al plan ' + plan.toUpperCase() + '? El nuevo precio se aplica en el próximo cobro.')) return;
+  const labels = { start:'Start · $18.900', pro:'Pro · $39.000', full:'Full · $63.000' };
+  if (!confirm('¿Cambiar al plan ' + labels[plan] + ' / mes? Se aplica en el próximo período.')) return;
   try {
     if (IS_DEMO) {
       USER.plan = plan;
