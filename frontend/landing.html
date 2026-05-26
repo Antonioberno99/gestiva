@@ -93,10 +93,11 @@
       border-bottom: 1px solid var(--border); padding: 15px 0; transition: box-shadow .3s;
     }
     nav.scrolled { box-shadow: 0 4px 20px rgba(0,0,0,.07); }
-    .nav-inner { display: flex; align-items: center; justify-content: space-between; }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: nowrap; min-width: 0; }
     .logo {
       font-size: 20px; font-weight: 900; color: var(--tx-dark);
       text-decoration: none; display: flex; align-items: center; gap: 9px;
+      flex-shrink: 0;
     }
     .logo-icon {
       width: 36px; height: 36px; background: #fff; border-radius: 10px;
@@ -105,10 +106,11 @@
     }
     .logo-icon img { width: 34px; height: 34px; object-fit: contain; display: block; }
     .logo { color: var(--or); }
-    .nav-links { display: flex; gap: 30px; list-style: none; }
-    .nav-links a { text-decoration: none; color: var(--tx-mid); font-size: 15px; font-weight: 500; transition: color .2s; }
+    .nav-links { display: flex; gap: 26px; list-style: none; margin: 0; padding: 0; flex-shrink: 1; min-width: 0; }
+    .nav-links a { text-decoration: none; color: var(--tx-mid); font-size: 15px; font-weight: 500; transition: color .2s; white-space: nowrap; }
     .nav-links a:hover { color: var(--or); }
-    .nav-ctas { display: flex; gap: 10px; }
+    .nav-ctas { display: flex; gap: 10px; flex-shrink: 0; }
+    .nav-ctas .btn { padding: 10px 18px; font-size: 14px; white-space: nowrap; }
     .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; }
     .hamburger span { display: block; width: 24px; height: 2px; background: var(--tx-dark); border-radius: 2px; }
     .m-menu { display: none; position: fixed; inset: 0; background: #fff; z-index: 200; padding: 24px; flex-direction: column; gap: 20px; }
@@ -469,6 +471,15 @@
       .tg6 { grid-template-columns: repeat(4,1fr); }
       .big-kpis { grid-template-columns: repeat(2,1fr); }
     }
+    @media (max-width: 1100px) {
+      .nav-links { gap: 18px; }
+      .nav-links a { font-size: 14px; }
+      .nav-ctas .btn { padding: 9px 14px; font-size: 13px; }
+    }
+    @media (max-width: 900px) {
+      .nav-links { display: none; }
+      .nav-ctas { gap: 8px; }
+    }
     @media (max-width: 768px) {
       .nav-links, .nav-ctas { display: none; }
       .hamburger { display: flex; }
@@ -549,7 +560,6 @@
       </ul>
       <div class="nav-ctas">
         <a href="login.html" class="btn btn-outline">Iniciar sesión</a>
-        <a href="#app-equipo" class="btn btn-outline">App equipo</a>
         <a href="signup.html" class="btn btn-primary">Probar sistema</a>
       </div>
       <div class="hamburger" onclick="toggleMenu()">
@@ -1183,7 +1193,7 @@
         <div class="plan-desc">Para food trucks, kioscos, take-away y emprendedores</div>
         <div class="plan-price"><span class="currency">$</span><span class="amount">18.900</span></div>
         <div class="plan-period">ARS por mes · Argentina</div>
-        <span class="plan-vs">$2.000 menos que Fudo Inicial</span>
+        <span class="plan-vs">Ideal para emprendedores</span>
         <ul class="plan-features">
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Caja y arqueos</li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Productos ilimitados</li>
@@ -1204,7 +1214,7 @@
         <div class="plan-desc">Para restaurantes y bares en operación normal</div>
         <div class="plan-price"><span class="currency">$</span><span class="amount">39.000</span></div>
         <div class="plan-period">ARS por mes · Argentina</div>
-        <span class="plan-vs">$2.000 menos que Fudo Avanzado + cocina incluida</span>
+        <span class="plan-vs">Más elegido · Cocina y app mozos incluidas</span>
         <ul class="plan-features">
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><strong>Todo lo de Start</strong></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Mesas ilimitadas + plano visual</li>
@@ -1225,7 +1235,7 @@
         <div class="plan-desc">Para restaurantes grandes, bares de noche, boliches y multi-local</div>
         <div class="plan-price"><span class="currency">$</span><span class="amount">63.000</span></div>
         <div class="plan-period">ARS por mes · Argentina</div>
-        <span class="plan-vs">$2.000 menos que Fudo Pro + delivery incluido</span>
+        <span class="plan-vs">Delivery y multi-caja incluidos</span>
         <ul class="plan-features">
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><strong>Todo lo de Pro</strong></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Delivery / Takeaway</li>
