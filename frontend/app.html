@@ -2188,9 +2188,21 @@ route('ajustes', async () => {
         ${USER.subscriptionEndsAt ? `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
           <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Próximo cobro</div>
           <div style="font-weight:700;margin-top:4px;">${new Date(USER.subscriptionEndsAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</div></div>` : ''}
-        <div style="padding:12px 0;">
-          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Plan</div>
-          <div style="font-weight:700;margin-top:4px;">$40.000 / mes</div></div>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
+          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Plan actual</div>
+          <div style="font-weight:700;margin-top:4px;font-size:18px;">${USER.planName || 'Pro'} · $${(USER.planPrice||39000).toLocaleString('es-AR')} / mes</div>
+          ${USER.planFeatures && USER.planFeatures.length ? `<div style="margin-top:10px;font-size:12px;color:var(--tx-mid);line-height:1.55;">${USER.planFeatures.slice(0,4).join(' · ')}…</div>` : ''}
+        </div>
+        <div style="padding:14px 0;">
+          <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Cambiar de plan</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${['start','pro','full'].map(p => {
+              const labels = { start:'Start · $18.900', pro:'Pro · $39.000', full:'Full · $63.000' };
+              const isCurrent = (USER.plan||'pro') === p;
+              return `<button class="btn btn-sm" style="flex:1;min-width:0;${isCurrent?'background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none;':'background:#fff;border:1px solid var(--border);color:var(--tx-dark);'}" onclick="changePlan('${p}')" ${isCurrent?'disabled':''}>${labels[p]}</button>`;
+            }).join('')}
+          </div>
+        </div>
         <a href="checkout.html" class="btn btn-secondary btn-block">Gestionar suscripción</a>
       </div>
     </div>`;
@@ -2206,6 +2218,35 @@ async function saveSettings() {
     USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
     refreshSubPill(); toast('Cambios guardados','success');
   } catch(e) { toast(e.message,'error'); }
+}
+
+async function changePlan(plan) {
+  if (!confirm('¿Querés cambiar al plan ' + plan.toUpperCase() + '? El nuevo precio se aplica en el próximo cobro.')) return;
+  try {
+    if (IS_DEMO) {
+      USER.plan = plan;
+      USER.planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+      USER.planPrice = { start:18900, pro:39000, full:63000 }[plan];
+      localStorage.setItem('gestiva_user', JSON.stringify(USER));
+      toast('Plan cambiado a ' + USER.planName + ' (demo)', 'success');
+      navigate();
+      return;
+    }
+    const r = await fetch(window.API_URL + '/billing/plan', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan })
+    });
+    if (!r.ok) throw new Error('No se pudo cambiar el plan');
+    const data = await r.json();
+    if (data.user) {
+      USER = data.user;
+      localStorage.setItem('gestiva_user', JSON.stringify(USER));
+    }
+    refreshSubPill();
+    toast('Plan cambiado a ' + (USER.planName || plan), 'success');
+    navigate();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 // ---------- INIT ----------

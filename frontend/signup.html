@@ -59,12 +59,12 @@
   </a>
 
   <div class="card">
-    <div class="price-pill">
+    <div class="price-pill" id="planPill">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
-      $40.000 / mes · Sin compromisos · Cancelá cuando quieras
+      <span id="planPillText">Plan Pro · $39.000 / mes · Sin compromisos</span>
     </div>
     <h1>Crear cuenta</h1>
-    <p class="sub">Empezá a usar Gestiva hoy. Tu data se guarda segura en la nube.</p>
+    <p class="sub">Empezá a usar Gestiva hoy. Tu data se guarda segura en la nube. <a href="landing.html#precios" style="color:var(--or-dk);">Ver otros planes</a></p>
 
     <div class="err" id="err"></div>
     <div id="gBtn"></div>
@@ -110,6 +110,21 @@
 const form = document.getElementById('signupForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('submitBtn');
+
+// Lee el plan del query string (?plan=start|pro|full) y lo refleja en la pill
+const PLAN_LABELS = {
+  start: { name: 'Start', price: '$18.900' },
+  pro:   { name: 'Pro',   price: '$39.000' },
+  full:  { name: 'Full',  price: '$63.000' }
+};
+const urlParams = new URLSearchParams(window.location.search);
+let selectedPlan = (urlParams.get('plan') || 'pro').toLowerCase();
+if (!PLAN_LABELS[selectedPlan]) selectedPlan = 'pro';
+(function updatePlanPill(){
+  const info = PLAN_LABELS[selectedPlan];
+  const el = document.getElementById('planPillText');
+  if (el) el.textContent = `Plan ${info.name} · ${info.price} / mes · Sin compromisos`;
+})();
 
 // Google Sign-In: solo renderiza si hay GOOGLE_CLIENT_ID configurado
 function initGoogleSignIn() {
@@ -170,6 +185,7 @@ form.addEventListener('submit', async (e) => {
     restaurantName: document.getElementById('restaurantName').value.trim(),
     ownerName: document.getElementById('ownerName').value.trim(),
     phone: document.getElementById('phone').value.trim(),
+    plan: selectedPlan,
   };
 
   try {

@@ -34,6 +34,9 @@ ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS google_picture TEXT;
 ALTER TABLE IF EXISTS tenants ALTER COLUMN password_hash DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_tenants_google ON tenants(google_id);
 
+-- Plan de suscripción: 'start' (18.900), 'pro' (39.000), 'full' (63.000) ARS/mes
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'pro';
+
 -- PRODUCTS
 CREATE TABLE IF NOT EXISTS products (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

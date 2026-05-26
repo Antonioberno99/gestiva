@@ -399,6 +399,35 @@
     .team-metric span { display:block; color:var(--tx-mid); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
     .team-metric b { display:block; font-size:20px; margin-top:4px; }
 
+    /* ── PRICING / PLANS ── */
+    .s-pricing { padding: 96px 0; background: linear-gradient(180deg, #fff 0%, #fff7ed 100%); }
+    .s-pricing .sec-head { text-align: center; margin-bottom: 56px; }
+    .s-pricing .sec-title { font-size: 42px; }
+    .s-pricing .sec-sub { font-size: 17px; color: var(--tx-mid); max-width: 620px; margin: 14px auto 0; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+    .pricing-grid > * { min-width: 0; }
+    .plan-card { background: #fff; border: 1px solid var(--border); border-radius: 22px; padding: 36px 28px; position: relative; display: flex; flex-direction: column; transition: transform .25s, box-shadow .25s, border-color .25s; }
+    .plan-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(15,23,42,.08); border-color: var(--or); }
+    .plan-card.featured { border: 2px solid var(--or); box-shadow: 0 24px 48px rgba(249,115,22,.18); transform: translateY(-8px); }
+    .plan-badge { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, var(--or), var(--or-dk)); color: #fff; font-size: 12px; font-weight: 800; padding: 6px 16px; border-radius: 999px; letter-spacing: .5px; text-transform: uppercase; box-shadow: 0 6px 14px rgba(249,115,22,.35); }
+    .plan-name { font-family: var(--ff-display); font-size: 22px; font-weight: 800; color: var(--tx-dark); margin-bottom: 6px; }
+    .plan-desc { color: var(--tx-mid); font-size: 14px; min-height: 42px; margin-bottom: 18px; line-height: 1.45; }
+    .plan-price { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+    .plan-price .currency { font-size: 22px; font-weight: 700; color: var(--tx-dark); }
+    .plan-price .amount { font-family: var(--ff-display); font-size: 48px; font-weight: 800; color: var(--or-dk); letter-spacing: -.02em; line-height: 1; }
+    .plan-period { color: var(--tx-mid); font-size: 13px; margin-bottom: 18px; }
+    .plan-vs { background: var(--or-lt); color: var(--or-dk); font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 999px; display: inline-block; margin-bottom: 22px; }
+    .plan-features { list-style: none; margin: 0 0 28px; padding: 0; flex-grow: 1; }
+    .plan-features li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; font-size: 14px; color: var(--tx-dark); }
+    .plan-features li svg { color: var(--or); flex-shrink: 0; margin-top: 2px; }
+    .plan-cta { display: inline-flex; align-items: center; justify-content: center; padding: 13px 18px; border-radius: 11px; font-weight: 700; font-size: 14px; text-decoration: none; transition: all .18s; }
+    .plan-cta.outline { background: #fff; color: var(--tx-dark); border: 1.5px solid var(--border); }
+    .plan-cta.outline:hover { border-color: var(--or); color: var(--or-dk); }
+    .plan-cta.primary { background: linear-gradient(135deg, var(--or), var(--or-dk)); color: #fff; box-shadow: 0 8px 18px rgba(249,115,22,.32); }
+    .plan-cta.primary:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(249,115,22,.42); }
+    .plan-foot { text-align: center; margin-top: 40px; color: var(--tx-mid); font-size: 14px; }
+    .plan-foot strong { color: var(--tx-dark); }
+
     .s-cta { padding: 96px 0; background: #fff; }
     .cta-box { background: linear-gradient(140deg, #0f172a 0%, #1e293b 100%); border-radius: var(--r-xl); padding: 84px 64px; text-align: center; position: relative; overflow: hidden; }
     .cta-box::before { content: ''; position: absolute; top: -120px; left: 50%; transform: translateX(-50%); width: 420px; height: 420px; background: radial-gradient(circle, rgba(249,115,22,.28) 0%, transparent 70%); pointer-events: none; }
@@ -444,6 +473,9 @@
       .nav-links, .nav-ctas { display: none; }
       .hamburger { display: flex; }
       .hero-grid, .sol-grid, .ben-grid-outer, .team-app-layout { grid-template-columns: minmax(0,1fr); gap: 48px; }
+      .pricing-grid { grid-template-columns: minmax(0,1fr); gap: 28px; }
+      .plan-card.featured { transform: none; }
+      .s-pricing .sec-title { font-size: 32px; }
       .browser { transform: none; }
       .sol-visual { padding: 0; }
       .fc1, .fc2 { display: none; }
@@ -493,6 +525,7 @@
     <li><a href="#app-equipo" onclick="toggleMenu()">App equipo</a></li>
     <li><a href="#negocios"  onclick="toggleMenu()">Para tu negocio</a></li>
     <li><a href="#beneficios" onclick="toggleMenu()">Beneficios</a></li>
+    <li><a href="#precios" onclick="toggleMenu()">Precios</a></li>
   </ul>
   <a href="signup.html" class="btn btn-primary" onclick="toggleMenu()">Entrar al sistema →</a>
 </div>
@@ -511,8 +544,8 @@
         <li><a href="#problema">El problema</a></li>
         <li><a href="#funciones">Funciones</a></li>
         <li><a href="#app-equipo">App equipo</a></li>
-        <li><a href="#negocios">Para tu negocio</a></li>
         <li><a href="#beneficios">Beneficios</a></li>
+        <li><a href="#precios">Precios</a></li>
       </ul>
       <div class="nav-ctas">
         <a href="login.html" class="btn btn-outline">Iniciar sesión</a>
@@ -1135,6 +1168,83 @@
   </div>
 </section>
 
+<!-- PRICING -->
+<section class="s-pricing" id="precios">
+  <div class="container">
+    <div class="sec-head fade">
+      <h2 class="sec-title">Elegí el plan que necesita tu negocio</h2>
+      <p class="sec-sub">Tres planes pensados para cada etapa. Sin permanencia, cancelás cuando quieras. Todos incluyen actualizaciones gratis.</p>
+    </div>
+    <div class="pricing-grid">
+
+      <!-- START -->
+      <div class="plan-card fade">
+        <div class="plan-name">Start</div>
+        <div class="plan-desc">Para food trucks, kioscos, take-away y emprendedores</div>
+        <div class="plan-price"><span class="currency">$</span><span class="amount">18.900</span></div>
+        <div class="plan-period">ARS por mes · Argentina</div>
+        <span class="plan-vs">$2.000 menos que Fudo Inicial</span>
+        <ul class="plan-features">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Caja y arqueos</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Productos ilimitados</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Comandas y descuentos</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Menú QR público</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Hasta 5 mesas</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>1 usuario admin</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Reportes básicos</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Soporte por email</li>
+        </ul>
+        <a href="signup.html?plan=start" class="plan-cta outline">Empezar con Start</a>
+      </div>
+
+      <!-- PRO (recomendado) -->
+      <div class="plan-card featured fade">
+        <span class="plan-badge">Más elegido</span>
+        <div class="plan-name">Pro</div>
+        <div class="plan-desc">Para restaurantes y bares en operación normal</div>
+        <div class="plan-price"><span class="currency">$</span><span class="amount">39.000</span></div>
+        <div class="plan-period">ARS por mes · Argentina</div>
+        <span class="plan-vs">$2.000 menos que Fudo Avanzado + cocina incluida</span>
+        <ul class="plan-features">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><strong>Todo lo de Start</strong></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Mesas ilimitadas + plano visual</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>KDS (Pantalla cocina) incluido</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>App PWA para mozos</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Modificadores y stock</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Clientes + cuenta corriente</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Reportes completos + Excel</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Hasta 10 mozos/cajeros</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Soporte por WhatsApp</li>
+        </ul>
+        <a href="signup.html?plan=pro" class="plan-cta primary">Empezar con Pro →</a>
+      </div>
+
+      <!-- FULL -->
+      <div class="plan-card fade">
+        <div class="plan-name">Full</div>
+        <div class="plan-desc">Para restaurantes grandes, bares de noche, boliches y multi-local</div>
+        <div class="plan-price"><span class="currency">$</span><span class="amount">63.000</span></div>
+        <div class="plan-period">ARS por mes · Argentina</div>
+        <span class="plan-vs">$2.000 menos que Fudo Pro + delivery incluido</span>
+        <ul class="plan-features">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><strong>Todo lo de Pro</strong></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Delivery / Takeaway</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Comisiones por mozo</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Múltiples cajas / turnos</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Multi-sucursal (próximamente)</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>AFIP facturación (próx.)</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Usuarios ilimitados</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Onboarding personalizado</li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Soporte prioritario</li>
+        </ul>
+        <a href="signup.html?plan=full" class="plan-cta outline">Empezar con Full</a>
+      </div>
+
+    </div>
+    <p class="plan-foot">Todos los planes incluyen <strong>actualizaciones gratis</strong>, datos seguros en la nube y acceso desde cualquier dispositivo. Sin permanencia · Cancelás cuando quieras.</p>
+  </div>
+</section>
+
 <!-- CTA -->
 <section class="s-cta" id="demo">
   <div class="container">
@@ -1166,7 +1276,7 @@
         <div class="foot-col-title">Producto</div>
         <ul class="foot-links">
           <li><a href="#">Funciones</a></li>
-          <li><a href="#">Precios</a></li>
+          <li><a href="#precios">Precios</a></li>
           <li><a href="#">Demo</a></li>
           <li><a href="#">Novedades</a></li>
         </ul>

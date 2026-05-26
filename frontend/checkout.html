@@ -41,6 +41,11 @@
   .logout{text-align:center;margin-top:18px;font-size:12px;color:var(--tx-lt)}
   .logout a{color:var(--tx-mid);text-decoration:underline;cursor:pointer}
   .mp-logo{background:#00b1ea;color:white;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:0.5px}
+  .plan-switch{margin-top:14px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+  .plan-switch button{background:#fff;border:1px solid var(--border);border-radius:999px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--tx-mid);font-family:inherit;transition:all .15s}
+  .plan-switch button:hover{border-color:var(--or);color:var(--or-dk)}
+  .plan-switch button.active{background:linear-gradient(135deg,var(--or),var(--or-dk));border-color:transparent;color:#fff;box-shadow:0 4px 10px rgba(249,115,22,.3)}
+  .plan-label{font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:8px;text-align:center}
 </style>
 </head>
 <body>
@@ -60,8 +65,15 @@
 <script src="gestiva-config.js"></script>
 <script>
 const token = localStorage.getItem('gestiva_token');
-const user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
+let user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
 if (!token || !user) location.href = 'login.html';
+
+const PLANS_INFO = {
+  start: { name: 'Start', price: 18900, label: '$18.900' },
+  pro:   { name: 'Pro',   price: 39000, label: '$39.000' },
+  full:  { name: 'Full',  price: 63000, label: '$63.000' }
+};
+let currentPlan = user?.plan && PLANS_INFO[user.plan] ? user.plan : 'pro';
 
 document.getElementById('logout').onclick = () => {
   localStorage.removeItem('gestiva_token');
@@ -115,25 +127,71 @@ function renderCheckout(status) {
   }
 
   // pending
+  const planInfo = PLANS_INFO[currentPlan];
   card.innerHTML = `
     <h1>Activá tu suscripción</h1>
     <p class="sub">Hola <strong>${user.restaurantName}</strong>, falta solo un paso para empezar.</p>
 
-    <div class="price-block">
-      <div class="price">$40.000</div>
-      <div class="price-period">por mes · Argentina</div>
+    <div class="plan-label">Plan elegido</div>
+    <div class="plan-switch">
+      ${['start','pro','full'].map(p => `
+        <button data-plan="${p}" class="${p===currentPlan?'active':''}">${PLANS_INFO[p].name} · ${PLANS_INFO[p].label}</button>
+      `).join('')}
     </div>
 
-    <div class="feat">
-      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Mesas, comandas, caja y reportes ilimitados</div>
-      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Datos en la nube · acceso desde cualquier dispositivo</div>
-      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Cancelá cuando quieras · sin permanencia</div>
-      <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> Soporte por WhatsApp</div>
+    <div class="price-block">
+      <div class="price">${planInfo.label}</div>
+      <div class="price-period">Plan ${planInfo.name} · por mes · Argentina</div>
     </div>
+
+    <div class="feat" id="planFeatures"></div>
 
     ${renderPayBlock()}
   `;
+  renderPlanFeatures();
+  bindPlanSwitch();
   bindPayBtn();
+}
+
+function renderPlanFeatures() {
+  const features = {
+    start: ['Caja, comandas y descuentos', 'Hasta 5 mesas · 1 admin', 'Productos ilimitados + menú QR', 'Soporte por email'],
+    pro:   ['Mesas ilimitadas + plano visual', 'KDS cocina + app mozos PWA', 'Stock, clientes y cuenta corriente', 'Soporte por WhatsApp'],
+    full:  ['Todo lo de Pro', 'Delivery + comisiones por mozo', 'Múltiples cajas y turnos', 'Soporte prioritario']
+  };
+  const el = document.getElementById('planFeatures');
+  if (!el) return;
+  el.innerHTML = features[currentPlan].map(f => `
+    <div class="feat-item"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/></svg> ${f}</div>
+  `).join('');
+}
+
+function bindPlanSwitch() {
+  document.querySelectorAll('.plan-switch button[data-plan]').forEach(btn => {
+    btn.onclick = async () => {
+      const newPlan = btn.dataset.plan;
+      if (newPlan === currentPlan) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch(window.API_URL + '/billing/plan', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan: newPlan })
+        });
+        if (!r.ok) throw new Error('No se pudo cambiar de plan');
+        const data = await r.json();
+        if (data.user) {
+          user = data.user;
+          localStorage.setItem('gestiva_user', JSON.stringify(user));
+        }
+        currentPlan = newPlan;
+        loadStatus().then(renderCheckout);
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 function renderPayBlock() {

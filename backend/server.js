@@ -25,8 +25,74 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod-gp';
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
-const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '40000');
+const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '39000'); // fallback = precio PRO
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
+
+// ---------- Planes de suscripción ----------
+// Tres planes: start (más barato), pro (recomendado), full (premium)
+// Diseñados para ser $2.000 más baratos que los equivalentes de Fudo (Inicial $20.900 / Avanzado $41.000 / Pro $65.000)
+const PLANS = {
+  start: {
+    id: 'start',
+    name: 'Start',
+    price: 18900,
+    description: 'Para food trucks, kioscos, take-away y emprendedores',
+    features: [
+      'Caja y arqueos',
+      'Productos ilimitados',
+      'Comandas',
+      'Descuentos',
+      'Menú QR público',
+      'Hasta 5 mesas',
+      '1 usuario admin',
+      'Reportes básicos (día/semana)',
+      'Soporte por email'
+    ],
+    limits: { tables: 5, waiters: 1, kds: false, delivery: false }
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    price: 39000,
+    description: 'Para restaurantes y bares en operación normal',
+    recommended: true,
+    features: [
+      'Todo lo de Start',
+      'Mesas ilimitadas + plano visual',
+      'KDS (Pantalla cocina) incluido',
+      'App PWA para mozos',
+      'Modificadores',
+      'Stock y movimientos',
+      'Clientes y cuenta corriente',
+      'Reportes completos + Excel',
+      'Hasta 10 mozos/cajeros',
+      'Soporte por WhatsApp'
+    ],
+    limits: { tables: -1, waiters: 10, kds: true, delivery: false }
+  },
+  full: {
+    id: 'full',
+    name: 'Full',
+    price: 63000,
+    description: 'Para restaurantes grandes, bares de noche, boliches y multi-local',
+    features: [
+      'Todo lo de Pro',
+      'Delivery / Takeaway',
+      'Comisiones por mozo',
+      'Múltiples cajas / turnos',
+      'Multi-sucursal (próximamente)',
+      'AFIP facturación (próximamente)',
+      'Usuarios ilimitados',
+      'Onboarding personalizado',
+      'Soporte prioritario WhatsApp'
+    ],
+    limits: { tables: -1, waiters: -1, kds: true, delivery: true }
+  }
+};
+
+function planFor(planId) {
+  return PLANS[planId] || PLANS.pro;
+}
 // Si está vacío, el endpoint /auth/google rechaza pedidos
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 // SKIP_BILLING=1 desactiva todo cobro: registros quedan 'active' por 1 año.
@@ -78,6 +144,8 @@ function signWaiterToken(tenant, waiter) {
 }
 
 function publicTenant(t) {
+  const planId = t.plan || 'pro';
+  const plan = planFor(planId);
   return {
     id: t.id, email: t.email,
     restaurantName: t.restaurant_name,
@@ -90,7 +158,12 @@ function publicTenant(t) {
     subscriptionEndsAt: t.subscription_ends_at,
     graceEndsAt: t.grace_ends_at,
     mpInitPoint: t.mp_init_point,
-    daysLeft: computeDaysLeft(t)
+    daysLeft: computeDaysLeft(t),
+    plan: planId,
+    planName: plan.name,
+    planPrice: plan.price,
+    planFeatures: plan.features,
+    planLimits: plan.limits
   };
 }
 
@@ -284,7 +357,7 @@ async function requireWaiterAuth(req, res, next) {
 
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
-    const { email, password, restaurantName, ownerName, phone } = req.body || {};
+    const { email, password, restaurantName, ownerName, phone, plan } = req.body || {};
     if (!email || !password || !restaurantName)
       return res.status(400).json({ error: 'missing_fields' });
     if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
@@ -293,6 +366,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     if (exists.rows[0]) return res.status(409).json({ error: 'email_taken' });
 
     const hash = await bcrypt.hash(password, 10);
+    const chosenPlan = (plan && PLANS[plan]) ? plan : 'pro';
 
     // Si SKIP_BILLING está activo, dejamos al tenant 'active' por 1 año desde el registro.
     let initialStatus = 'pending';
@@ -306,10 +380,10 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     const ins = await q(
       `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone,
-                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null,
-       initialStatus, startedAt, endsAt, graceEndsAt]
+       initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan]
     );
     const t = ins.rows[0];
 
@@ -549,6 +623,8 @@ app.post('/billing/webhook', async (req, res) => {
 });
 
 app.get('/billing/status', requireAuth, async (req, res) => {
+  const planId = req.tenant.plan || 'pro';
+  const plan = planFor(planId);
   res.json({
     status: req.tenant.subscription_status,
     endsAt: req.tenant.subscription_ends_at,
@@ -556,8 +632,35 @@ app.get('/billing/status', requireAuth, async (req, res) => {
     daysLeft: computeDaysLeft(req.tenant),
     initPoint: req.tenant.mp_init_point,
     lastPaymentAt: req.tenant.last_payment_at,
-    lastPaymentAmount: req.tenant.last_payment_amount
+    lastPaymentAmount: req.tenant.last_payment_amount,
+    plan: planId,
+    planName: plan.name,
+    planPrice: plan.price,
+    planFeatures: plan.features
   });
+});
+
+// Endpoint PÚBLICO: lista los planes disponibles (para mostrar en landing/checkout)
+app.get('/billing/plans', (req, res) => {
+  res.json({
+    plans: Object.values(PLANS).map(p => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      description: p.description,
+      recommended: !!p.recommended,
+      features: p.features
+    }))
+  });
+});
+
+// Cambiar de plan (upgrade/downgrade). En SKIP_BILLING aplica de inmediato.
+app.post('/billing/plan', requireAuth, async (req, res) => {
+  const { plan } = req.body || {};
+  if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'invalid_plan' });
+  await q('UPDATE tenants SET plan=$1 WHERE id=$2', [plan, req.tenant.id]);
+  const fresh = await q('SELECT * FROM tenants WHERE id=$1', [req.tenant.id]);
+  res.json({ ok: true, user: publicTenant(fresh.rows[0]) });
 });
 
 // DEV ONLY: simular pago exitoso (solo si MP_TEST_MODE=1)
