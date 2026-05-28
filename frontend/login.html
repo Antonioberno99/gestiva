@@ -130,7 +130,7 @@ async function handleGoogleSignIn(response) {
     if (data.isNew) {
       // Usuario nuevo: lo mandamos a Ajustes para que ponga el nombre del restaurante
       location.href = 'app.html#/ajustes';
-    } else if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+    } else if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
       location.href = 'checkout.html';
@@ -172,8 +172,8 @@ form.addEventListener('submit', async (e) => {
     if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : (data.error || 'Error'));
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    // si suscripción está activa o en gracia → app; si no → checkout
-    if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+    // si suscripción está activa, en gracia o en prueba → app; si no → checkout
+    if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
       location.href = 'checkout.html';

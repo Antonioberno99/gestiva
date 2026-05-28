@@ -643,9 +643,10 @@ function refreshSubPill() {
   const pill = $('#subPill');
   const status = USER.subscriptionStatus;
   const days = USER.daysLeft;
-  const cls = status === 'active' ? 'active' : (status === 'grace' ? 'grace' : 'other');
+  const cls = status === 'active' ? 'active' : (status === 'trial' ? 'active' : (status === 'grace' ? 'grace' : 'other'));
   pill.className = 'sub-pill ' + cls;
   let label = status === 'active' ? `Activa · ${days || '–'}d`
+            : status === 'trial' ? `Prueba gratis · ${days || 0}d`
             : status === 'grace' ? `Período de gracia`
             : status === 'expired' ? 'Vencida'
             : status === 'cancelled' ? 'Cancelada' : 'Pendiente';
@@ -656,7 +657,13 @@ function refreshSubPill() {
 }
 function refreshGraceBanner() {
   const el = $('#graceBanner');
-  if (USER.subscriptionStatus === 'grace') {
+  if (USER.subscriptionStatus === 'trial') {
+    const days = USER.daysLeft != null ? USER.daysLeft : Math.max(0, Math.ceil((new Date(USER.trialEndsAt || USER.subscriptionEndsAt) - new Date()) / 86400000));
+    el.innerHTML = `<div class="grace-banner" style="background:linear-gradient(135deg,#d1fae5,#fff);border-color:#6ee7b7;color:#047857;">
+      <div><b>Prueba gratis activa</b> · Tenés acceso completo. Te quedan <b>${days} día${days===1?'':'s'}</b>. Tu plan elegido: <b>${USER.planName || 'Pro'}</b> ($${(USER.planPrice||39000).toLocaleString('es-AR')}/mes).</div>
+      <a href="checkout.html">Activar suscripción</a>
+    </div>`;
+  } else if (USER.subscriptionStatus === 'grace') {
     const days = Math.max(0, Math.ceil((new Date(USER.graceEndsAt) - new Date()) / 86400000));
     el.innerHTML = `<div class="grace-banner">
       <div><b>Tu suscripción venció.</b> Te quedan <b>${days} día${days===1?'':'s'}</b> para renovar antes que se bloquee la cuenta.</div>
@@ -2289,7 +2296,7 @@ route('ajustes', async () => {
         <h3 style="margin-bottom:16px;">Suscripción</h3>
         <div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
           <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Estado</div>
-          <div style="font-weight:700;margin-top:4px;text-transform:capitalize;">${USER.subscriptionStatus}</div></div>
+          <div style="font-weight:700;margin-top:4px;">${({trial:'Prueba gratis',active:'Activa',grace:'Período de gracia',expired:'Vencida',cancelled:'Cancelada',pending:'Pendiente'})[USER.subscriptionStatus] || USER.subscriptionStatus}${USER.subscriptionStatus==='trial' && USER.daysLeft!=null ? ' · '+USER.daysLeft+' días' : ''}</div></div>
         ${USER.subscriptionEndsAt ? `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
           <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Próximo cobro</div>
           <div style="font-weight:700;margin-top:4px;">${new Date(USER.subscriptionEndsAt).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'})}</div></div>` : ''}

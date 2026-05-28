@@ -63,8 +63,8 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
       <span id="planPillText">Plan Pro · $39.000 / mes · Sin compromisos</span>
     </div>
-    <h1>Crear cuenta</h1>
-    <p class="sub">Empezá a usar Gestiva hoy. Tu data se guarda segura en la nube. <a href="landing.html#precios" style="color:var(--or-dk);">Ver otros planes</a></p>
+    <h1>Empezá tu prueba gratis</h1>
+    <p class="sub">Acceso completo sin tarjeta. Elegí tu plan y probá Gestiva con todas las funciones. <a href="landing.html#precios" style="color:var(--or-dk);">Ver planes</a></p>
 
     <div class="err" id="err"></div>
     <div id="gBtn"></div>
@@ -123,7 +123,7 @@ if (!PLAN_LABELS[selectedPlan]) selectedPlan = 'pro';
 (function updatePlanPill(){
   const info = PLAN_LABELS[selectedPlan];
   const el = document.getElementById('planPillText');
-  if (el) el.textContent = `Plan ${info.name} · ${info.price} / mes · Sin compromisos`;
+  if (el) el.textContent = `Prueba gratis · luego Plan ${info.name} ${info.price}/mes · Sin compromisos`;
 })();
 
 // Google Sign-In: solo renderiza si hay GOOGLE_CLIENT_ID configurado
@@ -154,7 +154,7 @@ async function handleGoogleSignIn(response) {
     if (data.isNew) {
       // Usuario nuevo via Google: lo mandamos a ajustes para que defina el nombre del restaurante
       location.href = 'app.html#/ajustes';
-    } else if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+    } else if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
       location.href = 'checkout.html';
@@ -198,8 +198,8 @@ form.addEventListener('submit', async (e) => {
 
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    // Si ya viene activo (SKIP_BILLING en backend) → entrar directo al panel
-    if (data.user.subscriptionStatus === 'active' || data.user.subscriptionStatus === 'grace') {
+    // Activo, en gracia o en prueba gratis → directo al panel
+    if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
       location.href = 'checkout.html';

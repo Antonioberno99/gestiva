@@ -126,11 +126,14 @@ function renderCheckout(status) {
     return;
   }
 
-  // pending
+  // trial o pending
   const planInfo = PLANS_INFO[currentPlan];
+  const isTrial = s === 'trial';
+  const trialDays = isTrial ? Math.max(0, Math.ceil((new Date(status.endsAt) - new Date()) / 86400000)) : 0;
   card.innerHTML = `
-    <h1>Activá tu suscripción</h1>
-    <p class="sub">Hola <strong>${user.restaurantName}</strong>, falta solo un paso para empezar.</p>
+    ${isTrial ? `<div class="alert success">🎉 Estás en <strong>prueba gratis</strong> con acceso completo. Te quedan <strong>${trialDays} día${trialDays===1?'':'s'}</strong>.</div>` : ''}
+    <h1>${isTrial ? 'Tu plan' : 'Activá tu suscripción'}</h1>
+    <p class="sub">Hola <strong>${user.restaurantName}</strong>, ${isTrial ? 'cuando termine la prueba se activa el plan que elijas. Podés suscribirte ahora y no perdés los días de prueba.' : 'falta solo un paso para empezar.'}</p>
 
     <div class="plan-label">Plan elegido</div>
     <div class="plan-switch">
@@ -146,6 +149,7 @@ function renderCheckout(status) {
 
     <div class="feat" id="planFeatures"></div>
 
+    ${isTrial ? '<a href="app.html" class="btn btn-test" style="margin-bottom:10px;">Seguir usando la prueba →</a>' : ''}
     ${renderPayBlock()}
   `;
   renderPlanFeatures();

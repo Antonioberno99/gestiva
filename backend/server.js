@@ -27,6 +27,8 @@ const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '39000'); // fallback = precio PRO
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
+// Prueba gratis: usuarios nuevos arrancan con acceso completo (features Full) por TRIAL_DAYS días
+const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '7', 10);
 
 // ---------- Planes de suscripción ----------
 // Tres planes: start (más barato), pro (recomendado), full (premium)
@@ -146,6 +148,9 @@ function signWaiterToken(tenant, waiter) {
 function publicTenant(t) {
   const planId = t.plan || 'pro';
   const plan = planFor(planId);
+  const isTrial = t.subscription_status === 'trial';
+  // Durante la prueba, el acceso es completo (límites del plan Full)
+  const effectiveLimits = isTrial ? planFor('full').limits : plan.limits;
   return {
     id: t.id, email: t.email,
     restaurantName: t.restaurant_name,
@@ -159,11 +164,13 @@ function publicTenant(t) {
     graceEndsAt: t.grace_ends_at,
     mpInitPoint: t.mp_init_point,
     daysLeft: computeDaysLeft(t),
-    plan: planId,
+    isTrial,
+    trialEndsAt: isTrial ? t.subscription_ends_at : null,
+    plan: planId,                 // plan elegido (lo que pagará al terminar la prueba)
     planName: plan.name,
     planPrice: plan.price,
     planFeatures: plan.features,
-    planLimits: plan.limits
+    planLimits: effectiveLimits
   };
 }
 
@@ -290,6 +297,10 @@ async function refreshSubscriptionStatus(tenantId) {
   const now = new Date();
   let newStatus = t.subscription_status;
 
+  // Prueba gratis vencida → debe pagar (expired)
+  if (t.subscription_status === 'trial' && t.subscription_ends_at && new Date(t.subscription_ends_at) < now) {
+    newStatus = 'expired';
+  }
   if (t.subscription_status === 'active' && t.subscription_ends_at && new Date(t.subscription_ends_at) < now) {
     newStatus = 'grace';
   }
@@ -323,7 +334,7 @@ async function requireAuth(req, res, next) {
 function requireSubscription(req, res, next) {
   if (SKIP_BILLING) return next();
   const s = req.tenant.subscription_status;
-  if (s === 'active' || s === 'grace') return next();
+  if (s === 'active' || s === 'grace' || s === 'trial') return next();
   return res.status(402).json({ error: 'subscription_required', status: s, initPoint: req.tenant.mp_init_point });
 }
 
@@ -338,7 +349,7 @@ async function requireWaiterAuth(req, res, next) {
     }
     const t = await refreshSubscriptionStatus(decoded.tenantId);
     if (!t) return res.status(401).json({ error: 'tenant_not_found' });
-    if (!SKIP_BILLING && !['active', 'grace'].includes(t.subscription_status)) {
+    if (!SKIP_BILLING && !['active', 'grace', 'trial'].includes(t.subscription_status)) {
       return res.status(402).json({ error: 'subscription_required' });
     }
     const waiter = (await q('SELECT * FROM waiters WHERE id=$1 AND tenant_id=$2', [decoded.waiterId, t.id])).rows[0];
@@ -368,13 +379,17 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const chosenPlan = (plan && PLANS[plan]) ? plan : 'pro';
 
-    // Si SKIP_BILLING está activo, dejamos al tenant 'active' por 1 año desde el registro.
-    let initialStatus = 'pending';
-    let endsAt = null, graceEndsAt = null, startedAt = null;
+    // Modo de alta:
+    // - SKIP_BILLING (dev): activo 1 año
+    // - Producción: prueba gratis con acceso completo por TRIAL_DAYS días, luego paga el plan elegido
+    let initialStatus, endsAt, graceEndsAt, startedAt = new Date();
     if (SKIP_BILLING) {
       initialStatus = 'active';
-      startedAt = new Date();
       endsAt = new Date(startedAt.getTime() + 365 * 86400000);
+      graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+    } else {
+      initialStatus = 'trial';
+      endsAt = new Date(startedAt.getTime() + TRIAL_DAYS * 86400000);   // fin de prueba
       graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
     }
 
