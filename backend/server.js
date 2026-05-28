@@ -701,6 +701,26 @@ app.get('/billing/mp-check', requireAuth, async (req, res) => {
   } catch (e) {
     out.preapprovalRaw = { fetchError: e.message };
   }
+  // Probar tambien Suscripciones CON plan (/preapproval_plan) — politicas distintas
+  try {
+    const planPayload = {
+      reason: 'Gestiva Plan Test',
+      auto_recurring: {
+        frequency: 1, frequency_type: 'months',
+        transaction_amount: 39000, currency_id: 'ARS'
+      },
+      back_url: `${APP_URL}/billing-return.html`
+    };
+    const pp = await fetch('https://api.mercadopago.com/preapproval_plan', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
+      body: JSON.stringify(planPayload)
+    });
+    const ppData = await pp.json();
+    out.preapprovalPlanRaw = { httpStatus: pp.status, id: ppData.id, initPoint: ppData.init_point, body: (pp.status>=400 ? ppData : undefined) };
+  } catch (e) {
+    out.preapprovalPlanRaw = { fetchError: e.message };
+  }
   res.json(out);
 });
 
