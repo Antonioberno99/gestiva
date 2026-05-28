@@ -660,77 +660,20 @@ app.get('/billing/status', requireAuth, async (req, res) => {
   });
 });
 
-// Diagnóstico de credenciales MercadoPago (NO expone el token completo)
+// Diagnóstico liviano de MercadoPago (NO expone el token ni crea objetos)
 app.get('/billing/mp-check', requireAuth, async (req, res) => {
   const tok = MP_TOKEN || '';
   const out = {
     tokenConfigured: !!tok,
-    tokenPrefix: tok ? tok.slice(0, 8) : null,        // 'APP_USR-' (prod) o 'TEST-' (test)
-    isTestToken: tok.startsWith('TEST-'),
     isProdToken: tok.startsWith('APP_USR-'),
+    isTestToken: tok.startsWith('TEST-'),
     skipBilling: SKIP_BILLING,
-    appUrl: APP_URL,
-    backendUrl: BACKEND_URL
+    appUrl: APP_URL
   };
-  // Validar el token llamando a /users/me de MercadoPago
   try {
-    const r = await fetch('https://api.mercadopago.com/users/me', {
-      headers: { Authorization: 'Bearer ' + tok }
-    });
-    const data = await r.json();
-    out.mpUsersMe = {
-      httpStatus: r.status,
-      id: data.id,
-      nickname: data.nickname,
-      site_id: data.site_id,
-      email: data.email,
-      error: data.error || data.message || null
-    };
-  } catch (e) {
-    out.mpUsersMe = { fetchError: e.message };
-  }
-  // Llamada CRUDA a /preapproval para capturar el cuerpo de error COMPLETO de MP
-  try {
-    const t = req.tenant;
-    const payload = {
-      reason: `Gestiva test`,
-      external_reference: t.id,
-      payer_email: t.email,
-      back_url: `${APP_URL}/billing-return.html`,
-      status: 'pending',
-      auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 39000, currency_id: 'ARS' },
-      notification_url: `${BACKEND_URL}/billing/webhook`
-    };
-    const pr = await fetch('https://api.mercadopago.com/preapproval', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const prData = await pr.json();
-    out.preapprovalRaw = { httpStatus: pr.status, body: prData };
-  } catch (e) {
-    out.preapprovalRaw = { fetchError: e.message };
-  }
-  // Probar tambien Suscripciones CON plan (/preapproval_plan) — politicas distintas
-  try {
-    const planPayload = {
-      reason: 'Gestiva Plan Test',
-      auto_recurring: {
-        frequency: 1, frequency_type: 'months',
-        transaction_amount: 39000, currency_id: 'ARS'
-      },
-      back_url: `${APP_URL}/billing-return.html`
-    };
-    const pp = await fetch('https://api.mercadopago.com/preapproval_plan', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
-      body: JSON.stringify(planPayload)
-    });
-    const ppData = await pp.json();
-    out.preapprovalPlanRaw = { httpStatus: pp.status, id: ppData.id, initPoint: ppData.init_point, body: (pp.status>=400 ? ppData : undefined) };
-  } catch (e) {
-    out.preapprovalPlanRaw = { fetchError: e.message };
-  }
+    const plans = await q('SELECT tier, mp_plan_id, amount FROM mp_plans ORDER BY amount');
+    out.cachedPlans = plans.rows;
+  } catch (e) { out.cachedPlans = { error: e.message }; }
   res.json(out);
 });
 
