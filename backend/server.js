@@ -650,6 +650,38 @@ app.get('/billing/status', requireAuth, async (req, res) => {
   });
 });
 
+// Diagnóstico de credenciales MercadoPago (NO expone el token completo)
+app.get('/billing/mp-check', requireAuth, async (req, res) => {
+  const tok = MP_TOKEN || '';
+  const out = {
+    tokenConfigured: !!tok,
+    tokenPrefix: tok ? tok.slice(0, 8) : null,        // 'APP_USR-' (prod) o 'TEST-' (test)
+    isTestToken: tok.startsWith('TEST-'),
+    isProdToken: tok.startsWith('APP_USR-'),
+    skipBilling: SKIP_BILLING,
+    appUrl: APP_URL,
+    backendUrl: BACKEND_URL
+  };
+  // Validar el token llamando a /users/me de MercadoPago
+  try {
+    const r = await fetch('https://api.mercadopago.com/users/me', {
+      headers: { Authorization: 'Bearer ' + tok }
+    });
+    const data = await r.json();
+    out.mpUsersMe = {
+      httpStatus: r.status,
+      id: data.id,
+      nickname: data.nickname,
+      site_id: data.site_id,
+      email: data.email,
+      error: data.error || data.message || null
+    };
+  } catch (e) {
+    out.mpUsersMe = { fetchError: e.message };
+  }
+  res.json(out);
+});
+
 // Endpoint PÚBLICO: lista los planes disponibles (para mostrar en landing/checkout)
 app.get('/billing/plans', (req, res) => {
   res.json({
