@@ -558,8 +558,15 @@ app.post('/billing/subscribe', requireAuth, async (req, res) => {
 
     return res.json({ initPoint: result.init_point, preapprovalId: result.id });
   } catch (e) {
-    console.error('[subscribe]', e?.cause || e?.message || e);
-    return res.status(500).json({ error: 'mp_error', detail: e?.message });
+    // Capturar todo el detalle del error de MercadoPago para diagnostico
+    const mpDetail = {
+      message: e?.message,
+      status: e?.status || e?.statusCode,
+      cause: e?.cause,
+      apiResponse: e?.apiResponse?.data || e?.response?.data || e?.error
+    };
+    console.error('[subscribe] MP error full:', JSON.stringify(mpDetail));
+    return res.status(500).json({ error: 'mp_error', detail: e?.message, mp: mpDetail });
   }
 });
 
