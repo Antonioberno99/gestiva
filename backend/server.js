@@ -679,6 +679,28 @@ app.get('/billing/mp-check', requireAuth, async (req, res) => {
   } catch (e) {
     out.mpUsersMe = { fetchError: e.message };
   }
+  // Llamada CRUDA a /preapproval para capturar el cuerpo de error COMPLETO de MP
+  try {
+    const t = req.tenant;
+    const payload = {
+      reason: `Gestiva test`,
+      external_reference: t.id,
+      payer_email: t.email,
+      back_url: `${APP_URL}/billing-return.html`,
+      status: 'pending',
+      auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 39000, currency_id: 'ARS' },
+      notification_url: `${BACKEND_URL}/billing/webhook`
+    };
+    const pr = await fetch('https://api.mercadopago.com/preapproval', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const prData = await pr.json();
+    out.preapprovalRaw = { httpStatus: pr.status, body: prData };
+  } catch (e) {
+    out.preapprovalRaw = { fetchError: e.message };
+  }
   res.json(out);
 });
 
