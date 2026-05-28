@@ -190,7 +190,7 @@
 <script src="gestiva-config.js"></script>
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
-let WAITER_DEMO = token === 'demo-token' || localStorage.getItem('gestiva_waiter_demo') === '1';
+let WAITER_DEMO = false; // demo desactivado para producción
 let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos' };
 
 const $ = (s) => document.querySelector(s);
