@@ -522,51 +522,56 @@ app.post('/auth/google', authLimiter, async (req, res) => {
 //                       BILLING (MercadoPago)
 // ============================================================
 
-// Crea una suscripción mensual recurrente en MP y devuelve el init_point
+// Asegura que exista un preapproval_plan en MP para el tier dado (lo crea/cachea).
+// La cuenta MP solo permite "Suscripciones con plan", por eso usamos preapproval_plan.
+async function ensureMpPlan(tierId) {
+  const plan = planFor(tierId);
+  // ¿Ya tenemos un plan con el monto actual?
+  const existing = await q('SELECT * FROM mp_plans WHERE tier=$1', [tierId]);
+  if (existing.rows[0] && parseFloat(existing.rows[0].amount) === plan.price) {
+    return existing.rows[0];
+  }
+  // Crear el plan en MercadoPago
+  const r = await fetch('https://api.mercadopago.com/preapproval_plan', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + MP_TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reason: `Gestiva ${plan.name}`,
+      auto_recurring: {
+        frequency: 1, frequency_type: 'months',
+        transaction_amount: plan.price, currency_id: 'ARS'
+      },
+      back_url: `${APP_URL}/billing-return.html`
+    })
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error('mp_plan_error: ' + JSON.stringify(data));
+  }
+  await q(`INSERT INTO mp_plans (tier, mp_plan_id, init_point, amount)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (tier) DO UPDATE SET mp_plan_id=$2, init_point=$3, amount=$4, created_at=now()`,
+    [tierId, data.id, data.init_point, plan.price]);
+  return { tier: tierId, mp_plan_id: data.id, init_point: data.init_point, amount: plan.price };
+}
+
+// Crea/recupera el link de suscripción (plan) y lo devuelve con external_reference del tenant
 app.post('/billing/subscribe', requireAuth, async (req, res) => {
   try {
-    if (!mpClient) return res.status(500).json({ error: 'mp_not_configured' });
+    if (!MP_TOKEN) return res.status(500).json({ error: 'mp_not_configured' });
     const t = req.tenant;
-    const plan = planFor(t.plan);
-    const amount = plan.price;
-
-    // Si ya tiene una init_point activa, reutilizar
-    if (t.mp_init_point && t.subscription_status === 'pending') {
-      return res.json({ initPoint: t.mp_init_point, reused: true });
-    }
-
-    const preApproval = new PreApproval(mpClient);
-    const result = await preApproval.create({
-      body: {
-        reason: `Gestiva ${plan.name} · ${t.restaurant_name}`,
-        external_reference: t.id,
-        payer_email: t.email,
-        back_url: `${APP_URL}/billing-return.html`,
-        status: 'pending',
-        auto_recurring: {
-          frequency: 1,
-          frequency_type: 'months',
-          transaction_amount: amount,
-          currency_id: 'ARS'
-        },
-        notification_url: `${BACKEND_URL}/billing/webhook`
-      }
-    });
+    const mpPlan = await ensureMpPlan(t.plan);
+    // Adjuntamos external_reference (tenant id) para identificarlo en el webhook
+    const sep = mpPlan.init_point.includes('?') ? '&' : '?';
+    const initPoint = `${mpPlan.init_point}${sep}external_reference=${encodeURIComponent(t.id)}`;
 
     await q('UPDATE tenants SET mp_preapproval_id=$1, mp_init_point=$2 WHERE id=$3',
-      [result.id, result.init_point, t.id]);
+      [mpPlan.mp_plan_id, initPoint, t.id]);
 
-    return res.json({ initPoint: result.init_point, preapprovalId: result.id });
+    return res.json({ initPoint, planId: mpPlan.mp_plan_id });
   } catch (e) {
-    // Capturar todo el detalle del error de MercadoPago para diagnostico
-    const mpDetail = {
-      message: e?.message,
-      status: e?.status || e?.statusCode,
-      cause: e?.cause,
-      apiResponse: e?.apiResponse?.data || e?.response?.data || e?.error
-    };
-    console.error('[subscribe] MP error full:', JSON.stringify(mpDetail));
-    return res.status(500).json({ error: 'mp_error', detail: e?.message, mp: mpDetail });
+    console.error('[subscribe] error:', e?.message || e);
+    return res.status(500).json({ error: 'mp_error', detail: e?.message });
   }
 });
 
@@ -582,8 +587,13 @@ app.post('/billing/webhook', async (req, res) => {
     if (type === 'subscription_preapproval' && data?.id) {
       const pre = new PreApproval(mpClient);
       const info = await pre.get({ id: data.id });
-      const tenantId = info.external_reference;
-      if (!tenantId) { res.sendStatus(200); return; }
+      // Identificar tenant: 1) external_reference, 2) fallback por email del pagador
+      let tenantId = info.external_reference;
+      if (!tenantId && info.payer_email) {
+        const found = await q('SELECT id FROM tenants WHERE lower(email)=lower($1)', [info.payer_email]);
+        if (found.rows[0]) tenantId = found.rows[0].id;
+      }
+      if (!tenantId) { console.warn('[webhook] no tenant for preapproval', data.id); res.sendStatus(200); return; }
 
       // status: pending, authorized, paused, cancelled
       if (info.status === 'authorized') {

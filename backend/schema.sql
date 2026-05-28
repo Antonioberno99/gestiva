@@ -249,3 +249,14 @@ CREATE TABLE IF NOT EXISTS subscription_payments (
   paid_at         TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_subpay_tenant ON subscription_payments(tenant_id, paid_at DESC);
+
+-- PLANES DE MERCADOPAGO (preapproval_plan) — cacheados por tier
+-- La cuenta solo permite "Suscripciones con plan", así que creamos un plan
+-- por cada tier (start/pro/full) y guardamos su id + init_point.
+CREATE TABLE IF NOT EXISTS mp_plans (
+  tier        TEXT PRIMARY KEY,             -- 'start' | 'pro' | 'full'
+  mp_plan_id  TEXT NOT NULL,
+  init_point  TEXT NOT NULL,
+  amount      NUMERIC(12,2) NOT NULL,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
