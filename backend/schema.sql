@@ -260,3 +260,6 @@ CREATE TABLE IF NOT EXISTS mp_plans (
   amount      NUMERIC(12,2) NOT NULL,
   created_at  TIMESTAMPTZ DEFAULT now()
 );
+
+-- LANZAMIENTO: eliminar la cuenta demo de pruebas (ya no se usa).
+DELETE FROM tenants WHERE email = 'demo@gestiva.app';

@@ -124,22 +124,6 @@ const tenantId = params.get('id');
     document.getElementById('root').innerHTML = `<div class="error"><h2>Link inválido</h2><p>Pedí el link correcto al restaurante.</p></div>`;
     return;
   }
-  // En modo demo (tenantId = demo-tenant), no hay backend real → leemos del localStorage del mismo browser
-  if (tenantId === 'demo-tenant') {
-    const products = JSON.parse(localStorage.getItem('gestiva_demo_products') || '[]').filter(p => p.available !== false);
-    const user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
-    if (products.length === 0) {
-      document.getElementById('root').innerHTML = `<div class="error"><h2>Demo sin productos</h2><p>Abrí el panel demo, cargá productos, y volvé acá.</p></div>`;
-      return;
-    }
-    const grouped = {};
-    products.forEach(p => { const c = p.cat || 'Otros'; if (!grouped[c]) grouped[c]=[]; grouped[c].push(p); });
-    render({
-      restaurant: { name: user?.restaurantName || 'Restaurante Demo', currency: user?.currency || '$' },
-      categories: Object.entries(grouped).map(([name, items]) => ({ name, items }))
-    });
-    return;
-  }
   try {
     const r = await fetch(window.API_URL + '/public/menu/' + tenantId);
     if (!r.ok) throw new Error('No se pudo cargar el menú');

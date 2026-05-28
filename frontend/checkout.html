@@ -203,9 +203,6 @@ function renderPayBlock() {
     <button class="btn btn-primary" id="payBtn">
       Pagar con <span class="mp-logo">MercadoPago</span> →
     </button>
-    <button class="btn btn-test" id="testBtn">
-      Simular pago (modo TEST)
-    </button>
     <p style="font-size:11px;color:var(--tx-lt);margin-top:12px;">
       Se cobra automáticamente el mismo día de cada mes. Podés cancelar desde MercadoPago.
     </p>
@@ -214,7 +211,6 @@ function renderPayBlock() {
 
 async function bindPayBtn() {
   const payBtn = document.getElementById('payBtn');
-  const testBtn = document.getElementById('testBtn');
 
   if (payBtn) payBtn.onclick = async () => {
     payBtn.disabled = true; payBtn.textContent = 'Generando link de pago...';
@@ -229,27 +225,6 @@ async function bindPayBtn() {
     } catch (e) {
       alert('Error: ' + e.message);
       payBtn.disabled = false; payBtn.innerHTML = 'Pagar con <span class="mp-logo">MercadoPago</span> →';
-    }
-  };
-
-  if (testBtn) testBtn.onclick = async () => {
-    if (!confirm('¿Simular pago exitoso? (solo disponible en modo TEST)')) return;
-    testBtn.disabled = true; testBtn.textContent = 'Activando...';
-    try {
-      const r = await fetch(window.API_URL + '/billing/dev-activate', {
-        method: 'POST', headers: { Authorization: 'Bearer ' + token }
-      });
-      if (!r.ok) {
-        const data = await r.json();
-        throw new Error(data.error === 'not_in_test_mode' ? 'El backend no está en modo TEST' : data.error);
-      }
-      // refresh user
-      const me = await fetch(window.API_URL + '/auth/me', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
-      localStorage.setItem('gestiva_user', JSON.stringify(me.user));
-      location.reload();
-    } catch (e) {
-      alert('Error: ' + e.message);
-      testBtn.disabled = false; testBtn.textContent = 'Simular pago (modo TEST)';
     }
   };
 }
