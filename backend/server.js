@@ -527,6 +527,8 @@ app.post('/billing/subscribe', requireAuth, async (req, res) => {
   try {
     if (!mpClient) return res.status(500).json({ error: 'mp_not_configured' });
     const t = req.tenant;
+    const plan = planFor(t.plan);
+    const amount = plan.price;
 
     // Si ya tiene una init_point activa, reutilizar
     if (t.mp_init_point && t.subscription_status === 'pending') {
@@ -536,7 +538,7 @@ app.post('/billing/subscribe', requireAuth, async (req, res) => {
     const preApproval = new PreApproval(mpClient);
     const result = await preApproval.create({
       body: {
-        reason: `Gestiva · ${t.restaurant_name}`,
+        reason: `Gestiva ${plan.name} · ${t.restaurant_name}`,
         external_reference: t.id,
         payer_email: t.email,
         back_url: `${APP_URL}/billing-return.html`,
@@ -544,7 +546,7 @@ app.post('/billing/subscribe', requireAuth, async (req, res) => {
         auto_recurring: {
           frequency: 1,
           frequency_type: 'months',
-          transaction_amount: SUB_PRICE,
+          transaction_amount: amount,
           currency_id: 'ARS'
         },
         notification_url: `${BACKEND_URL}/billing/webhook`
@@ -581,14 +583,15 @@ app.post('/billing/webhook', async (req, res) => {
         const now = new Date();
         const ends = new Date(now.getTime() + 30 * 86400000);
         const grace = new Date(ends.getTime() + GRACE_DAYS * 86400000);
+        const amount = info.auto_recurring?.transaction_amount || SUB_PRICE;
         await q(`UPDATE tenants SET subscription_status='active',
                  subscription_started_at=COALESCE(subscription_started_at, $1),
                  subscription_ends_at=$2, grace_ends_at=$3,
                  last_payment_at=$1, last_payment_amount=$4
                  WHERE id=$5`,
-          [now, ends, grace, SUB_PRICE, tenantId]);
+          [now, ends, grace, amount, tenantId]);
         await q(`INSERT INTO subscription_payments (tenant_id, mp_preapproval_id, amount, status, raw)
-                 VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, SUB_PRICE, 'authorized', info]);
+                 VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, amount, 'authorized', info]);
       } else if (info.status === 'cancelled' || info.status === 'paused') {
         await q(`UPDATE tenants SET subscription_status='cancelled' WHERE id=$1`, [tenantId]);
       }
@@ -658,7 +661,10 @@ app.get('/billing/plans', (req, res) => {
 app.post('/billing/plan', requireAuth, async (req, res) => {
   const { plan } = req.body || {};
   if (!plan || !PLANS[plan]) return res.status(400).json({ error: 'invalid_plan' });
-  await q('UPDATE tenants SET plan=$1 WHERE id=$2', [plan, req.tenant.id]);
+  // Al cambiar de plan, el link de pago viejo tenía el precio anterior:
+  // lo limpiamos para que /billing/subscribe genere uno nuevo con el precio correcto.
+  await q('UPDATE tenants SET plan=$1, mp_init_point=NULL, mp_preapproval_id=NULL WHERE id=$2',
+    [plan, req.tenant.id]);
   const fresh = await q('SELECT * FROM tenants WHERE id=$1', [req.tenant.id]);
   res.json({ ok: true, user: publicTenant(fresh.rows[0]) });
 });
