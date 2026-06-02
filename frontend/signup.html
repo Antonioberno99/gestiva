@@ -90,6 +90,10 @@
         <label>Contraseña (mínimo 6 caracteres)</label>
         <input id="password" type="password" required minlength="6" autocomplete="new-password" />
       </div>
+      <div class="field">
+        <label>Código de vendedor <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
+        <input id="refInput" placeholder="Si un vendedor te recomendó, poné su código" style="text-transform:uppercase" />
+      </div>
       <button type="submit" class="btn" id="submitBtn">Crear cuenta y continuar</button>
     </form>
 
@@ -120,15 +124,23 @@ const PLAN_LABELS = {
 const urlParams = new URLSearchParams(window.location.search);
 let selectedPlan = (urlParams.get('plan') || 'pro').toLowerCase();
 if (!PLAN_LABELS[selectedPlan]) selectedPlan = 'pro';
-// Código de vendedor: si viene en URL, lo guardamos. Si no, recuperamos el guardado.
+// Código de vendedor: si viene en URL, lo guardamos y pre-llenamos el campo.
 const refFromUrl = urlParams.get('ref');
 if (refFromUrl) localStorage.setItem('gestiva_ref', refFromUrl.toUpperCase().trim());
-const refCode = localStorage.getItem('gestiva_ref') || null;
+const storedRef = localStorage.getItem('gestiva_ref') || '';
 (function updatePlanPill(){
   const info = PLAN_LABELS[selectedPlan];
   const el = document.getElementById('planPillText');
   if (el) el.textContent = `Prueba gratis · luego Plan ${info.name} ${info.price}/mes · Sin compromisos`;
+  const refEl = document.getElementById('refInput');
+  if (refEl && storedRef) refEl.value = storedRef;
 })();
+// El código a enviar = lo que esté en el campo (el usuario puede tipearlo) o el guardado.
+function currentRef() {
+  const refEl = document.getElementById('refInput');
+  const v = (refEl && refEl.value.trim()) || storedRef || '';
+  return v ? v.toUpperCase().trim() : null;
+}
 
 // Google Sign-In: solo renderiza si hay GOOGLE_CLIENT_ID configurado
 function initGoogleSignIn() {
@@ -149,7 +161,7 @@ async function handleGoogleSignIn(response) {
   try {
     const r = await fetch(window.API_URL + '/auth/google', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ credential: response.credential })
+      body: JSON.stringify({ credential: response.credential, ref: currentRef() || undefined })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de registro'));
@@ -190,7 +202,7 @@ form.addEventListener('submit', async (e) => {
     ownerName: document.getElementById('ownerName').value.trim(),
     phone: document.getElementById('phone').value.trim(),
     plan: selectedPlan,
-    ref: refCode || undefined,
+    ref: currentRef() || undefined,
   };
 
   try {

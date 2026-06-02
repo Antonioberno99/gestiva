@@ -512,7 +512,7 @@ async function verifyGoogleCredential(credential) {
 
 app.post('/auth/google', authLimiter, async (req, res) => {
   try {
-    const { credential } = req.body || {};
+    const { credential, ref } = req.body || {};
     const { email, googleId, name, picture } = await verifyGoogleCredential(credential);
 
     // Buscar tenant existente por google_id o email
@@ -548,11 +548,17 @@ app.post('/auth/google', authLimiter, async (req, res) => {
         endsAt = new Date(startedAt.getTime() + TRIAL_DAYS * 86400000);
         graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
       }
+      // Asociar vendedor si vino con código (ref) válido y activo
+      let vendorId = null;
+      if (ref && typeof ref === 'string') {
+        const vv = await q('SELECT id FROM vendors WHERE ref_code=$1 AND status=$2', [ref.toUpperCase().trim(), 'active']);
+        if (vv.rows[0]) vendorId = vv.rows[0].id;
+      }
       const ins = await q(
         `INSERT INTO tenants (email, google_id, google_picture, restaurant_name, owner_name,
-                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt]
+                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt, vendorId]
       );
       t = ins.rows[0];
       // Seed inicial: 12 mesas, 1 mozo, productos por defecto
@@ -1536,7 +1542,7 @@ app.post('/vendor/register', authLimiter, async (req, res) => {
     const ins = await q(
       `INSERT INTO vendors (email, password_hash, name, phone, ref_code, commission_percent, status, application, applied_at)
        VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8) RETURNING *`,
-      [normEmail, hash, name.trim(), phone || null, refCode, 20.00, app, app ? new Date() : null]
+      [normEmail, hash, name.trim(), phone || null, refCode, 40.00, app, app ? new Date() : null]
     );
     const v = ins.rows[0];
     if (app) mailer.notifyNewVendorApplication(v).catch(e => console.error('[mail] notify', e.message));
@@ -1567,7 +1573,7 @@ app.post('/vendor/google', authLimiter, async (req, res) => {
       v = (await q(
         `INSERT INTO vendors (email, name, google_id, google_picture, ref_code, commission_percent, status, application, applied_at)
          VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8) RETURNING *`,
-        [email, name || 'Vendedor', googleId, picture, refCode, 20.00, app, app ? new Date() : null]
+        [email, name || 'Vendedor', googleId, picture, refCode, 40.00, app, app ? new Date() : null]
       )).rows[0];
       if (app) mailer.notifyNewVendorApplication(v).catch(e => console.error('[mail] notify', e.message));
     }

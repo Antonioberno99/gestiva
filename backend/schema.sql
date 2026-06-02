@@ -276,7 +276,7 @@ CREATE TABLE IF NOT EXISTS vendors (
   name                TEXT NOT NULL,
   phone               TEXT,
   ref_code            TEXT UNIQUE NOT NULL,            -- código único para el link
-  commission_percent  NUMERIC(5,2) DEFAULT 20.00,      -- % sobre cobros de sus clientes
+  commission_percent  NUMERIC(5,2) DEFAULT 40.00,      -- % sobre cobros de sus clientes
   status              TEXT DEFAULT 'pending',          -- pending | active | rejected | paused
   created_at          TIMESTAMPTZ DEFAULT now()
 );
@@ -290,6 +290,9 @@ ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS application JSONB;     --
 ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
 ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors(status, created_at DESC);
+-- Comisión estándar 40%. Actualizar default y vendedores creados con el default viejo (20%).
+ALTER TABLE IF EXISTS vendors ALTER COLUMN commission_percent SET DEFAULT 40.00;
+UPDATE vendors SET commission_percent = 40.00 WHERE commission_percent = 20.00;
 
 -- Asociación tenant ↔ vendor (cliente captado por vendedor)
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS vendor_id UUID;

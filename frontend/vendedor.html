@@ -137,14 +137,27 @@
     <div id="activeView">
     <p style="color:var(--tx-mid);margin:0 0 28px">Esta es tu cartera de clientes y comisiones acumuladas.</p>
 
-    <div class="ref-box">
-      <div>
-        <div class="ref-box-label">Tu link para captar restaurantes</div>
-        <div class="ref-link" id="refLink">cargando…</div>
+    <div class="ref-box" style="display:block">
+      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+        <div>
+          <div class="ref-box-label">Tu código de vendedor</div>
+          <div style="font-family:'Outfit',sans-serif;font-size:34px;font-weight:800;color:var(--or-dk);letter-spacing:1px;" id="refCodeBig">—</div>
+          <div style="font-size:12px;color:var(--tx-mid);margin-top:4px;">El restaurante lo pone al registrarse · vos ganás 40% de comisión recurrente</div>
+        </div>
+        <div class="ref-actions">
+          <button class="btn-sm primary" onclick="copyRefCode()">Copiar código</button>
+        </div>
       </div>
-      <div class="ref-actions">
-        <button class="btn-sm primary" onclick="copyRefLink()">Copiar link</button>
-        <button class="btn-sm" onclick="shareWA()">WhatsApp</button>
+      <div style="border-top:1px solid var(--or-100);margin:16px 0;"></div>
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+        <div style="flex:1;min-width:260px;">
+          <div class="ref-box-label">O compartí tu link directo (ya trae el código)</div>
+          <div class="ref-link" id="refLink" style="margin-top:6px;">cargando…</div>
+        </div>
+        <div class="ref-actions">
+          <button class="btn-sm" onclick="copyRefLink()">Copiar link</button>
+          <button class="btn-sm" onclick="shareWA()">WhatsApp</button>
+        </div>
       </div>
     </div>
 
@@ -235,6 +248,7 @@ async function loadPanel() {
 
   const refUrl = location.origin + '/signup.html?ref=' + encodeURIComponent(vendor.refCode);
   $('#refLink').textContent = refUrl;
+  $('#refCodeBig').textContent = vendor.refCode;
 
   const [stats, clientsResp, commResp] = await Promise.all([
     api('/vendor/stats'),
@@ -281,6 +295,9 @@ async function loadPanel() {
   }
 }
 
+function copyRefCode() {
+  navigator.clipboard.writeText($('#refCodeBig').textContent).then(()=> alert('Código copiado ✓'));
+}
 function copyRefLink() {
   const text = $('#refLink').textContent;
   navigator.clipboard.writeText(text).then(()=> alert('Link copiado ✓'));
