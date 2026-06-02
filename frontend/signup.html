@@ -120,6 +120,10 @@ const PLAN_LABELS = {
 const urlParams = new URLSearchParams(window.location.search);
 let selectedPlan = (urlParams.get('plan') || 'pro').toLowerCase();
 if (!PLAN_LABELS[selectedPlan]) selectedPlan = 'pro';
+// Código de vendedor: si viene en URL, lo guardamos. Si no, recuperamos el guardado.
+const refFromUrl = urlParams.get('ref');
+if (refFromUrl) localStorage.setItem('gestiva_ref', refFromUrl.toUpperCase().trim());
+const refCode = localStorage.getItem('gestiva_ref') || null;
 (function updatePlanPill(){
   const info = PLAN_LABELS[selectedPlan];
   const el = document.getElementById('planPillText');
@@ -186,6 +190,7 @@ form.addEventListener('submit', async (e) => {
     ownerName: document.getElementById('ownerName').value.trim(),
     phone: document.getElementById('phone').value.trim(),
     plan: selectedPlan,
+    ref: refCode || undefined,
   };
 
   try {

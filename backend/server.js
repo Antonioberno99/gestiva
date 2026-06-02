@@ -145,6 +145,53 @@ function signWaiterToken(tenant, waiter) {
   );
 }
 
+function signVendorToken(vendor) {
+  return jwt.sign(
+    { role: 'vendor', vendorId: vendor.id, email: vendor.email },
+    JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+}
+
+function publicVendor(v) {
+  return {
+    id: v.id,
+    email: v.email,
+    name: v.name,
+    phone: v.phone,
+    refCode: v.ref_code,
+    commissionPercent: parseFloat(v.commission_percent) || 0,
+    status: v.status,
+    createdAt: v.created_at
+  };
+}
+
+// Genera un ref_code corto (ej: 'JUAN-3X9K') a partir del nombre del vendedor.
+function makeRefCode(name) {
+  const base = (name || 'GEST').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 5) || 'GEST';
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${base}-${rand}`;
+}
+
+// Acredita comisión al vendedor si el tenant fue captado por uno.
+async function creditVendorCommission(tenantId, paymentAmount) {
+  try {
+    const t = (await q('SELECT vendor_id FROM tenants WHERE id=$1', [tenantId])).rows[0];
+    if (!t || !t.vendor_id) return;
+    const v = (await q('SELECT id, commission_percent FROM vendors WHERE id=$1 AND status=$2',
+      [t.vendor_id, 'active'])).rows[0];
+    if (!v) return;
+    const pct = parseFloat(v.commission_percent) || 0;
+    if (pct <= 0) return;
+    const amt = Math.round(parseFloat(paymentAmount) * pct) / 100;
+    await q(
+      `INSERT INTO vendor_commissions (vendor_id, tenant_id, payment_amount, commission_pct, commission_amt, status)
+       VALUES ($1,$2,$3,$4,$5,'pending')`,
+      [v.id, tenantId, paymentAmount, pct, amt]
+    );
+  } catch (e) { console.error('[commission]', e.message); }
+}
+
 function publicTenant(t) {
   const planId = t.plan || 'pro';
   const plan = planFor(planId);
@@ -308,13 +355,32 @@ async function requireWaiterAuth(req, res, next) {
   }
 }
 
+async function requireVendorAuth(req, res, next) {
+  try {
+    const h = req.headers.authorization || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'no_token' });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'vendor' || !decoded.vendorId) {
+      return res.status(401).json({ error: 'invalid_token' });
+    }
+    const v = (await q('SELECT * FROM vendors WHERE id=$1', [decoded.vendorId])).rows[0];
+    if (!v) return res.status(401).json({ error: 'vendor_not_found' });
+    if (v.status !== 'active') return res.status(403).json({ error: 'vendor_paused' });
+    req.vendor = v;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
 // ============================================================
 //                       AUTH
 // ============================================================
 
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
-    const { email, password, restaurantName, ownerName, phone, plan } = req.body || {};
+    const { email, password, restaurantName, ownerName, phone, plan, ref } = req.body || {};
     if (!email || !password || !restaurantName)
       return res.status(400).json({ error: 'missing_fields' });
     if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
@@ -324,6 +390,13 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const chosenPlan = (plan && PLANS[plan]) ? plan : 'pro';
+
+    // Si vino con código de vendedor (ref), buscamos al vendor
+    let vendorId = null;
+    if (ref && typeof ref === 'string') {
+      const v = await q('SELECT id FROM vendors WHERE ref_code=$1 AND status=$2', [ref.toUpperCase().trim(), 'active']);
+      if (v.rows[0]) vendorId = v.rows[0].id;
+    }
 
     // Modo de alta:
     // - SKIP_BILLING (dev): activo 1 año
@@ -341,10 +414,10 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     const ins = await q(
       `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone,
-                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan, vendor_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null,
-       initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan]
+       initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan, vendorId]
     );
     const t = ins.rows[0];
 
@@ -565,6 +638,7 @@ app.post('/billing/webhook', async (req, res) => {
           [now, ends, grace, amount, tenantId]);
         await q(`INSERT INTO subscription_payments (tenant_id, mp_preapproval_id, amount, status, raw)
                  VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, amount, 'authorized', info]);
+        await creditVendorCommission(tenantId, amount);
       } else if (info.status === 'cancelled' || info.status === 'paused') {
         await q(`UPDATE tenants SET subscription_status='cancelled' WHERE id=$1`, [tenantId]);
       }
@@ -588,6 +662,7 @@ app.post('/billing/webhook', async (req, res) => {
         await q(`INSERT INTO subscription_payments (tenant_id, mp_payment_id, amount, status, raw)
                  VALUES ($1,$2,$3,$4,$5)`,
           [tenantId, data.id, info.transaction_amount || SUB_PRICE, 'approved', info]);
+        await creditVendorCommission(tenantId, info.transaction_amount || SUB_PRICE);
       }
     }
 
@@ -1401,6 +1476,116 @@ app.put('/api/settings', async (req, res) => {
       WHERE id=$5 RETURNING *`,
     [restaurantName || null, currency || null, ownerName || null, phone || null, req.tenant.id]);
   res.json(publicTenant(r.rows[0]));
+});
+
+// ============================================================
+//             PROGRAMA DE VENDEDORES (Partners)
+// ============================================================
+
+// Registro público de vendedor
+app.post('/vendor/register', authLimiter, async (req, res) => {
+  try {
+    const { email, password, name, phone } = req.body || {};
+    if (!email || !password || !name) return res.status(400).json({ error: 'missing_fields' });
+    if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+
+    const normEmail = email.toLowerCase().trim();
+    const exists = await q('SELECT id FROM vendors WHERE email=$1', [normEmail]);
+    if (exists.rows[0]) return res.status(409).json({ error: 'email_taken' });
+
+    const hash = await bcrypt.hash(password, 10);
+    // Generar ref_code único (reintenta si choca)
+    let refCode = makeRefCode(name);
+    for (let i = 0; i < 5; i++) {
+      const dup = await q('SELECT id FROM vendors WHERE ref_code=$1', [refCode]);
+      if (!dup.rows[0]) break;
+      refCode = makeRefCode(name);
+    }
+
+    const ins = await q(
+      `INSERT INTO vendors (email, password_hash, name, phone, ref_code, commission_percent, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'active') RETURNING *`,
+      [normEmail, hash, name.trim(), phone || null, refCode, 20.00]
+    );
+    const v = ins.rows[0];
+    return res.json({ token: signVendorToken(v), vendor: publicVendor(v) });
+  } catch (e) {
+    console.error('[vendor-register]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.post('/vendor/login', authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'missing_fields' });
+    const r = await q('SELECT * FROM vendors WHERE email=$1', [email.toLowerCase().trim()]);
+    const v = r.rows[0];
+    if (!v) return res.status(401).json({ error: 'invalid_credentials' });
+    const ok = await bcrypt.compare(password, v.password_hash);
+    if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+    return res.json({ token: signVendorToken(v), vendor: publicVendor(v) });
+  } catch (e) {
+    console.error('[vendor-login]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+app.get('/vendor/me', requireVendorAuth, async (req, res) => {
+  res.json({ vendor: publicVendor(req.vendor) });
+});
+
+// Listar clientes captados por el vendedor
+app.get('/vendor/clients', requireVendorAuth, async (req, res) => {
+  const r = await q(
+    `SELECT id, restaurant_name, email, phone, subscription_status, subscription_ends_at,
+            plan, created_at, last_payment_at, last_payment_amount
+     FROM tenants
+     WHERE vendor_id=$1
+     ORDER BY created_at DESC`,
+    [req.vendor.id]
+  );
+  res.json({ clients: r.rows });
+});
+
+// Comisiones acumuladas / historial
+app.get('/vendor/commissions', requireVendorAuth, async (req, res) => {
+  const r = await q(
+    `SELECT vc.*, t.restaurant_name
+     FROM vendor_commissions vc
+     LEFT JOIN tenants t ON t.id = vc.tenant_id
+     WHERE vc.vendor_id=$1
+     ORDER BY vc.created_at DESC
+     LIMIT 200`,
+    [req.vendor.id]
+  );
+  res.json({ commissions: r.rows });
+});
+
+// Estadísticas resumidas
+app.get('/vendor/stats', requireVendorAuth, async (req, res) => {
+  const clients = await q(
+    `SELECT
+       count(*)::int AS total,
+       count(*) FILTER (WHERE subscription_status='trial')::int AS in_trial,
+       count(*) FILTER (WHERE subscription_status='active')::int AS active,
+       count(*) FILTER (WHERE subscription_status IN ('expired','cancelled'))::int AS lost
+     FROM tenants WHERE vendor_id=$1`,
+    [req.vendor.id]
+  );
+  const comm = await q(
+    `SELECT
+       COALESCE(SUM(commission_amt),0)::numeric AS earned_total,
+       COALESCE(SUM(commission_amt) FILTER (WHERE status='pending'),0)::numeric AS pending,
+       COALESCE(SUM(commission_amt) FILTER (WHERE status='paid'),0)::numeric AS paid,
+       count(*)::int AS commissions_count
+     FROM vendor_commissions WHERE vendor_id=$1`,
+    [req.vendor.id]
+  );
+  res.json({
+    clients: clients.rows[0],
+    commissions: comm.rows[0]
+  });
 });
 
 // ============================================================

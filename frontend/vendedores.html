@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Programa de Vendedores · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--tx-dark:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--bg:#f8fafc;--border:#e2e8f0;--green:#10b981;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed 0%,#fafafa 50%,#fff7ed 100%);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased;padding:32px 20px;}
+  .wrap{max-width:1080px;margin:0 auto}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:32px;text-decoration:none;color:inherit;}
+  .brand-logo{width:40px;height:40px;border-radius:11px;background:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(15,23,42,.08);overflow:hidden}
+  .brand-logo img{width:38px;height:38px;object-fit:contain;display:block}
+  .brand-name{font-family:var(--ff-display);font-weight:800;font-size:20px;color:var(--or)}
+
+  .hero{text-align:center;margin-bottom:56px;padding:32px 16px}
+  .hero h1{font-family:var(--ff-display);font-size:48px;font-weight:800;margin:0 0 16px;letter-spacing:-.02em;line-height:1.05}
+  .hero h1 span{color:var(--or-dk)}
+  .hero p{font-size:18px;color:var(--tx-mid);max-width:680px;margin:0 auto;line-height:1.55}
+  .pill{display:inline-flex;align-items:center;gap:8px;background:var(--or-lt);color:var(--or-dk);padding:8px 16px;border-radius:999px;font-size:13px;font-weight:700;margin-bottom:20px}
+
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:56px}
+  .stat{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;text-align:center}
+  .stat-val{font-family:var(--ff-display);font-size:38px;font-weight:800;color:var(--or-dk);letter-spacing:-.02em;line-height:1}
+  .stat-lbl{font-size:13px;color:var(--tx-mid);margin-top:8px}
+
+  .how{margin-bottom:56px}
+  .how-title{font-family:var(--ff-display);font-size:28px;font-weight:800;text-align:center;margin:0 0 32px}
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .step{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px;position:relative}
+  .step-n{position:absolute;top:-14px;left:24px;background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:14px;box-shadow:0 4px 10px rgba(249,115,22,.3)}
+  .step h3{font-size:15px;font-weight:700;margin:8px 0 8px}
+  .step p{font-size:13px;color:var(--tx-mid);line-height:1.5;margin:0}
+
+  .benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:56px}
+  .ben{background:#fff;border:1px solid var(--border);border-radius:18px;padding:24px}
+  .ben h3{font-size:16px;font-weight:700;margin:0 0 8px;display:flex;align-items:center;gap:10px}
+  .ben h3 svg{color:var(--green)}
+  .ben p{font-size:13px;color:var(--tx-mid);line-height:1.55;margin:0}
+
+  .form-card{background:#fff;border-radius:24px;padding:36px;box-shadow:var(--sh-md);max-width:520px;margin:0 auto}
+  .form-card h2{font-family:var(--ff-display);font-size:24px;margin:0 0 8px}
+  .form-card .sub{color:var(--tx-mid);margin-bottom:20px;font-size:14px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:6px}
+  .field input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+  .field input:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .btn{width:100%;padding:14px 18px;border:none;border-radius:12px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--or),var(--or-dk));color:white;box-shadow:0 6px 16px rgba(249,115,22,.3);transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(249,115,22,.4)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .err{background:#fee2e2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none}
+  .err.on{display:block}
+  .alt{text-align:center;margin-top:18px;font-size:13px;color:var(--tx-mid)}
+  .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+
+  @media (max-width:768px){
+    .hero h1{font-size:32px}
+    .hero p{font-size:16px}
+    .stats,.steps,.benefits{grid-template-columns:1fr}
+    .form-card{padding:28px 22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="landing.html" class="brand">
+    <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+    <div class="brand-name">Gestiva</div>
+  </a>
+
+  <section class="hero">
+    <div class="pill">PROGRAMA DE VENDEDORES</div>
+    <h1>Sumate a <span>Gestiva</span><br>y armá tu cartera de clientes</h1>
+    <p>Sumate como vendedor independiente de Gestiva, captá restaurantes y bares, y ganá <strong>20% de comisión recurrente</strong> sobre cada suscripción que cobramos. Tu cartera crece, tus ingresos también.</p>
+  </section>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-val">20%</div><div class="stat-lbl">Comisión recurrente · todos los meses que el cliente siga pagando</div></div>
+    <div class="stat"><div class="stat-val">7 días</div><div class="stat-lbl">De prueba gratis para tus clientes · más fácil de cerrar la venta</div></div>
+    <div class="stat"><div class="stat-val">$0</div><div class="stat-lbl">De inversión · solo necesitás ganas de vender</div></div>
+  </div>
+
+  <section class="how">
+    <h2 class="how-title">¿Cómo funciona?</h2>
+    <div class="steps">
+      <div class="step"><span class="step-n">1</span><h3>Te registrás</h3><p>Llenás el formulario de acá abajo y al toque tenés tu cuenta de vendedor activa.</p></div>
+      <div class="step"><span class="step-n">2</span><h3>Recibís tu link</h3><p>Te damos un link único (ej: <em>gestiva.site/?ref=JUAN-3X9K</em>) para compartir.</p></div>
+      <div class="step"><span class="step-n">3</span><h3>Compartís y vendés</h3><p>Mandás el link a restaurantes y bares. Cada uno que se registra queda asociado a vos.</p></div>
+      <div class="step"><span class="step-n">4</span><h3>Cobrás comisión</h3><p>Cuando el cliente paga su suscripción, vos ganás 20%. Mes a mes mientras siga activo.</p></div>
+    </div>
+  </section>
+
+  <section style="margin-bottom:56px">
+    <h2 class="how-title">¿Por qué venderías Gestiva?</h2>
+    <div class="benefits">
+      <div class="ben">
+        <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Producto que se vende solo</h3>
+        <p>3 planes desde $18.900/mes, prueba gratis 7 días, sin permanencia. Más barato que Fudo y con más funciones incluidas.</p>
+      </div>
+      <div class="ben">
+        <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Ingreso pasivo</h3>
+        <p>Vendés una vez y cobrás todos los meses. Si captás 30 clientes a Pro, eso son $234.000/mes recurrentes.</p>
+      </div>
+      <div class="ben">
+        <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg> Panel propio</h3>
+        <p>Mirá quiénes son tus clientes, en qué estado están (prueba, activos, vencidos) y cuánto llevás ganado este mes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="form-card" id="signupSection">
+    <h2>Crear cuenta de vendedor</h2>
+    <p class="sub">Sin costo. Sin compromiso. Empezás a vender hoy mismo.</p>
+    <div class="err" id="err"></div>
+    <form id="vendorForm">
+      <div class="field"><label>Nombre completo</label><input id="name" required placeholder="Juan Pérez" autofocus/></div>
+      <div class="field"><label>Email</label><input id="email" type="email" required placeholder="tu@email.com" autocomplete="email"/></div>
+      <div class="field"><label>Teléfono / WhatsApp</label><input id="phone" type="tel" placeholder="3884-XXXXXXX"/></div>
+      <div class="field"><label>Contraseña (mínimo 6 caracteres)</label><input id="password" type="password" required minlength="6" autocomplete="new-password"/></div>
+      <button type="submit" class="btn" id="submitBtn">Quiero ser vendedor</button>
+    </form>
+    <div class="alt">¿Ya sos vendedor? <a href="vendedor.html">Iniciar sesión</a></div>
+  </section>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const form = document.getElementById('vendorForm');
+const errEl = document.getElementById('err');
+const btn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errEl.classList.remove('on');
+  btn.disabled = true; btn.textContent = 'Creando cuenta...';
+  try {
+    const r = await fetch(window.API_URL + '/vendor/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('name').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        password: document.getElementById('password').value
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(({email_taken:'Ese email ya está registrado', password_too_short:'La contraseña debe tener al menos 6 caracteres', missing_fields:'Faltan campos obligatorios'})[data.error] || data.error);
+    localStorage.setItem('gestiva_vendor_token', data.token);
+    localStorage.setItem('gestiva_vendor', JSON.stringify(data.vendor));
+    location.href = 'vendedor.html';
+  } catch (e) {
+    errEl.textContent = e.message; errEl.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Quiero ser vendedor';
+  }
+});
+</script>
+</body>
+</html>

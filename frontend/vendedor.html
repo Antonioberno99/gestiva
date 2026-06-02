@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Panel de Vendedor · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--tx-dark:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--bg:#f8fafc;--border:#e2e8f0;--green:#10b981;--green-lt:#d1fae5;--yellow:#f59e0b;--red:#ef4444;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:#f8fafc;color:var(--tx-dark);-webkit-font-smoothing:antialiased;min-height:100vh}
+
+  /* LOGIN VIEW */
+  .login-bg{background:linear-gradient(135deg,#fff7ed 0%,#fafafa 50%,#fff7ed 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-wrap{max-width:440px;width:100%}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;text-decoration:none;color:inherit;justify-content:center}
+  .brand-logo{width:40px;height:40px;border-radius:11px;background:#fff;display:grid;place-items:center;box-shadow:0 6px 16px rgba(15,23,42,.08);overflow:hidden}
+  .brand-logo img{width:38px;height:38px;object-fit:contain;display:block}
+  .brand-name{font-family:var(--ff-display);font-weight:800;font-size:20px;color:var(--or)}
+  .card{background:white;border-radius:24px;padding:36px;box-shadow:var(--sh-md)}
+  .card h1{font-family:var(--ff-display);font-size:24px;margin:0 0 8px;letter-spacing:-.02em;text-align:center}
+  .card .sub{color:var(--tx-mid);margin-bottom:20px;font-size:14px;text-align:center}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:6px}
+  .field input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+  .field input:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .btn-primary{width:100%;padding:13px 16px;border:none;border-radius:12px;font-weight:600;font-size:15px;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--or),var(--or-dk));color:white;box-shadow:0 6px 16px rgba(249,115,22,.3);transition:transform .15s}
+  .btn-primary:hover{transform:translateY(-1px)}
+  .err{background:#fee2e2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none}
+  .err.on{display:block}
+  .alt{text-align:center;margin-top:18px;font-size:13px;color:var(--tx-mid)}
+  .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+
+  /* PANEL */
+  .topbar{background:#fff;border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+  .topbar-left{display:flex;align-items:center;gap:14px}
+  .topbar .brand-name{margin:0}
+  .topbar .role{font-size:12px;color:var(--tx-lt);background:var(--or-lt);color:var(--or-dk);padding:4px 10px;border-radius:999px;font-weight:600}
+  .topbar-right{display:flex;align-items:center;gap:16px;font-size:14px}
+  .logout-btn{background:none;border:none;color:var(--tx-mid);cursor:pointer;font-size:13px;font-family:inherit;text-decoration:underline}
+  .container{max-width:1180px;margin:0 auto;padding:32px 24px}
+
+  .greeting{font-family:var(--ff-display);font-size:28px;font-weight:800;margin:0 0 6px}
+  .ref-box{background:linear-gradient(135deg,var(--or-lt),#fff);border:1px solid var(--or-100);border-radius:18px;padding:22px;margin-bottom:32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px}
+  .ref-box-label{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--or-dk);font-weight:700;margin-bottom:6px}
+  .ref-link{font-family:'Inter',monospace;font-size:14px;color:var(--tx-dark);background:#fff;padding:10px 14px;border:1px solid var(--or-100);border-radius:8px;word-break:break-all;min-width:280px;display:inline-block}
+  .ref-actions{display:flex;gap:8px}
+  .btn-sm{padding:9px 14px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--tx-dark);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+  .btn-sm:hover{border-color:var(--or);color:var(--or-dk)}
+  .btn-sm.primary{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
+  .kpi{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+  .kpi-label{font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .kpi-val{font-family:var(--ff-display);font-size:30px;font-weight:800;color:var(--tx-dark);letter-spacing:-.02em;margin-top:6px}
+  .kpi-val.money{color:var(--or-dk)}
+  .kpi-sub{font-size:12px;color:var(--tx-mid);margin-top:4px}
+
+  .panel-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:24px}
+  .panel-card h3{font-family:var(--ff-display);font-size:18px;font-weight:700;margin:0 0 16px}
+
+  table.data{width:100%;border-collapse:collapse;font-size:13px}
+  table.data th,table.data td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+  table.data th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx-mid);font-weight:600}
+  table.data tbody tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
+  .badge.trial{background:#dbeafe;color:#1e40af}
+  .badge.active{background:var(--green-lt);color:#047857}
+  .badge.expired,.badge.cancelled{background:#fee2e2;color:#b91c1c}
+  .badge.grace{background:#fef3c7;color:#b45309}
+  .badge.pending{background:#f1f5f9;color:#475569}
+  .empty{text-align:center;color:var(--tx-lt);padding:30px 0;font-size:13px}
+
+  @media (max-width:768px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .ref-box{flex-direction:column;align-items:stretch}
+    .ref-link{min-width:0}
+  }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-bg" id="loginView" style="display:none">
+  <div class="login-wrap">
+    <a href="landing.html" class="brand">
+      <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+      <div class="brand-name">Gestiva</div>
+    </a>
+    <div class="card">
+      <h1>Panel de Vendedor</h1>
+      <p class="sub">Ingresá a tu cartera de clientes y comisiones</p>
+      <div class="err" id="loginErr"></div>
+      <form id="loginForm">
+        <div class="field"><label>Email</label><input id="email" type="email" required autofocus autocomplete="email"/></div>
+        <div class="field"><label>Contraseña</label><input id="password" type="password" required autocomplete="current-password"/></div>
+        <button type="submit" class="btn-primary" id="loginBtn">Iniciar sesión</button>
+      </form>
+      <div class="alt">¿Querés ser vendedor? <a href="vendedores.html">Crear cuenta</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL -->
+<div id="panelView" style="display:none">
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="landing.html" class="brand" style="margin:0">
+        <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+        <div class="brand-name">Gestiva</div>
+      </a>
+      <span class="role">VENDEDOR</span>
+    </div>
+    <div class="topbar-right">
+      <span id="hello"></span>
+      <button class="logout-btn" onclick="logout()">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <h1 class="greeting" id="greeting">Hola</h1>
+    <p style="color:var(--tx-mid);margin:0 0 28px">Esta es tu cartera de clientes y comisiones acumuladas.</p>
+
+    <div class="ref-box">
+      <div>
+        <div class="ref-box-label">Tu link para captar restaurantes</div>
+        <div class="ref-link" id="refLink">cargando…</div>
+      </div>
+      <div class="ref-actions">
+        <button class="btn-sm primary" onclick="copyRefLink()">Copiar link</button>
+        <button class="btn-sm" onclick="shareWA()">WhatsApp</button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Clientes</div><div class="kpi-val" id="kpiTotal">0</div><div class="kpi-sub" id="kpiTotalSub">en tu cartera</div></div>
+      <div class="kpi"><div class="kpi-label">Activos</div><div class="kpi-val" id="kpiActive" style="color:var(--green)">0</div><div class="kpi-sub">pagando suscripción</div></div>
+      <div class="kpi"><div class="kpi-label">A cobrar</div><div class="kpi-val money" id="kpiPending">$0</div><div class="kpi-sub">comisiones pendientes</div></div>
+      <div class="kpi"><div class="kpi-label">Histórico ganado</div><div class="kpi-val money" id="kpiEarned">$0</div><div class="kpi-sub">total acumulado</div></div>
+    </div>
+
+    <div class="panel-card">
+      <h3>Mis clientes</h3>
+      <div id="clientsBox"><div class="empty">Sin clientes todavía. Compartí tu link arriba para empezar.</div></div>
+    </div>
+
+    <div class="panel-card">
+      <h3>Mis comisiones</h3>
+      <div id="commissionsBox"><div class="empty">Las comisiones aparecen cuando un cliente paga su suscripción.</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = (n) => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR');
+let token = localStorage.getItem('gestiva_vendor_token');
+let vendor = null; try { vendor = JSON.parse(localStorage.getItem('gestiva_vendor') || 'null'); } catch(e){}
+
+function logout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  localStorage.removeItem('gestiva_vendor_token');
+  localStorage.removeItem('gestiva_vendor');
+  location.reload();
+}
+
+if (token && vendor) showPanel(); else showLogin();
+
+function showLogin() { $('#loginView').style.display=''; $('#panelView').style.display='none'; }
+function showPanel() { $('#loginView').style.display='none'; $('#panelView').style.display=''; loadPanel(); }
+
+$('#loginForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = $('#loginErr'); err.classList.remove('on');
+  const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = 'Entrando...';
+  try {
+    const r = await fetch(window.API_URL + '/vendor/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: $('#email').value.trim(), password: $('#password').value })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : data.error);
+    token = data.token; vendor = data.vendor;
+    localStorage.setItem('gestiva_vendor_token', token);
+    localStorage.setItem('gestiva_vendor', JSON.stringify(vendor));
+    showPanel();
+  } catch(e) {
+    err.textContent = e.message; err.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Iniciar sesión';
+  }
+});
+
+async function api(path) {
+  const r = await fetch(window.API_URL + path, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+async function loadPanel() {
+  $('#greeting').textContent = 'Hola ' + (vendor.name || '');
+  $('#hello').textContent = vendor.email;
+  const refUrl = location.origin + '/signup.html?ref=' + encodeURIComponent(vendor.refCode);
+  $('#refLink').textContent = refUrl;
+
+  const [stats, clientsResp, commResp] = await Promise.all([
+    api('/vendor/stats'),
+    api('/vendor/clients'),
+    api('/vendor/commissions')
+  ]);
+  if (!stats) return;
+
+  $('#kpiTotal').textContent = stats.clients.total;
+  $('#kpiTotalSub').textContent = `${stats.clients.in_trial} en prueba · ${stats.clients.lost} perdidos`;
+  $('#kpiActive').textContent = stats.clients.active;
+  $('#kpiPending').textContent = fmt(stats.commissions.pending);
+  $('#kpiEarned').textContent = fmt(stats.commissions.earned_total);
+
+  // Clientes
+  if (clientsResp.clients.length === 0) {
+    $('#clientsBox').innerHTML = '<div class="empty">Sin clientes todavía. Compartí tu link arriba para empezar.</div>';
+  } else {
+    $('#clientsBox').innerHTML = `<table class="data">
+      <thead><tr><th>Restaurante</th><th>Email</th><th>Plan</th><th>Estado</th><th style="text-align:right">Alta</th></tr></thead>
+      <tbody>${clientsResp.clients.map(c => `<tr>
+        <td><strong>${c.restaurant_name}</strong></td>
+        <td>${c.email}</td>
+        <td style="text-transform:capitalize">${c.plan || 'pro'}</td>
+        <td><span class="badge ${c.subscription_status}">${({trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'})[c.subscription_status] || c.subscription_status}</span></td>
+        <td style="text-align:right;color:var(--tx-mid)">${new Date(c.created_at).toLocaleDateString('es-AR')}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  // Comisiones
+  if (commResp.commissions.length === 0) {
+    $('#commissionsBox').innerHTML = '<div class="empty">Las comisiones aparecen cuando un cliente paga su suscripción.</div>';
+  } else {
+    $('#commissionsBox').innerHTML = `<table class="data">
+      <thead><tr><th>Restaurante</th><th>Fecha</th><th style="text-align:right">Pago</th><th style="text-align:right">%</th><th style="text-align:right">Comisión</th><th>Estado</th></tr></thead>
+      <tbody>${commResp.commissions.map(c => `<tr>
+        <td>${c.restaurant_name || '-'}</td>
+        <td style="color:var(--tx-mid)">${new Date(c.created_at).toLocaleDateString('es-AR')}</td>
+        <td style="text-align:right">${fmt(c.payment_amount)}</td>
+        <td style="text-align:right;color:var(--tx-mid)">${parseFloat(c.commission_pct)}%</td>
+        <td style="text-align:right;font-weight:700;color:var(--or-dk)">${fmt(c.commission_amt)}</td>
+        <td><span class="badge ${c.status}">${c.status==='paid'?'Cobrada':'Pendiente'}</span></td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+}
+
+function copyRefLink() {
+  const text = $('#refLink').textContent;
+  navigator.clipboard.writeText(text).then(()=> alert('Link copiado ✓'));
+}
+function shareWA() {
+  const url = $('#refLink').textContent;
+  const msg = encodeURIComponent('Hola! Te recomiendo Gestiva, un sistema súper completo para administrar tu restaurante o bar. Tenés 7 días gratis para probarlo: ' + url);
+  window.open('https://wa.me/?text=' + msg, '_blank');
+}
+</script>
+</body>
+</html>

@@ -263,3 +263,40 @@ CREATE TABLE IF NOT EXISTS mp_plans (
 
 -- LANZAMIENTO: eliminar la cuenta demo de pruebas (ya no se usa).
 DELETE FROM tenants WHERE email = 'demo@gestiva.app';
+
+-- ============================================================
+-- PROGRAMA DE VENDEDORES (Partners / Resellers)
+-- ============================================================
+
+-- VENDORS (cuenta de vendedor independiente)
+CREATE TABLE IF NOT EXISTS vendors (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email               TEXT UNIQUE NOT NULL,
+  password_hash       TEXT NOT NULL,
+  name                TEXT NOT NULL,
+  phone               TEXT,
+  ref_code            TEXT UNIQUE NOT NULL,            -- código único para el link
+  commission_percent  NUMERIC(5,2) DEFAULT 20.00,      -- % sobre cobros de sus clientes
+  status              TEXT DEFAULT 'active',           -- active | paused
+  created_at          TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vendors_ref ON vendors(ref_code);
+
+-- Asociación tenant ↔ vendor (cliente captado por vendedor)
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS vendor_id UUID;
+CREATE INDEX IF NOT EXISTS idx_tenants_vendor ON tenants(vendor_id);
+
+-- COMISIONES generadas por cobros de suscripción
+CREATE TABLE IF NOT EXISTS vendor_commissions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vendor_id       UUID NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  tenant_id       UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  payment_amount  NUMERIC(12,2) NOT NULL,              -- monto del cobro de suscripción
+  commission_pct  NUMERIC(5,2) NOT NULL,               -- % aplicado en ese momento
+  commission_amt  NUMERIC(12,2) NOT NULL,              -- monto efectivo de la comisión
+  status          TEXT DEFAULT 'pending',              -- pending | paid
+  paid_at         TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vc_vendor ON vendor_commissions(vendor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_vc_tenant ON vendor_commissions(tenant_id);
