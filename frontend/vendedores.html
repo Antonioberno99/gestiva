@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--tx-dark:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--bg:#f8fafc;--border:#e2e8f0;--green:#10b981;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
   *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed 0%,#fafafa 50%,#fff7ed 100%);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased;padding:32px 20px;}
@@ -55,6 +56,13 @@
   .err.on{display:block}
   .alt{text-align:center;margin-top:18px;font-size:13px;color:var(--tx-mid)}
   .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+  .field textarea{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;resize:vertical}
+  .field textarea:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .field select{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit;background:#fff}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+  #gBtn{display:flex;justify-content:center}#gBtn:empty{display:none}
+  .note{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;padding:12px;border-radius:10px;font-size:13px;margin-bottom:16px;line-height:1.5}
 
   @media (max-width:768px){
     .hero h1{font-size:32px}
@@ -112,15 +120,31 @@
   </section>
 
   <section class="form-card" id="signupSection">
-    <h2>Crear cuenta de vendedor</h2>
-    <p class="sub">Sin costo. Sin compromiso. Empezás a vender hoy mismo.</p>
+    <h2>Solicitud para ser vendedor</h2>
+    <p class="sub">Completá tus datos. Revisamos tu solicitud y te avisamos por email cuando esté aprobada.</p>
+    <div class="note">Tu solicitud queda <strong>pendiente de aprobación</strong>. Una vez aprobada, recibís tu link único para empezar a vender.</div>
     <div class="err" id="err"></div>
+
+    <div id="gBtn"></div>
+    <div class="divider" id="gDivider" style="display:none;">o registrate con email</div>
+
     <form id="vendorForm">
-      <div class="field"><label>Nombre completo</label><input id="name" required placeholder="Juan Pérez" autofocus/></div>
-      <div class="field"><label>Email</label><input id="email" type="email" required placeholder="tu@email.com" autocomplete="email"/></div>
-      <div class="field"><label>Teléfono / WhatsApp</label><input id="phone" type="tel" placeholder="3884-XXXXXXX"/></div>
-      <div class="field"><label>Contraseña (mínimo 6 caracteres)</label><input id="password" type="password" required minlength="6" autocomplete="new-password"/></div>
-      <button type="submit" class="btn" id="submitBtn">Quiero ser vendedor</button>
+      <div class="field"><label>Nombre completo *</label><input id="name" required placeholder="Juan Pérez" autofocus/></div>
+      <div class="field"><label>Email *</label><input id="email" type="email" required placeholder="tu@email.com" autocomplete="email"/></div>
+      <div class="field"><label>Teléfono / WhatsApp *</label><input id="phone" type="tel" required placeholder="3884-XXXXXXX"/></div>
+      <div class="field"><label>Zona / Ciudad donde vas a vender *</label><input id="zona" required placeholder="Ej: San Salvador de Jujuy"/></div>
+      <div class="field"><label>¿Tenés experiencia en ventas?</label>
+        <select id="experiencia">
+          <option value="Sin experiencia">Sin experiencia, pero con muchas ganas</option>
+          <option value="Algo de experiencia">Algo de experiencia</option>
+          <option value="Mucha experiencia">Mucha experiencia en ventas</option>
+          <option value="Vendo gastronomía/software">Ya vendo a gastronomía o software</option>
+        </select>
+      </div>
+      <div class="field"><label>¿Cómo pensás vender Gestiva?</label><textarea id="comoVende" rows="2" placeholder="Ej: Visitando restaurantes de mi zona, redes sociales, contactos..."></textarea></div>
+      <div class="field"><label>Comentarios (opcional)</label><textarea id="comentarios" rows="2" placeholder="Algo que quieras contarnos"></textarea></div>
+      <div class="field"><label>Contraseña (mínimo 6 caracteres) *</label><input id="password" type="password" required minlength="6" autocomplete="new-password"/></div>
+      <button type="submit" class="btn" id="submitBtn">Enviar solicitud</button>
     </form>
     <div class="alt">¿Ya sos vendedor? <a href="vendedor.html">Iniciar sesión</a></div>
   </section>
@@ -132,10 +156,25 @@ const form = document.getElementById('vendorForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('submitBtn');
 
+function buildApplication() {
+  return {
+    zona: document.getElementById('zona').value.trim(),
+    telefono: document.getElementById('phone').value.trim(),
+    experiencia: document.getElementById('experiencia').value,
+    comoVende: document.getElementById('comoVende').value.trim(),
+    comentarios: document.getElementById('comentarios').value.trim()
+  };
+}
+function showErr(msg) { errEl.textContent = msg; errEl.classList.add('on'); }
+function mapErr(code) {
+  return ({email_taken:'Ese email ya está registrado', password_too_short:'La contraseña debe tener al menos 6 caracteres', missing_fields:'Faltan campos obligatorios', google_not_configured:'Google no está configurado'})[code] || code;
+}
+
+// Registro con email
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errEl.classList.remove('on');
-  btn.disabled = true; btn.textContent = 'Creando cuenta...';
+  btn.disabled = true; btn.textContent = 'Enviando solicitud...';
   try {
     const r = await fetch(window.API_URL + '/vendor/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -143,18 +182,44 @@ form.addEventListener('submit', async (e) => {
         name: document.getElementById('name').value.trim(),
         email: document.getElementById('email').value.trim(),
         phone: document.getElementById('phone').value.trim(),
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        application: buildApplication()
       })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(({email_taken:'Ese email ya está registrado', password_too_short:'La contraseña debe tener al menos 6 caracteres', missing_fields:'Faltan campos obligatorios'})[data.error] || data.error);
+    if (!r.ok) throw new Error(mapErr(data.error));
     localStorage.setItem('gestiva_vendor_token', data.token);
     localStorage.setItem('gestiva_vendor', JSON.stringify(data.vendor));
     location.href = 'vendedor.html';
   } catch (e) {
-    errEl.textContent = e.message; errEl.classList.add('on');
-    btn.disabled = false; btn.textContent = 'Quiero ser vendedor';
+    showErr(e.message);
+    btn.disabled = false; btn.textContent = 'Enviar solicitud';
   }
+});
+
+// Registro con Google (manda también la solicitud que tenga completada en el form)
+function initGoogleSignIn() {
+  if (!window.GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return;
+  window.google.accounts.id.initialize({ client_id: window.GOOGLE_CLIENT_ID, callback: handleGoogle, auto_select:false, context:'signup' });
+  window.google.accounts.id.renderButton(document.getElementById('gBtn'), { type:'standard', theme:'outline', size:'large', text:'signup_with', shape:'rectangular', logo_alignment:'center', width:360 });
+  document.getElementById('gDivider').style.display = '';
+}
+async function handleGoogle(response) {
+  errEl.classList.remove('on');
+  try {
+    const r = await fetch(window.API_URL + '/vendor/google', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: response.credential, application: buildApplication() })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(mapErr(data.error));
+    localStorage.setItem('gestiva_vendor_token', data.token);
+    localStorage.setItem('gestiva_vendor', JSON.stringify(data.vendor));
+    location.href = 'vendedor.html';
+  } catch(e) { showErr(e.message); }
+}
+window.addEventListener('load', () => {
+  let n = 0; const t = setInterval(() => { if (window.google?.accounts?.id) { clearInterval(t); initGoogleSignIn(); } else if (++n > 50) clearInterval(t); }, 200);
 });
 </script>
 </body>

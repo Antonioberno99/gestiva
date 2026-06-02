@@ -272,15 +272,24 @@ DELETE FROM tenants WHERE email = 'demo@gestiva.app';
 CREATE TABLE IF NOT EXISTS vendors (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email               TEXT UNIQUE NOT NULL,
-  password_hash       TEXT NOT NULL,
+  password_hash       TEXT,                            -- null si entra solo con Google
   name                TEXT NOT NULL,
   phone               TEXT,
   ref_code            TEXT UNIQUE NOT NULL,            -- código único para el link
   commission_percent  NUMERIC(5,2) DEFAULT 20.00,      -- % sobre cobros de sus clientes
-  status              TEXT DEFAULT 'active',           -- active | paused
+  status              TEXT DEFAULT 'pending',          -- pending | active | rejected | paused
   created_at          TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_vendors_ref ON vendors(ref_code);
+
+-- Soporte Google + solicitud (application) + revisión del dueño
+ALTER TABLE IF EXISTS vendors ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS google_id TEXT;
+ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS google_picture TEXT;
+ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS application JSONB;     -- datos de la solicitud
+ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ;
+ALTER TABLE IF EXISTS vendors ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors(status, created_at DESC);
 
 -- Asociación tenant ↔ vendor (cliente captado por vendedor)
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS vendor_id UUID;

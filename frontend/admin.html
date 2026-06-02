@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Panel del Dueño · Gestiva</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--ink:#0f172a;--ink2:#1e293b;--tx-dark:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--bg:#0f172a;--border:#e2e8f0;--green:#10b981;--green-lt:#d1fae5;--yellow:#f59e0b;--yellow-lt:#fef3c7;--red:#ef4444;--blue:#3b82f6;--sh-md:0 12px 40px rgba(15,23,42,.10);--ff-display:'Outfit','Inter',sans-serif;--ff-body:'Inter',sans-serif; }
+  *{box-sizing:border-box} body{margin:0;font-family:var(--ff-body);background:#f1f5f9;color:var(--tx-dark);-webkit-font-smoothing:antialiased;min-height:100vh}
+
+  /* LOGIN */
+  .login-bg{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-wrap{max-width:420px;width:100%}
+  .login-brand{display:flex;align-items:center;gap:10px;margin-bottom:28px;justify-content:center}
+  .login-brand .logo{width:40px;height:40px;border-radius:11px;background:#fff;display:grid;place-items:center;overflow:hidden}
+  .login-brand .logo img{width:38px;height:38px;object-fit:contain}
+  .login-brand .name{font-family:var(--ff-display);font-weight:800;font-size:20px;color:#fff}
+  .login-brand .badge{font-size:11px;background:var(--or);color:#fff;padding:3px 10px;border-radius:999px;font-weight:700;letter-spacing:.04em}
+  .login-card{background:#fff;border-radius:24px;padding:36px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .login-card h1{font-family:var(--ff-display);font-size:22px;margin:0 0 6px;text-align:center}
+  .login-card .sub{color:var(--tx-mid);font-size:13px;text-align:center;margin-bottom:22px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:6px}
+  .field input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);font-size:14px;font-family:inherit}
+  .field input:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .btn-primary{width:100%;padding:13px;border:none;border-radius:12px;font-weight:700;font-size:15px;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;box-shadow:0 6px 16px rgba(249,115,22,.3)}
+  .err{background:#fee2e2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none}
+  .err.on{display:block}
+  #gBtnAdmin{display:flex;justify-content:center;margin-top:6px}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+  /* TOPBAR */
+  .topbar{background:var(--ink);color:#fff;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+  .topbar-left{display:flex;align-items:center;gap:14px}
+  .topbar .logo{width:34px;height:34px;border-radius:9px;background:#fff;display:grid;place-items:center;overflow:hidden}
+  .topbar .logo img{width:32px;height:32px;object-fit:contain}
+  .topbar .name{font-family:var(--ff-display);font-weight:800;font-size:18px}
+  .topbar .badge{font-size:11px;background:var(--or);padding:3px 10px;border-radius:999px;font-weight:700;letter-spacing:.04em}
+  .topbar-right{display:flex;align-items:center;gap:14px;font-size:13px;color:#cbd5e1}
+  .logout-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;cursor:pointer;font-size:13px;font-family:inherit;padding:7px 14px;border-radius:8px}
+
+  .container{max-width:1240px;margin:0 auto;padding:28px 24px}
+
+  /* KPIs */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:14px}
+  .kpi{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
+  .kpi-label{font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .kpi-val{font-family:var(--ff-display);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+  .kpi-val.money{color:var(--or-dk)}
+  .kpi-sub{font-size:12px;color:var(--tx-mid);margin-top:4px}
+
+  /* TABS */
+  .tabs{display:flex;gap:6px;margin:24px 0 18px;flex-wrap:wrap}
+  .tab{padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--tx-mid);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;position:relative}
+  .tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tab .count{display:inline-block;margin-left:6px;background:var(--or);color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;font-weight:700}
+  .tab.active .count{background:var(--or)}
+
+  .panel{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;display:none}
+  .panel.active{display:block}
+  .panel h2{font-family:var(--ff-display);font-size:18px;margin:0 0 16px}
+
+  table.data{width:100%;border-collapse:collapse;font-size:13px}
+  table.data th,table.data td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+  table.data th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx-mid);font-weight:600}
+  table.data tbody tr:hover{background:#f8fafc}
+  .badge2{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
+  .badge2.pending{background:var(--yellow-lt);color:#b45309}
+  .badge2.active{background:var(--green-lt);color:#047857}
+  .badge2.trial{background:#dbeafe;color:#1e40af}
+  .badge2.rejected,.badge2.expired,.badge2.cancelled{background:#fee2e2;color:#b91c1c}
+  .badge2.paused,.badge2.grace{background:#f1f5f9;color:#475569}
+  .badge2.paid{background:var(--green-lt);color:#047857}
+  .empty{text-align:center;color:var(--tx-lt);padding:30px 0;font-size:13px}
+  .btn-act{padding:6px 12px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px}
+  .btn-approve{background:var(--green);color:#fff}
+  .btn-reject{background:#fff;color:var(--red);border:1px solid #fecaca}
+  .btn-pay{background:var(--or);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--tx-mid)}
+  .app-detail{font-size:12px;color:var(--tx-mid);line-height:1.5;margin-top:6px}
+  .app-detail b{color:var(--tx-dark)}
+
+  @media (max-width:768px){ .kpis{grid-template-columns:repeat(2,1fr)} table.data{font-size:12px} .container{padding:18px 12px} }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-bg" id="loginView">
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+      <span class="name">Gestiva</span>
+      <span class="badge">DUEÑO</span>
+    </div>
+    <div class="login-card">
+      <h1>Panel del Dueño</h1>
+      <p class="sub">Acceso exclusivo del organizador</p>
+      <div class="err" id="loginErr"></div>
+      <form id="loginForm">
+        <div class="field"><label>Email</label><input id="email" type="email" required autofocus autocomplete="email"/></div>
+        <div class="field"><label>Contraseña</label><input id="password" type="password" required autocomplete="current-password"/></div>
+        <button type="submit" class="btn-primary" id="loginBtn">Entrar</button>
+      </form>
+      <div class="divider" id="gDivider" style="display:none">o con Google</div>
+      <div id="gBtnAdmin"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL -->
+<div id="panelView" style="display:none">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+      <span class="name">Gestiva</span>
+      <span class="badge">DUEÑO</span>
+    </div>
+    <div class="topbar-right">
+      <span id="adminEmail"></span>
+      <button class="logout-btn" onclick="logout()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Restaurantes</div><div class="kpi-val" id="kTenants">0</div><div class="kpi-sub" id="kTenantsSub"></div></div>
+      <div class="kpi"><div class="kpi-label">MRR (ingreso mensual)</div><div class="kpi-val money" id="kMrr">$0</div><div class="kpi-sub">de clientes activos</div></div>
+      <div class="kpi"><div class="kpi-label">Vendedores</div><div class="kpi-val" id="kVendors">0</div><div class="kpi-sub" id="kVendorsSub"></div></div>
+      <div class="kpi"><div class="kpi-label">Comisiones a pagar</div><div class="kpi-val money" id="kCommPending">$0</div><div class="kpi-sub">pendientes</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="solicitudes" onclick="setTab('solicitudes')">Solicitudes <span class="count" id="cntPending" style="display:none">0</span></button>
+      <button class="tab" data-tab="vendedores" onclick="setTab('vendedores')">Vendedores</button>
+      <button class="tab" data-tab="comisiones" onclick="setTab('comisiones')">Comisiones</button>
+      <button class="tab" data-tab="restaurantes" onclick="setTab('restaurantes')">Restaurantes</button>
+    </div>
+
+    <div class="panel active" id="panel-solicitudes"><h2>Solicitudes de vendedores</h2><div id="solicitudesBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-vendedores"><h2>Todos los vendedores</h2><div id="vendedoresBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-comisiones"><h2>Comisiones</h2><div id="comisionesBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-restaurantes"><h2>Restaurantes (clientes)</h2><div id="restaurantesBox"><div class="empty">Cargando…</div></div></div>
+  </div>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="gestiva-config.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = (n) => '$' + Math.round(parseFloat(n)||0).toLocaleString('es-AR');
+const dt = (d) => d ? new Date(d).toLocaleDateString('es-AR') : '—';
+let token = localStorage.getItem('gestiva_admin_token');
+
+function logout(){ localStorage.removeItem('gestiva_admin_token'); location.reload(); }
+if (token) showPanel(); else showLogin();
+function showLogin(){ $('#loginView').style.display=''; $('#panelView').style.display='none'; }
+function showPanel(){ $('#loginView').style.display='none'; $('#panelView').style.display=''; loadAll(); }
+
+async function api(path, opts={}) {
+  const r = await fetch(window.API_URL + path, { ...opts, headers: { Authorization:'Bearer '+token, 'Content-Type':'application/json', ...(opts.headers||{}) } });
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+// LOGIN email
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err=$('#loginErr'); err.classList.remove('on');
+  const btn=$('#loginBtn'); btn.disabled=true; btn.textContent='Entrando...';
+  try {
+    const r = await fetch(window.API_URL + '/admin/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email:$('#email').value.trim(), password:$('#password').value })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : (data.error === 'admin_not_configured' ? 'El panel de dueño no está configurado en el servidor' : data.error));
+    token = data.token; localStorage.setItem('gestiva_admin_token', token);
+    showPanel();
+  } catch(e){ err.textContent=e.message; err.classList.add('on'); btn.disabled=false; btn.textContent='Entrar'; }
+});
+
+// LOGIN Google
+function initGoogle(){
+  if (!window.GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return;
+  window.google.accounts.id.initialize({ client_id:window.GOOGLE_CLIENT_ID, callback:onGoogle, auto_select:false });
+  window.google.accounts.id.renderButton($('#gBtnAdmin'), { type:'standard', theme:'filled_black', size:'large', text:'signin_with', shape:'rectangular', width:330 });
+  $('#gDivider').style.display='';
+}
+async function onGoogle(resp){
+  const err=$('#loginErr'); err.classList.remove('on');
+  try {
+    const r = await fetch(window.API_URL + '/admin/google', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ credential: resp.credential }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'not_admin' ? 'Esa cuenta de Google no es la del dueño' : data.error);
+    token = data.token; localStorage.setItem('gestiva_admin_token', token);
+    showPanel();
+  } catch(e){ err.textContent=e.message; err.classList.add('on'); }
+}
+window.addEventListener('load', ()=>{ let n=0; const t=setInterval(()=>{ if(window.google?.accounts?.id){clearInterval(t);initGoogle();} else if(++n>50)clearInterval(t);},200); });
+
+function setTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+name));
+}
+
+async function loadAll(){
+  const stats = await api('/admin/stats');
+  if (!stats) return;
+  $('#adminEmail').textContent = '';
+  $('#kTenants').textContent = stats.tenants.total;
+  $('#kTenantsSub').textContent = `${stats.tenants.trial} prueba · ${stats.tenants.active} activos`;
+  $('#kMrr').textContent = fmt(stats.mrr);
+  $('#kVendors').textContent = stats.vendors.total;
+  $('#kVendorsSub').textContent = `${stats.vendors.pending} pendientes · ${stats.vendors.active} activos`;
+  $('#kCommPending').textContent = fmt(stats.commissions.pending);
+  if (stats.vendors.pending > 0){ const c=$('#cntPending'); c.textContent=stats.vendors.pending; c.style.display=''; }
+  loadSolicitudes(); loadVendedores(); loadComisiones(); loadRestaurantes();
+}
+
+function appDetail(a){
+  if (!a) return '<span style="color:var(--tx-lt)">Sin solicitud detallada</span>';
+  return `<div class="app-detail">
+    <b>Zona:</b> ${a.zona||'—'} · <b>Experiencia:</b> ${a.experiencia||'—'}<br>
+    <b>Cómo vende:</b> ${a.comoVende||'—'}${a.comentarios?`<br><b>Notas:</b> ${a.comentarios}`:''}
+  </div>`;
+}
+
+async function loadSolicitudes(){
+  const data = await api('/admin/vendors?status=pending');
+  if (!data) return;
+  const box = $('#solicitudesBox');
+  if (!data.vendors.length){ box.innerHTML='<div class="empty">No hay solicitudes pendientes. 🎉</div>'; return; }
+  box.innerHTML = `<table class="data"><thead><tr><th>Vendedor</th><th>Contacto</th><th>Solicitud</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>
+    ${data.vendors.map(v=>`<tr>
+      <td><strong>${v.name}</strong></td>
+      <td>${v.email}<br><span style="color:var(--tx-mid)">${v.phone||'—'}</span></td>
+      <td>${appDetail(v.application)}</td>
+      <td style="color:var(--tx-mid)">${dt(v.appliedAt||v.createdAt)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-act btn-approve" onclick="approve('${v.id}')">Aprobar</button>
+        <button class="btn-act btn-reject" onclick="reject('${v.id}')">Rechazar</button>
+      </td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+async function loadVendedores(){
+  const data = await api('/admin/vendors');
+  if (!data) return;
+  const box = $('#vendedoresBox');
+  if (!data.vendors.length){ box.innerHTML='<div class="empty">Todavía no hay vendedores.</div>'; return; }
+  box.innerHTML = `<table class="data"><thead><tr><th>Vendedor</th><th>Estado</th><th>Ref</th><th style="text-align:center">Clientes</th><th style="text-align:center">Activos</th><th style="text-align:right">Comisión %</th><th style="text-align:right">Ganado</th><th>Acción</th></tr></thead><tbody>
+    ${data.vendors.map(v=>`<tr>
+      <td><strong>${v.name}</strong><br><span style="color:var(--tx-mid)">${v.email}</span></td>
+      <td><span class="badge2 ${v.status}">${({pending:'Pendiente',active:'Activo',rejected:'Rechazado',paused:'Pausado'})[v.status]||v.status}</span></td>
+      <td style="font-family:monospace;font-size:12px">${v.refCode}</td>
+      <td style="text-align:center">${v.clientsCount}</td>
+      <td style="text-align:center;color:var(--green);font-weight:700">${v.activeClients}</td>
+      <td style="text-align:right">${v.commissionPercent}%</td>
+      <td style="text-align:right;font-weight:700;color:var(--or-dk)">${fmt(v.commissionsTotal)}</td>
+      <td style="white-space:nowrap">
+        ${v.status==='active'?`<button class="btn-act btn-ghost" onclick="pause('${v.id}')">Pausar</button>`:''}
+        ${v.status==='paused'?`<button class="btn-act btn-approve" onclick="reactivate('${v.id}')">Reactivar</button>`:''}
+        ${v.status==='pending'?`<button class="btn-act btn-approve" onclick="approve('${v.id}')">Aprobar</button>`:''}
+      </td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+async function loadComisiones(){
+  const data = await api('/admin/commissions');
+  if (!data) return;
+  const box = $('#comisionesBox');
+  if (!data.commissions.length){ box.innerHTML='<div class="empty">Todavía no hay comisiones generadas.</div>'; return; }
+  box.innerHTML = `<table class="data"><thead><tr><th>Vendedor</th><th>Restaurante</th><th>Fecha</th><th style="text-align:right">Pago</th><th style="text-align:right">%</th><th style="text-align:right">Comisión</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+    ${data.commissions.map(c=>`<tr>
+      <td>${c.vendor_name||'—'}</td>
+      <td>${c.restaurant_name||'—'}</td>
+      <td style="color:var(--tx-mid)">${dt(c.created_at)}</td>
+      <td style="text-align:right">${fmt(c.payment_amount)}</td>
+      <td style="text-align:right;color:var(--tx-mid)">${parseFloat(c.commission_pct)}%</td>
+      <td style="text-align:right;font-weight:700;color:var(--or-dk)">${fmt(c.commission_amt)}</td>
+      <td><span class="badge2 ${c.status}">${c.status==='paid'?'Pagada':'Pendiente'}</span></td>
+      <td>${c.status==='pending'?`<button class="btn-act btn-pay" onclick="payComm('${c.id}')">Marcar pagada</button>`:'—'}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+async function loadRestaurantes(){
+  const data = await api('/admin/tenants');
+  if (!data) return;
+  const box = $('#restaurantesBox');
+  if (!data.tenants.length){ box.innerHTML='<div class="empty">Todavía no hay restaurantes.</div>'; return; }
+  box.innerHTML = `<table class="data"><thead><tr><th>Restaurante</th><th>Contacto</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th></tr></thead><tbody>
+    ${data.tenants.map(t=>`<tr>
+      <td><strong>${t.restaurant_name}</strong></td>
+      <td>${t.email}<br><span style="color:var(--tx-mid)">${t.phone||'—'}</span></td>
+      <td style="text-transform:capitalize">${t.plan||'pro'}</td>
+      <td><span class="badge2 ${t.subscription_status}">${({trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'})[t.subscription_status]||t.subscription_status}</span></td>
+      <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
+      <td style="text-align:right;color:var(--tx-mid)">${dt(t.created_at)}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+async function approve(id){ if(!confirm('¿Aprobar este vendedor? Va a recibir un email con su link.'))return; await api('/admin/vendors/'+id+'/approve',{method:'POST'}); loadAll(); }
+async function reject(id){ if(!confirm('¿Rechazar esta solicitud?'))return; await api('/admin/vendors/'+id+'/reject',{method:'POST'}); loadAll(); }
+async function pause(id){ if(!confirm('¿Pausar este vendedor? No podrá captar nuevos clientes.'))return; await api('/admin/vendors/'+id+'/status',{method:'POST',body:JSON.stringify({status:'paused'})}); loadAll(); }
+async function reactivate(id){ await api('/admin/vendors/'+id+'/status',{method:'POST',body:JSON.stringify({status:'active'})}); loadAll(); }
+async function payComm(id){ if(!confirm('¿Marcar esta comisión como pagada al vendedor?'))return; await api('/admin/commissions/'+id+'/pay',{method:'POST'}); loadAll(); }
+</script>
+</body>
+</html>

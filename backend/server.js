@@ -18,6 +18,7 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const { v4: uuid } = require('uuid');
 const { MercadoPagoConfig, PreApproval, Payment } = require('mercadopago');
+const mailer = require('./mailer');
 
 // ---------- Config ----------
 const PORT = process.env.PORT || 3100;
@@ -29,6 +30,9 @@ const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '39000'); // fallback 
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
 // Prueba gratis: usuarios nuevos arrancan con acceso completo (features Full) por TRIAL_DAYS días
 const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '7', 10);
+// Panel del dueño (admin). Login con estas credenciales.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 // ---------- Planes de suscripción ----------
 // Tres planes: start (más barato), pro (recomendado), full (premium)
@@ -162,6 +166,9 @@ function publicVendor(v) {
     refCode: v.ref_code,
     commissionPercent: parseFloat(v.commission_percent) || 0,
     status: v.status,
+    hasApplication: !!v.application,
+    googlePicture: v.google_picture || null,
+    appliedAt: v.applied_at,
     createdAt: v.created_at
   };
 }
@@ -366,8 +373,28 @@ async function requireVendorAuth(req, res, next) {
     }
     const v = (await q('SELECT * FROM vendors WHERE id=$1', [decoded.vendorId])).rows[0];
     if (!v) return res.status(401).json({ error: 'vendor_not_found' });
-    if (v.status !== 'active') return res.status(403).json({ error: 'vendor_paused' });
+    // 'pending' y 'active' pueden entrar al portal (pending ve estado de su solicitud).
+    // 'rejected' y 'paused' quedan bloqueados.
+    if (v.status === 'rejected') return res.status(403).json({ error: 'vendor_rejected' });
+    if (v.status === 'paused') return res.status(403).json({ error: 'vendor_paused' });
     req.vendor = v;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid_token' });
+  }
+}
+
+function signAdminToken() {
+  return jwt.sign({ role: 'admin', email: ADMIN_EMAIL }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+function requireAdminAuth(req, res, next) {
+  try {
+    const h = req.headers.authorization || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+    if (!token) return res.status(401).json({ error: 'no_token' });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') return res.status(401).json({ error: 'invalid_token' });
     next();
   } catch (e) {
     return res.status(401).json({ error: 'invalid_token' });
@@ -466,31 +493,27 @@ app.get('/auth/me', requireAuth, async (req, res) => {
 // de Google. Lo verificamos llamando al endpoint público de tokeninfo de Google.
 // - Si el email ya existe (con o sin password) → linkeamos google_id y log in.
 // - Si no existe → creamos tenant nuevo con restaurant_name placeholder.
+// Verifica un ID token de Google Identity Services. Devuelve {email, googleId, name, picture}
+// o lanza un Error con .code para responder el status correcto.
+async function verifyGoogleCredential(credential) {
+  if (!GOOGLE_CLIENT_ID) { const e = new Error('google_not_configured'); e.code = 503; throw e; }
+  if (!credential) { const e = new Error('missing_credential'); e.code = 400; throw e; }
+  const verifyRes = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+  if (!verifyRes.ok) { const e = new Error('invalid_credential'); e.code = 401; throw e; }
+  const info = await verifyRes.json();
+  const aud = Array.isArray(info.aud) ? info.aud : [info.aud];
+  if (!aud.includes(GOOGLE_CLIENT_ID)) { const e = new Error('invalid_audience'); e.code = 401; throw e; }
+  if (info.email_verified !== 'true' && info.email_verified !== true) { const e = new Error('email_not_verified'); e.code = 401; throw e; }
+  const email = (info.email || '').toLowerCase().trim();
+  const googleId = info.sub;
+  if (!email || !googleId) { const e = new Error('invalid_payload'); e.code = 400; throw e; }
+  return { email, googleId, name: info.name || '', picture: info.picture || null };
+}
+
 app.post('/auth/google', authLimiter, async (req, res) => {
   try {
-    if (!GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'google_not_configured' });
     const { credential } = req.body || {};
-    if (!credential) return res.status(400).json({ error: 'missing_credential' });
-
-    // Verificar el ID token con Google
-    const verifyRes = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
-    if (!verifyRes.ok) return res.status(401).json({ error: 'invalid_credential' });
-    const info = await verifyRes.json();
-
-    // Validar audience (debe coincidir con NUESTRO client_id) y que el email esté verificado
-    const aud = Array.isArray(info.aud) ? info.aud : [info.aud];
-    if (!aud.includes(GOOGLE_CLIENT_ID)) {
-      return res.status(401).json({ error: 'invalid_audience' });
-    }
-    if (info.email_verified !== 'true' && info.email_verified !== true) {
-      return res.status(401).json({ error: 'email_not_verified' });
-    }
-
-    const email = (info.email || '').toLowerCase().trim();
-    const googleId = info.sub;
-    const name = info.name || '';
-    const picture = info.picture || null;
-    if (!email || !googleId) return res.status(400).json({ error: 'invalid_payload' });
+    const { email, googleId, name, picture } = await verifyGoogleCredential(credential);
 
     // Buscar tenant existente por google_id o email
     const r = await q('SELECT * FROM tenants WHERE google_id=$1 OR email=$2 LIMIT 1', [googleId, email]);
@@ -513,14 +536,16 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       const fresh = await q('SELECT * FROM tenants WHERE id=$1', [t.id]);
       t = fresh.rows[0];
     } else {
-      // Crear tenant nuevo
+      // Crear tenant nuevo (mismo modelo de alta que /auth/register)
       isNew = true;
-      let initialStatus = 'pending';
-      let endsAt = null, graceEndsAt = null, startedAt = null;
+      let initialStatus, endsAt, graceEndsAt, startedAt = new Date();
       if (SKIP_BILLING) {
         initialStatus = 'active';
-        startedAt = new Date();
         endsAt = new Date(startedAt.getTime() + 365 * 86400000);
+        graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+      } else {
+        initialStatus = 'trial';
+        endsAt = new Date(startedAt.getTime() + TRIAL_DAYS * 86400000);
         graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
       }
       const ins = await q(
@@ -1482,10 +1507,21 @@ app.put('/api/settings', async (req, res) => {
 //             PROGRAMA DE VENDEDORES (Partners)
 // ============================================================
 
-// Registro público de vendedor
+// Genera un ref_code único reintentando ante colisión.
+async function uniqueRefCode(name) {
+  let refCode = makeRefCode(name);
+  for (let i = 0; i < 6; i++) {
+    const dup = await q('SELECT id FROM vendors WHERE ref_code=$1', [refCode]);
+    if (!dup.rows[0]) return refCode;
+    refCode = makeRefCode(name);
+  }
+  return refCode;
+}
+
+// Registro de vendedor con email+password. Queda PENDING hasta que el dueño apruebe.
 app.post('/vendor/register', authLimiter, async (req, res) => {
   try {
-    const { email, password, name, phone } = req.body || {};
+    const { email, password, name, phone, application } = req.body || {};
     if (!email || !password || !name) return res.status(400).json({ error: 'missing_fields' });
     if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
 
@@ -1494,23 +1530,51 @@ app.post('/vendor/register', authLimiter, async (req, res) => {
     if (exists.rows[0]) return res.status(409).json({ error: 'email_taken' });
 
     const hash = await bcrypt.hash(password, 10);
-    // Generar ref_code único (reintenta si choca)
-    let refCode = makeRefCode(name);
-    for (let i = 0; i < 5; i++) {
-      const dup = await q('SELECT id FROM vendors WHERE ref_code=$1', [refCode]);
-      if (!dup.rows[0]) break;
-      refCode = makeRefCode(name);
-    }
+    const refCode = await uniqueRefCode(name);
+    const app = application && typeof application === 'object' ? application : null;
 
     const ins = await q(
-      `INSERT INTO vendors (email, password_hash, name, phone, ref_code, commission_percent, status)
-       VALUES ($1,$2,$3,$4,$5,$6,'active') RETURNING *`,
-      [normEmail, hash, name.trim(), phone || null, refCode, 20.00]
+      `INSERT INTO vendors (email, password_hash, name, phone, ref_code, commission_percent, status, application, applied_at)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8) RETURNING *`,
+      [normEmail, hash, name.trim(), phone || null, refCode, 20.00, app, app ? new Date() : null]
     );
     const v = ins.rows[0];
+    if (app) mailer.notifyNewVendorApplication(v).catch(e => console.error('[mail] notify', e.message));
     return res.json({ token: signVendorToken(v), vendor: publicVendor(v) });
   } catch (e) {
     console.error('[vendor-register]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Registro / login de vendedor con Google
+app.post('/vendor/google', authLimiter, async (req, res) => {
+  try {
+    const { credential, application } = req.body || {};
+    const { email, googleId, name, picture } = await verifyGoogleCredential(credential);
+
+    let v = (await q('SELECT * FROM vendors WHERE google_id=$1 OR email=$2 LIMIT 1', [googleId, email])).rows[0];
+    let isNew = false;
+    if (v) {
+      if (!v.google_id || !v.google_picture) {
+        v = (await q('UPDATE vendors SET google_id=COALESCE(google_id,$1), google_picture=COALESCE(google_picture,$2) WHERE id=$3 RETURNING *',
+          [googleId, picture, v.id])).rows[0];
+      }
+    } else {
+      isNew = true;
+      const refCode = await uniqueRefCode(name);
+      const app = application && typeof application === 'object' ? application : null;
+      v = (await q(
+        `INSERT INTO vendors (email, name, google_id, google_picture, ref_code, commission_percent, status, application, applied_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8) RETURNING *`,
+        [email, name || 'Vendedor', googleId, picture, refCode, 20.00, app, app ? new Date() : null]
+      )).rows[0];
+      if (app) mailer.notifyNewVendorApplication(v).catch(e => console.error('[mail] notify', e.message));
+    }
+    return res.json({ token: signVendorToken(v), vendor: publicVendor(v), isNew });
+  } catch (e) {
+    if (e.code) return res.status(e.code).json({ error: e.message });
+    console.error('[vendor-google]', e);
     return res.status(500).json({ error: 'server_error' });
   }
 });
@@ -1521,7 +1585,7 @@ app.post('/vendor/login', authLimiter, async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'missing_fields' });
     const r = await q('SELECT * FROM vendors WHERE email=$1', [email.toLowerCase().trim()]);
     const v = r.rows[0];
-    if (!v) return res.status(401).json({ error: 'invalid_credentials' });
+    if (!v || !v.password_hash) return res.status(401).json({ error: 'invalid_credentials' });
     const ok = await bcrypt.compare(password, v.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
     return res.json({ token: signVendorToken(v), vendor: publicVendor(v) });
@@ -1533,6 +1597,20 @@ app.post('/vendor/login', authLimiter, async (req, res) => {
 
 app.get('/vendor/me', requireVendorAuth, async (req, res) => {
   res.json({ vendor: publicVendor(req.vendor) });
+});
+
+// Enviar / actualizar la solicitud (cuando el vendedor entró por Google sin completarla aún)
+app.post('/vendor/application', requireVendorAuth, async (req, res) => {
+  const { application } = req.body || {};
+  if (!application || typeof application !== 'object') return res.status(400).json({ error: 'missing_application' });
+  // Solo permite (re)enviar solicitud si sigue pendiente
+  if (req.vendor.status !== 'pending') return res.status(400).json({ error: 'already_reviewed' });
+  const wasFirst = !req.vendor.application;
+  const upd = await q('UPDATE vendors SET application=$1, applied_at=COALESCE(applied_at, now()), phone=COALESCE($2, phone) WHERE id=$3 RETURNING *',
+    [application, application.telefono || null, req.vendor.id]);
+  const v = upd.rows[0];
+  if (wasFirst) mailer.notifyNewVendorApplication(v).catch(e => console.error('[mail] notify', e.message));
+  res.json({ ok: true, vendor: publicVendor(v) });
 });
 
 // Listar clientes captados por el vendedor
@@ -1586,6 +1664,174 @@ app.get('/vendor/stats', requireVendorAuth, async (req, res) => {
     clients: clients.rows[0],
     commissions: comm.rows[0]
   });
+});
+
+// ============================================================
+//          PANEL DEL DUEÑO (Admin / Organizador)
+// ============================================================
+
+// ¿Está configurado el panel de dueño?
+app.get('/admin/configured', (req, res) => {
+  res.json({ configured: !!(ADMIN_EMAIL && ADMIN_PASSWORD) });
+});
+
+app.post('/admin/login', authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return res.status(503).json({ error: 'admin_not_configured' });
+    if (!email || !password) return res.status(400).json({ error: 'missing_fields' });
+    if (email.toLowerCase().trim() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+      return res.status(401).json({ error: 'invalid_credentials' });
+    }
+    return res.json({ token: signAdminToken(), admin: { email: ADMIN_EMAIL } });
+  } catch (e) {
+    console.error('[admin-login]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Login de admin con Google (solo si el email coincide con ADMIN_EMAIL)
+app.post('/admin/google', authLimiter, async (req, res) => {
+  try {
+    if (!ADMIN_EMAIL) return res.status(503).json({ error: 'admin_not_configured' });
+    const { credential } = req.body || {};
+    const { email } = await verifyGoogleCredential(credential);
+    if (email !== ADMIN_EMAIL) return res.status(403).json({ error: 'not_admin' });
+    return res.json({ token: signAdminToken(), admin: { email: ADMIN_EMAIL } });
+  } catch (e) {
+    if (e.code) return res.status(e.code).json({ error: e.message });
+    console.error('[admin-google]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Resumen global del negocio
+app.get('/admin/stats', requireAdminAuth, async (req, res) => {
+  const tenants = await q(`SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE subscription_status='trial')::int AS trial,
+      count(*) FILTER (WHERE subscription_status='active')::int AS active,
+      count(*) FILTER (WHERE subscription_status IN ('expired','cancelled','grace'))::int AS inactive
+    FROM tenants`);
+  const vendors = await q(`SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE status='pending')::int AS pending,
+      count(*) FILTER (WHERE status='active')::int AS active,
+      count(*) FILTER (WHERE status='rejected')::int AS rejected
+    FROM vendors`);
+  const revenue = await q(`SELECT
+      COALESCE(SUM(amount),0)::numeric AS total_collected,
+      count(*)::int AS payments
+    FROM subscription_payments WHERE status IN ('approved','authorized')`);
+  const mrr = await q(`SELECT COALESCE(SUM(last_payment_amount),0)::numeric AS mrr
+    FROM tenants WHERE subscription_status='active'`);
+  const commissions = await q(`SELECT
+      COALESCE(SUM(commission_amt),0)::numeric AS total,
+      COALESCE(SUM(commission_amt) FILTER (WHERE status='pending'),0)::numeric AS pending,
+      COALESCE(SUM(commission_amt) FILTER (WHERE status='paid'),0)::numeric AS paid
+    FROM vendor_commissions`);
+  res.json({
+    tenants: tenants.rows[0], vendors: vendors.rows[0],
+    revenue: revenue.rows[0], mrr: parseFloat(mrr.rows[0].mrr),
+    commissions: commissions.rows[0]
+  });
+});
+
+// Listar vendedores (con filtro opcional ?status=pending)
+app.get('/admin/vendors', requireAdminAuth, async (req, res) => {
+  const status = req.query.status;
+  const params = [];
+  let where = '';
+  if (status) { where = 'WHERE v.status=$1'; params.push(status); }
+  const r = await q(
+    `SELECT v.*,
+            (SELECT count(*)::int FROM tenants t WHERE t.vendor_id=v.id) AS clients_count,
+            (SELECT count(*)::int FROM tenants t WHERE t.vendor_id=v.id AND t.subscription_status='active') AS active_clients,
+            (SELECT COALESCE(SUM(commission_amt),0)::numeric FROM vendor_commissions vc WHERE vc.vendor_id=v.id) AS commissions_total
+     FROM vendors v ${where}
+     ORDER BY v.created_at DESC`,
+    params
+  );
+  res.json({ vendors: r.rows.map(v => ({ ...publicVendor(v), application: v.application, clientsCount: v.clients_count, activeClients: v.active_clients, commissionsTotal: parseFloat(v.commissions_total) })) });
+});
+
+// Detalle de un vendedor + sus clientes
+app.get('/admin/vendors/:id', requireAdminAuth, async (req, res) => {
+  const v = (await q('SELECT * FROM vendors WHERE id=$1', [req.params.id])).rows[0];
+  if (!v) return res.status(404).json({ error: 'not_found' });
+  const clients = (await q(`SELECT id, restaurant_name, email, phone, subscription_status, plan, created_at, last_payment_amount
+                            FROM tenants WHERE vendor_id=$1 ORDER BY created_at DESC`, [v.id])).rows;
+  res.json({ vendor: { ...publicVendor(v), application: v.application }, clients });
+});
+
+// Aprobar vendedor
+app.post('/admin/vendors/:id/approve', requireAdminAuth, async (req, res) => {
+  const v = (await q(`UPDATE vendors SET status='active', reviewed_at=now() WHERE id=$1 RETURNING *`, [req.params.id])).rows[0];
+  if (!v) return res.status(404).json({ error: 'not_found' });
+  mailer.notifyVendorApproved(v).catch(e => console.error('[mail] approve', e.message));
+  res.json({ ok: true, vendor: publicVendor(v) });
+});
+
+// Rechazar vendedor
+app.post('/admin/vendors/:id/reject', requireAdminAuth, async (req, res) => {
+  const v = (await q(`UPDATE vendors SET status='rejected', reviewed_at=now() WHERE id=$1 RETURNING *`, [req.params.id])).rows[0];
+  if (!v) return res.status(404).json({ error: 'not_found' });
+  mailer.notifyVendorRejected(v).catch(e => console.error('[mail] reject', e.message));
+  res.json({ ok: true, vendor: publicVendor(v) });
+});
+
+// Cambiar % de comisión de un vendedor
+app.post('/admin/vendors/:id/commission', requireAdminAuth, async (req, res) => {
+  const pct = parseFloat(req.body?.commissionPercent);
+  if (isNaN(pct) || pct < 0 || pct > 100) return res.status(400).json({ error: 'invalid_percent' });
+  const v = (await q('UPDATE vendors SET commission_percent=$1 WHERE id=$2 RETURNING *', [pct, req.params.id])).rows[0];
+  if (!v) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true, vendor: publicVendor(v) });
+});
+
+// Pausar / reactivar vendedor
+app.post('/admin/vendors/:id/status', requireAdminAuth, async (req, res) => {
+  const status = req.body?.status;
+  if (!['active', 'paused'].includes(status)) return res.status(400).json({ error: 'invalid_status' });
+  const v = (await q('UPDATE vendors SET status=$1 WHERE id=$2 RETURNING *', [status, req.params.id])).rows[0];
+  if (!v) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true, vendor: publicVendor(v) });
+});
+
+// Listar comisiones (global o ?status=pending)
+app.get('/admin/commissions', requireAdminAuth, async (req, res) => {
+  const status = req.query.status;
+  const params = [];
+  let where = '';
+  if (status) { where = 'WHERE vc.status=$1'; params.push(status); }
+  const r = await q(
+    `SELECT vc.*, v.name AS vendor_name, t.restaurant_name
+     FROM vendor_commissions vc
+     LEFT JOIN vendors v ON v.id=vc.vendor_id
+     LEFT JOIN tenants t ON t.id=vc.tenant_id
+     ${where}
+     ORDER BY vc.created_at DESC LIMIT 300`,
+    params
+  );
+  res.json({ commissions: r.rows });
+});
+
+// Marcar comisión como pagada al vendedor
+app.post('/admin/commissions/:id/pay', requireAdminAuth, async (req, res) => {
+  const r = await q(`UPDATE vendor_commissions SET status='paid', paid_at=now() WHERE id=$1 RETURNING *`, [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true });
+});
+
+// Listar todos los restaurantes (clientes del negocio)
+app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
+  const r = await q(
+    `SELECT t.id, t.restaurant_name, t.email, t.phone, t.subscription_status, t.plan,
+            t.created_at, t.last_payment_at, t.last_payment_amount, v.name AS vendor_name
+     FROM tenants t LEFT JOIN vendors v ON v.id=t.vendor_id
+     ORDER BY t.created_at DESC LIMIT 500`
+  );
+  res.json({ tenants: r.rows });
 });
 
 // ============================================================
