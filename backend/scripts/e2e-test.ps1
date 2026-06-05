@@ -65,10 +65,10 @@ Check 'Cancelar en pending = 400' ($cancelStatus -eq 400)
 $cfg = Api 'GET' '/admin/configured' $null $null
 Check 'Admin configurado' ($cfg.configured -eq $true)
 
-# 9. Páginas públicas cargan
-foreach ($p in @('/landing.html','/signup.html','/checkout.html','/billing-return.html')) {
+# 9. Páginas públicas cargan (URLs limpias de Vercel; .html redirige 308 y PS 5.1 no lo sigue)
+foreach ($p in @('/checkout','/signup','/vendedores','/admin')) {
   $code = 0
-  try { $code = (Invoke-WebRequest -Uri ('https://gestiva.site'+$p) -UseBasicParsing).StatusCode } catch { $code = 0 }
+  try { $code = (Invoke-WebRequest -Uri ('https://gestiva.site'+$p) -UseBasicParsing).StatusCode } catch { $code = [int]$_.Exception.Response.StatusCode.value__ }
   Check ("Pagina $p carga 200") ($code -eq 200)
 }
 
