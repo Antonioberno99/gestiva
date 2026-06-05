@@ -21,7 +21,7 @@ $reg = Api 'POST' '/auth/register' @{ email=$email; password='test1234'; restaur
 $tok = $reg.token
 Check 'Registro crea cuenta' ($tok -ne $null)
 Check 'Estado inicial = trial' ($reg.user.subscriptionStatus -eq 'trial')
-Check 'Trial 7 dias' ($reg.user.daysLeft -eq 7)
+Check 'Trial 30 dias' ($reg.user.daysLeft -eq 30)
 Check 'Plan elegido = pro' ($reg.user.plan -eq 'pro')
 
 # 2. Login

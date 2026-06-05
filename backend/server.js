@@ -29,7 +29,7 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
 const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '39000'); // fallback = precio PRO
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
 // Prueba gratis: usuarios nuevos arrancan con acceso completo (features Full) por TRIAL_DAYS días
-const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '7', 10);
+const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '30', 10);
 // Panel del dueño (admin). Login con estas credenciales.
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
