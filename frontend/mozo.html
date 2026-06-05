@@ -138,6 +138,7 @@
     </div>
     <div class="top-actions">
       <button class="btn btn-secondary" id="clockBtn" onclick="toggleClock()">Ingresar</button>
+      <button class="btn btn-secondary" onclick="Comandera.openConfig()" title="Configurar comandera">🖨️ Comandera</button>
       <button class="btn btn-secondary" onclick="showProfile()">Mi panel</button>
       <button class="btn btn-secondary" onclick="logout()">Salir</button>
     </div>
@@ -169,6 +170,7 @@
         <div class="cart-list" id="cartList"></div>
         <div class="cart-actions">
           <button class="btn btn-danger" onclick="clearCart()">Vaciar</button>
+          <button class="btn btn-secondary" id="reprintBtn" onclick="reprintLast()" title="Reimprimir comanda" style="display:none;">🧾 Imprimir</button>
           <button class="btn btn-primary" onclick="saveOrder()">Enviar a cocina</button>
         </div>
       </div>
@@ -188,6 +190,7 @@
 </section>
 
 <script src="gestiva-config.js"></script>
+<script src="comandera.js"></script>
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
 let WAITER_DEMO = false; // demo desactivado para producción
@@ -596,17 +599,47 @@ async function saveOrder() {
     };
   });
   try {
-    // 1) Crear ticket de cocina
-    await api('/waiter/kitchen', { method:'POST', body: JSON.stringify({ tableId: state.table.id, items: itemsForKitchen }) });
+    // 1) Crear ticket de cocina (KDS)
+    const ticket = await api('/waiter/kitchen', { method:'POST', body: JSON.stringify({ tableId: state.table.id, items: itemsForKitchen }) });
     // 2) Marcar items como enviados
     state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
     // 3) Persistir en open_tables
     await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
-    alert('Pedido enviado a cocina (' + newItems.length + ' items)');
+    // 4) Comandera: armar datos del ticket y guardar para reimprimir
+    lastTicket = buildTicketData(ticket, itemsForKitchen);
+    const reBtn = document.getElementById('reprintBtn'); if (reBtn) reBtn.style.display = '';
     renderCart();
+    // 5) Imprimir comanda según configuración del dispositivo
+    const cfg = Comandera.getCfg();
+    if (cfg.method !== 'screen' && cfg.autoprint) {
+      try { await Comandera.print(lastTicket); }
+      catch (e) { alert('Pedido enviado a cocina ✓\n\nPero no se pudo imprimir la comanda:\n' + (e.message || e) + '\n\nRevisá la configuración (botón Comandera).'); return; }
+    }
+    alert('Pedido enviado a cocina (' + newItems.length + ' items)' + (cfg.method !== 'screen' && cfg.autoprint ? ' e impreso ✓' : ''));
   } catch (e) {
     alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);
   }
+}
+
+// Arma el objeto de ticket para la comandera a partir de la respuesta del backend
+function buildTicketData(ticket, items) {
+  return {
+    restaurant: (state.restaurant && (state.restaurant.restaurantName || state.restaurant.restaurant_name)) || 'Gestiva',
+    table: (state.table && state.table.num) || (ticket && ticket.table_num) || null,
+    waiter: (state.waiter && state.waiter.name) || (ticket && ticket.waiter_name) || '',
+    ticketId: ticket && ticket.id,
+    datetime: new Date(),
+    items: items
+  };
+}
+
+let lastTicket = null;
+async function reprintLast() {
+  if (!lastTicket) { alert('No hay una comanda reciente para imprimir.'); return; }
+  const cfg = Comandera.getCfg();
+  if (cfg.method === 'screen') { alert('La comandera está en "Solo pantalla". Cambiá el método desde el botón Comandera para imprimir.'); return; }
+  try { await Comandera.print(lastTicket); }
+  catch (e) { alert('No se pudo imprimir: ' + (e.message || e)); }
 }
 
 function logout() {
