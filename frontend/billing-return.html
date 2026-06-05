@@ -19,8 +19,8 @@
 <body>
 <div class="box" id="box">
   <div class="spinner"></div>
-  <h1>Procesando pago</h1>
-  <p>Esperando confirmación de MercadoPago...</p>
+  <h1>Activando tu cuenta</h1>
+  <p>Esperando la confirmación de MercadoPago...</p>
 </div>
 <script src="gestiva-config.js"></script>
 <script>
@@ -31,9 +31,19 @@ async function check() {
   try {
     const r = await fetch(window.API_URL + '/billing/status', { headers: { Authorization: 'Bearer ' + token } });
     const data = await r.json();
+    // En el modelo de mes gratis, al dejar la tarjeta el estado pasa a 'trial' (sin cobro).
+    // 'active' aparece recién cuando MP hace el primer cobro al terminar el mes.
+    if (data.status === 'trial') {
+      const charge = data.endsAt ? new Date(data.endsAt).toLocaleDateString('es-AR',{day:'numeric',month:'long'}) : '';
+      document.getElementById('box').innerHTML = `
+        <h1 style="color:#10b981;">✓ ¡Listo! Empezó tu mes gratis</h1>
+        <p>Tenés acceso completo. El primer cobro es recién el <strong>${charge}</strong>, y podés cancelar cuando quieras.</p>
+        <a href="app.html" class="btn">Ir al panel →</a>`;
+      return true;
+    }
     if (data.status === 'active') {
       document.getElementById('box').innerHTML = `
-        <h1 style="color:#10b981;">✓ Pago confirmado</h1>
+        <h1 style="color:#10b981;">✓ Suscripción activa</h1>
         <p>Tu suscripción está activa hasta ${new Date(data.endsAt).toLocaleDateString('es-AR')}.</p>
         <a href="app.html" class="btn">Ir al panel →</a>`;
       return true;
@@ -50,9 +60,10 @@ async function poll() {
   if (attempts < 20) setTimeout(poll, 3000);
   else {
     document.getElementById('box').innerHTML = `
-      <h1>Estamos esperando MP</h1>
-      <p>MercadoPago aún no confirmó el pago. Probá refrescar en unos minutos o volvé al checkout.</p>
-      <a href="checkout.html" class="btn">Volver a checkout</a>`;
+      <h1>Casi listo</h1>
+      <p>MercadoPago todavía no confirmó. Puede tardar un minuto. Entrá al panel y, si no podés, volvé al checkout.</p>
+      <a href="app.html" class="btn" style="margin-bottom:10px;">Ir al panel →</a><br>
+      <a href="checkout.html" style="color:#475569;font-size:13px;">Volver al checkout</a>`;
   }
 }
 poll();

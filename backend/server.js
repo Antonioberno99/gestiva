@@ -217,6 +217,7 @@ function publicTenant(t) {
     subscriptionEndsAt: t.subscription_ends_at,
     graceEndsAt: t.grace_ends_at,
     mpInitPoint: t.mp_init_point,
+    cancelAtPeriodEnd: !!t.cancel_at_period_end,
     daysLeft: computeDaysLeft(t),
     isTrial,
     trialEndsAt: isTrial ? t.subscription_ends_at : null,
@@ -296,16 +297,22 @@ async function refreshSubscriptionStatus(tenantId) {
 
   const now = new Date();
   let newStatus = t.subscription_status;
+  const cancelling = t.cancel_at_period_end;
+  const endsPassed = t.subscription_ends_at && new Date(t.subscription_ends_at) < now;
+  const gracePassed = t.grace_ends_at && new Date(t.grace_ends_at) < now;
 
-  // Prueba gratis vencida → debe pagar (expired)
-  if (t.subscription_status === 'trial' && t.subscription_ends_at && new Date(t.subscription_ends_at) < now) {
-    newStatus = 'expired';
+  // Fin del mes gratis. Si el dueño canceló, se termina el acceso (no se le cobró nada).
+  // Si no canceló, MP está por cobrar: damos 'grace' para esperar la confirmación del pago.
+  if (t.subscription_status === 'trial' && endsPassed) {
+    newStatus = cancelling ? 'cancelled' : 'grace';
   }
-  if (t.subscription_status === 'active' && t.subscription_ends_at && new Date(t.subscription_ends_at) < now) {
-    newStatus = 'grace';
+  // Fin del período pago. Si canceló → se termina (cancelled). Si no → gracia esperando renovación.
+  if (t.subscription_status === 'active' && endsPassed) {
+    newStatus = cancelling ? 'cancelled' : 'grace';
   }
-  if (t.subscription_status === 'grace' && t.grace_ends_at && new Date(t.grace_ends_at) < now) {
-    newStatus = 'expired';
+  // Gracia agotada sin pago → vencida (o cancelada si venía cancelando).
+  if (t.subscription_status === 'grace' && gracePassed) {
+    newStatus = cancelling ? 'cancelled' : 'expired';
   }
 
   if (newStatus !== t.subscription_status) {
@@ -427,16 +434,18 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     // Modo de alta:
     // - SKIP_BILLING (dev): activo 1 año
-    // - Producción: prueba gratis con acceso completo por TRIAL_DAYS días, luego paga el plan elegido
+    // - Producción: el dueño debe dejar la tarjeta para arrancar el mes gratis.
+    //   Hasta que no autorice la suscripción en MercadoPago queda 'pending' (sin acceso).
+    //   El estado pasa a 'trial' (mes gratis) cuando el webhook confirma la autorización.
     let initialStatus, endsAt, graceEndsAt, startedAt = new Date();
     if (SKIP_BILLING) {
       initialStatus = 'active';
       endsAt = new Date(startedAt.getTime() + 365 * 86400000);
       graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
     } else {
-      initialStatus = 'trial';
-      endsAt = new Date(startedAt.getTime() + TRIAL_DAYS * 86400000);   // fin de prueba
-      graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+      initialStatus = 'pending';
+      endsAt = null;
+      graceEndsAt = null;
     }
 
     const ins = await q(
@@ -544,9 +553,10 @@ app.post('/auth/google', authLimiter, async (req, res) => {
         endsAt = new Date(startedAt.getTime() + 365 * 86400000);
         graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
       } else {
-        initialStatus = 'trial';
-        endsAt = new Date(startedAt.getTime() + TRIAL_DAYS * 86400000);
-        graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+        // Debe dejar la tarjeta para arrancar el mes gratis → 'pending' hasta autorizar.
+        initialStatus = 'pending';
+        endsAt = null;
+        graceEndsAt = null;
       }
       // Asociar vendedor si vino con código (ref) válido y activo
       let vendorId = null;
@@ -586,12 +596,13 @@ app.post('/auth/google', authLimiter, async (req, res) => {
 // La cuenta MP solo permite "Suscripciones con plan", por eso usamos preapproval_plan.
 async function ensureMpPlan(tierId) {
   const plan = planFor(tierId);
-  // ¿Ya tenemos un plan con el monto actual?
+  // ¿Ya tenemos un plan con el monto actual Y con el mes gratis (free_trial) configurado?
   const existing = await q('SELECT * FROM mp_plans WHERE tier=$1', [tierId]);
-  if (existing.rows[0] && parseFloat(existing.rows[0].amount) === plan.price) {
+  if (existing.rows[0] && parseFloat(existing.rows[0].amount) === plan.price && existing.rows[0].has_free_trial) {
     return existing.rows[0];
   }
-  // Crear el plan en MercadoPago
+  // Crear el plan en MercadoPago con 1 mes de prueba gratis.
+  // El dueño deja la tarjeta ahora; MP recién cobra al terminar el free_trial.
   const r = await fetch('https://api.mercadopago.com/preapproval_plan', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + MP_TOKEN, 'Content-Type': 'application/json' },
@@ -599,7 +610,8 @@ async function ensureMpPlan(tierId) {
       reason: `Gestiva ${plan.name}`,
       auto_recurring: {
         frequency: 1, frequency_type: 'months',
-        transaction_amount: plan.price, currency_id: 'ARS'
+        transaction_amount: plan.price, currency_id: 'ARS',
+        free_trial: { frequency: TRIAL_DAYS, frequency_type: 'days' }
       },
       back_url: `${APP_URL}/billing-return.html`
     })
@@ -608,9 +620,9 @@ async function ensureMpPlan(tierId) {
   if (!r.ok) {
     throw new Error('mp_plan_error: ' + JSON.stringify(data));
   }
-  await q(`INSERT INTO mp_plans (tier, mp_plan_id, init_point, amount)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT (tier) DO UPDATE SET mp_plan_id=$2, init_point=$3, amount=$4, created_at=now()`,
+  await q(`INSERT INTO mp_plans (tier, mp_plan_id, init_point, amount, has_free_trial)
+           VALUES ($1,$2,$3,$4,true)
+           ON CONFLICT (tier) DO UPDATE SET mp_plan_id=$2, init_point=$3, amount=$4, has_free_trial=true, created_at=now()`,
     [tierId, data.id, data.init_point, plan.price]);
   return { tier: tierId, mp_plan_id: data.id, init_point: data.init_point, amount: plan.price };
 }
@@ -657,21 +669,24 @@ app.post('/billing/webhook', async (req, res) => {
 
       // status: pending, authorized, paused, cancelled
       if (info.status === 'authorized') {
+        // El dueño dejó la tarjeta y MP autorizó la suscripción con el mes gratis.
+        // Arranca la PRUEBA (trial): acceso completo, sin cobro todavía.
+        // La comisión al vendedor NO se acredita acá (no hubo plata) — se acredita en el primer pago real.
         const now = new Date();
-        const ends = new Date(now.getTime() + 30 * 86400000);
+        const ends = new Date(now.getTime() + TRIAL_DAYS * 86400000); // fin del mes gratis = primer cobro
         const grace = new Date(ends.getTime() + GRACE_DAYS * 86400000);
-        const amount = info.auto_recurring?.transaction_amount || SUB_PRICE;
-        await q(`UPDATE tenants SET subscription_status='active',
-                 subscription_started_at=COALESCE(subscription_started_at, $1),
-                 subscription_ends_at=$2, grace_ends_at=$3,
-                 last_payment_at=$1, last_payment_amount=$4
+        // Guardamos el id real de la suscripción (preapproval) para poder cancelarla luego.
+        await q(`UPDATE tenants SET subscription_status='trial',
+                 mp_preapproval_id=$1, cancel_at_period_end=false,
+                 subscription_started_at=COALESCE(subscription_started_at, $2),
+                 subscription_ends_at=$3, grace_ends_at=$4
                  WHERE id=$5`,
-          [now, ends, grace, amount, tenantId]);
+          [data.id, now, ends, grace, tenantId]);
         await q(`INSERT INTO subscription_payments (tenant_id, mp_preapproval_id, amount, status, raw)
-                 VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, amount, 'authorized', info]);
-        await creditVendorCommission(tenantId, amount);
+                 VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, 0, 'trial_authorized', info]);
       } else if (info.status === 'cancelled' || info.status === 'paused') {
-        await q(`UPDATE tenants SET subscription_status='cancelled' WHERE id=$1`, [tenantId]);
+        // Cancelación desde MP: mantenemos acceso hasta fin del período ya pagado/de prueba.
+        await q(`UPDATE tenants SET cancel_at_period_end=true WHERE id=$1`, [tenantId]);
       }
     }
 
@@ -713,6 +728,7 @@ app.get('/billing/status', requireAuth, async (req, res) => {
     graceEndsAt: req.tenant.grace_ends_at,
     daysLeft: computeDaysLeft(req.tenant),
     initPoint: req.tenant.mp_init_point,
+    cancelAtPeriodEnd: !!req.tenant.cancel_at_period_end,
     lastPaymentAt: req.tenant.last_payment_at,
     lastPaymentAmount: req.tenant.last_payment_amount,
     plan: planId,
@@ -720,6 +736,55 @@ app.get('/billing/status', requireAuth, async (req, res) => {
     planPrice: plan.price,
     planFeatures: plan.features
   });
+});
+
+// Cancelar la suscripción. No se cobra más, pero el dueño mantiene el acceso
+// hasta el final del período que ya tiene (mes gratis o mes pago).
+app.post('/billing/cancel', requireAuth, async (req, res) => {
+  try {
+    const t = req.tenant;
+    if (['pending', 'expired', 'cancelled'].includes(t.subscription_status)) {
+      return res.status(400).json({ error: 'nothing_to_cancel', status: t.subscription_status });
+    }
+    // Cancelar la suscripción en MercadoPago para frenar cobros futuros (si existe).
+    if (t.mp_preapproval_id && MP_TOKEN && !SKIP_BILLING) {
+      try {
+        const r = await fetch(`https://api.mercadopago.com/preapproval/${t.mp_preapproval_id}`, {
+          method: 'PUT',
+          headers: { Authorization: 'Bearer ' + MP_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'cancelled' })
+        });
+        if (!r.ok) {
+          const detail = await r.text();
+          console.warn('[cancel] MP no canceló:', r.status, detail);
+        }
+      } catch (e) {
+        console.warn('[cancel] error llamando a MP:', e?.message || e);
+      }
+    }
+    // Marcamos cancelación al fin de período: mantiene acceso hasta subscription_ends_at.
+    await q('UPDATE tenants SET cancel_at_period_end=true WHERE id=$1', [t.id]);
+    const fresh = await q('SELECT * FROM tenants WHERE id=$1', [t.id]);
+    return res.json({ ok: true, user: publicTenant(fresh.rows[0]) });
+  } catch (e) {
+    console.error('[cancel]', e?.message || e);
+    return res.status(500).json({ error: 'cancel_error' });
+  }
+});
+
+// Reactivar una cancelación pendiente (si todavía no terminó el período).
+app.post('/billing/reactivate', requireAuth, async (req, res) => {
+  try {
+    const t = req.tenant;
+    if (!t.cancel_at_period_end) return res.json({ ok: true, user: publicTenant(t) });
+    // Si sigue dentro del período, simplemente quitamos la marca. Deberá volver a
+    // suscribirse en MP para reanudar cobros (lo guiamos desde el checkout).
+    await q('UPDATE tenants SET cancel_at_period_end=false WHERE id=$1', [t.id]);
+    const fresh = await q('SELECT * FROM tenants WHERE id=$1', [t.id]);
+    return res.json({ ok: true, user: publicTenant(fresh.rows[0]) });
+  } catch (e) {
+    return res.status(500).json({ error: 'reactivate_error' });
+  }
 });
 
 // Diagnóstico liviano de MercadoPago (NO expone el token ni crea objetos)

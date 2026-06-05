@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Carrusel Lanzamiento · 8 slides</title>
+<link rel="stylesheet" href="_styles.css">
+<style>
+  body {
+    background: #1a1a1a;
+    padding: 40px 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .header {
+    max-width: 1080px;
+    width: 100%;
+    margin-bottom: 30px;
+    color: #fff;
+    font-family: 'Outfit', sans-serif;
+  }
+  .header h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+  .header p { color: #94a3b8; font-size: 14px; font-family: 'Inter', sans-serif; }
+  .grid {
+    display: grid;
+    gap: 30px;
+    max-width: 1080px;
+  }
+  .preview {
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .label {
+    background: #0f172a;
+    color: #fff;
+    padding: 16px 24px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .label a { color: var(--or); text-decoration: none; font-size: 13px; }
+  .label a:hover { text-decoration: underline; }
+  iframe {
+    width: 100%;
+    aspect-ratio: 1080 / 1350;
+    border: 0;
+    display: block;
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Carrusel 1 · Lanzamiento de Gestiva</h1>
+  <p>8 slides · Formato Instagram 4:5 (1080×1350). Cada slide es una página HTML independiente. Para descargar como PNG: abrí el slide en una pestaña nueva y screenshoteá a tamaño completo.</p>
+</div>
+
+<div class="grid">
+  <div class="preview"><div class="label"><span>Slide 1 · Portada</span><a href="slide-1.html" target="_blank">Abrir →</a></div><iframe src="slide-1.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 2 · Hablemos claro</span><a href="slide-2.html" target="_blank">Abrir →</a></div><iframe src="slide-2.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 3 · El método viejo</span><a href="slide-3.html" target="_blank">Abrir →</a></div><iframe src="slide-3.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 4 · El número no cierra</span><a href="slide-4.html" target="_blank">Abrir →</a></div><iframe src="slide-4.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 5 · Te presentamos Gestiva</span><a href="slide-5.html" target="_blank">Abrir →</a></div><iframe src="slide-5.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 6 · 4 features</span><a href="slide-6.html" target="_blank">Abrir →</a></div><iframe src="slide-6.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 7 · Sin complicaciones</span><a href="slide-7.html" target="_blank">Abrir →</a></div><iframe src="slide-7.html"></iframe></div>
+  <div class="preview"><div class="label"><span>Slide 8 · CTA 30 días gratis</span><a href="slide-8.html" target="_blank">Abrir →</a></div><iframe src="slide-8.html"></iframe></div>
+</div>
+</body>
+</html>

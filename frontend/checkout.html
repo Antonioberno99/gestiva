@@ -126,14 +126,35 @@ function renderCheckout(status) {
     return;
   }
 
-  // trial o pending
+  // trial = ya dejó la tarjeta y está en el mes gratis
+  if (s === 'trial') {
+    const trialDays = Math.max(0, Math.ceil((new Date(status.endsAt) - new Date()) / 86400000));
+    const chargeDate = new Date(status.endsAt).toLocaleDateString('es-AR', {day:'numeric',month:'long'});
+    const planInfo = PLANS_INFO[currentPlan];
+    const cancelling = status.cancelAtPeriodEnd;
+    card.innerHTML = `
+      <div class="alert success">🎉 Estás en tu <strong>mes gratis</strong> con acceso completo. Te quedan <strong>${trialDays} día${trialDays===1?'':'s'}</strong>.</div>
+      <h1>¡Todo listo!</h1>
+      <p class="sub">Hola <strong>${user.restaurantName}</strong>, ya podés usar Gestiva sin límites.</p>
+      <div class="price-block">
+        <div class="price" style="font-size:34px;">Gratis hasta el ${chargeDate}</div>
+        <div class="price-period">${cancelling
+          ? 'Cancelaste la renovación. No se te va a cobrar.'
+          : `Después: Plan ${planInfo.name} ${planInfo.label}/mes · se cobra automáticamente`}</div>
+      </div>
+      <a href="app.html" class="btn btn-primary">Ir al panel →</a>
+      ${cancelling ? '' : '<button class="btn btn-test" id="cancelBtn" style="margin-top:10px;">Cancelar suscripción</button>'}
+    `;
+    bindCancelBtn();
+    return;
+  }
+
+  // pending = registrado pero todavía sin tarjeta → debe dejarla para empezar el mes gratis
   const planInfo = PLANS_INFO[currentPlan];
-  const isTrial = s === 'trial';
-  const trialDays = isTrial ? Math.max(0, Math.ceil((new Date(status.endsAt) - new Date()) / 86400000)) : 0;
   card.innerHTML = `
-    ${isTrial ? `<div class="alert success">🎉 Estás en <strong>prueba gratis</strong> con acceso completo. Te quedan <strong>${trialDays} día${trialDays===1?'':'s'}</strong>.</div>` : ''}
-    <h1>${isTrial ? 'Tu plan' : 'Activá tu suscripción'}</h1>
-    <p class="sub">Hola <strong>${user.restaurantName}</strong>, ${isTrial ? 'cuando termine la prueba se activa el plan que elijas. Podés suscribirte ahora y no perdés los días de prueba.' : 'falta solo un paso para empezar.'}</p>
+    <div class="alert info">Dejá tu tarjeta para activar tu <strong>mes gratis</strong>. No se te cobra nada durante los primeros 30 días.</div>
+    <h1>Empezá tu mes gratis</h1>
+    <p class="sub">Hola <strong>${user.restaurantName}</strong>, elegí tu plan y activá Gestiva. El primer cobro es recién dentro de 30 días y podés cancelar cuando quieras.</p>
 
     <div class="plan-label">Plan elegido</div>
     <div class="plan-switch">
@@ -143,18 +164,38 @@ function renderCheckout(status) {
     </div>
 
     <div class="price-block">
-      <div class="price">${planInfo.label}</div>
-      <div class="price-period">Plan ${planInfo.name} · por mes · Argentina</div>
+      <div class="price" style="font-size:34px;">30 días gratis</div>
+      <div class="price-period">Luego Plan ${planInfo.name} · ${planInfo.label}/mes · Argentina</div>
     </div>
 
     <div class="feat" id="planFeatures"></div>
 
-    ${isTrial ? '<a href="app.html" class="btn btn-test" style="margin-bottom:10px;">Seguir usando la prueba →</a>' : ''}
-    ${renderPayBlock()}
+    ${renderPayBlock(true)}
   `;
   renderPlanFeatures();
   bindPlanSwitch();
   bindPayBtn();
+}
+
+async function bindCancelBtn() {
+  const btn = document.getElementById('cancelBtn');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!confirm('¿Seguro que querés cancelar? Vas a mantener el acceso hasta que termine el período actual, y no se te cobra más.')) return;
+    btn.disabled = true; btn.textContent = 'Cancelando...';
+    try {
+      const r = await fetch(window.API_URL + '/billing/cancel', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'No se pudo cancelar');
+      if (data.user) { user = data.user; localStorage.setItem('gestiva_user', JSON.stringify(user)); }
+      loadStatus().then(renderCheckout);
+    } catch (e) {
+      alert('Error: ' + e.message);
+      btn.disabled = false; btn.textContent = 'Cancelar suscripción';
+    }
+  };
 }
 
 function renderPlanFeatures() {
@@ -198,13 +239,15 @@ function bindPlanSwitch() {
   });
 }
 
-function renderPayBlock() {
+function renderPayBlock(isPending) {
   return `
     <button class="btn btn-primary" id="payBtn">
-      Pagar con <span class="mp-logo">MercadoPago</span> →
+      ${isPending ? 'Agregar tarjeta y empezar gratis' : 'Reactivar con'} <span class="mp-logo">MercadoPago</span> →
     </button>
     <p style="font-size:11px;color:var(--tx-lt);margin-top:12px;">
-      Se cobra automáticamente el mismo día de cada mes. Podés cancelar desde MercadoPago.
+      ${isPending
+        ? 'Validamos tu tarjeta con MercadoPago. No se te cobra durante 30 días. Después se cobra automático cada mes y cancelás cuando quieras.'
+        : 'Se cobra automáticamente cada mes. Podés cancelar cuando quieras.'}
     </p>
   `;
 }

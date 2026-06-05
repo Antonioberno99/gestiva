@@ -1,0 +1,214 @@
+/* ============================================================
+   Gestiva — Estilos compartidos para todos los slides
+   Formato Instagram carrusel: 1080x1350 (4:5)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap');
+
+:root {
+  --or: #f97316;
+  --or-dk: #ea580c;
+  --or-lt: #fff7ed;
+  --or-100: #ffedd5;
+  --ink: #0f172a;
+  --ink2: #1e293b;
+  --cream: #fff7ed;
+  --white: #ffffff;
+  --slate: #475569;
+  --slate-lt: #cbd5e1;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #1a1a1a;
+}
+/* Cuando el slide se ve solo (no en el index), ocupa exactamente 1080x1350 */
+body:not(.is-grid) > .slide {
+  margin: 0;
+  width: 1080px;
+  height: 1350px;
+}
+
+/* CADA SLIDE = 1080x1350 exactos para Instagram (4:5) */
+.slide {
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Bases por estilo */
+.bg-dark    { background: var(--ink); color: var(--white); }
+.bg-cream   { background: var(--cream); color: var(--ink); }
+.bg-orange  { background: linear-gradient(135deg, var(--or) 0%, var(--or-dk) 100%); color: var(--white); }
+
+/* Glow naranja decorativo */
+.glow-or {
+  position: absolute;
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(249,115,22,.35) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Layout interno consistente */
+.inner {
+  padding: 100px 90px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 2;
+}
+
+/* Tipografía display */
+.display {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+}
+.display-xl { font-size: 132px; }
+.display-lg { font-size: 104px; }
+.display-md { font-size: 84px; }
+.display-sm { font-size: 64px; }
+
+.subhead {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+}
+
+.kicker {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+/* Branding/Logo footer */
+.brand-mark {
+  position: absolute;
+  bottom: 60px;
+  left: 90px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+.brand-dot {
+  width: 16px; height: 16px;
+  background: var(--or);
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px rgba(249,115,22,.18);
+}
+.bg-dark .brand-mark { color: var(--white); }
+.bg-cream .brand-mark { color: var(--ink); }
+.bg-orange .brand-mark { color: var(--white); }
+.bg-orange .brand-dot { background: var(--white); box-shadow: 0 0 0 6px rgba(255,255,255,.25); }
+
+/* Numero de slide */
+.pageno {
+  position: absolute;
+  top: 60px;
+  right: 90px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  opacity: 0.45;
+}
+
+/* Texto resaltado naranja */
+.hi { color: var(--or); }
+.bg-orange .hi { color: var(--ink); }
+
+/* Texto que ocupa todo el slide centrado */
+.center-stack {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* Etiqueta de gancho arriba */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  background: rgba(249,115,22,.15);
+  border: 1.5px solid rgba(249,115,22,.4);
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--or);
+  align-self: flex-start;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bg-cream .tag { background: var(--or-100); border-color: var(--or); color: var(--or-dk); }
+.bg-orange .tag { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.5); color: var(--white); }
+
+/* Flechita */
+.arrow-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  color: var(--or);
+}
+.bg-orange .arrow-cta { color: var(--white); }
+.bg-cream .arrow-cta { color: var(--or-dk); }
+
+/* Para 4 features en grilla */
+.feat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 50px;
+}
+.feat-card {
+  background: var(--ink);
+  color: var(--white);
+  padding: 36px;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.feat-card .num {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--or);
+  margin-bottom: 8px;
+}
+.feat-card h3 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 36px;
+  letter-spacing: -0.02em;
+}
+.feat-card p {
+  font-size: 18px;
+  color: var(--slate-lt);
+  line-height: 1.4;
+}
+</content>

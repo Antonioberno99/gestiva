@@ -258,8 +258,15 @@ CREATE TABLE IF NOT EXISTS mp_plans (
   mp_plan_id  TEXT NOT NULL,
   init_point  TEXT NOT NULL,
   amount      NUMERIC(12,2) NOT NULL,
+  has_free_trial BOOLEAN DEFAULT false,     -- plan creado con el mes gratis (free_trial)
   created_at  TIMESTAMPTZ DEFAULT now()
 );
+-- Al agregar la columna (1ra vez), los planes viejos quedan en false y se regeneran
+-- una sola vez con el free_trial en el próximo /billing/subscribe.
+ALTER TABLE IF EXISTS mp_plans ADD COLUMN IF NOT EXISTS has_free_trial BOOLEAN DEFAULT false;
+-- Modelo nuevo: el dueño deja la tarjeta y arranca el mes gratis; MP cobra al terminar.
+-- Marcamos cancelaciones "al fin de período" para mantener acceso hasta que venza.
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT false;
 
 -- LANZAMIENTO: eliminar la cuenta demo de pruebas (ya no se usa).
 DELETE FROM tenants WHERE email = 'demo@gestiva.app';

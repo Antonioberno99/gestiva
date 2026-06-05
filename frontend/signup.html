@@ -63,8 +63,8 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
       <span id="planPillText">Plan Pro · $39.000 / mes · Sin compromisos</span>
     </div>
-    <h1>Empezá tu prueba gratis</h1>
-    <p class="sub">Acceso completo sin tarjeta. Elegí tu plan y probá Gestiva con todas las funciones. <a href="landing.html#precios" style="color:var(--or-dk);">Ver planes</a></p>
+    <h1>Empezá tu mes gratis</h1>
+    <p class="sub">Creá tu cuenta y dejá tu tarjeta para activar Gestiva. No se te cobra por 30 días y cancelás cuando quieras. <a href="landing.html#precios" style="color:var(--or-dk);">Ver planes</a></p>
 
     <div class="err" id="err"></div>
     <div id="gBtn"></div>
@@ -167,12 +167,10 @@ async function handleGoogleSignIn(response) {
     if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de registro'));
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    if (data.isNew) {
-      // Usuario nuevo via Google: lo mandamos a ajustes para que defina el nombre del restaurante
-      location.href = 'app.html#/ajustes';
-    } else if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
+    if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
+      // Nuevo o sin tarjeta → debe dejar la tarjeta para empezar el mes gratis
       location.href = 'checkout.html';
     }
   } catch(e) {
