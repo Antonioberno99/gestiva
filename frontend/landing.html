@@ -111,14 +111,30 @@
     .nav-links a:hover { color: var(--or); }
     .nav-ctas { display: flex; gap: 10px; flex-shrink: 0; }
     .nav-ctas .btn { padding: 10px 18px; font-size: 14px; white-space: nowrap; }
-    .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; }
-    .hamburger span { display: block; width: 24px; height: 2px; background: var(--tx-dark); border-radius: 2px; }
-    .m-menu { display: none; position: fixed; inset: 0; background: #fff; z-index: 200; padding: 24px; flex-direction: column; gap: 20px; }
-    .m-menu.open { display: flex; }
-    .m-menu-top { display: flex; justify-content: space-between; align-items: center; }
-    .m-menu ul { list-style: none; display: flex; flex-direction: column; }
-    .m-menu ul a { display: block; padding: 15px 0; font-size: 18px; font-weight: 600; color: var(--tx-dark); text-decoration: none; border-bottom: 1px solid var(--border); }
-    .close-x { font-size: 26px; cursor: pointer; color: var(--tx-mid); line-height: 1; }
+    /* Botón menú (3 rayitas) — visible siempre, acceso rápido */
+    .hamburger { display: inline-flex; flex-direction: column; gap: 5px; cursor: pointer; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: #fff; transition: .2s; flex-shrink: 0; }
+    .hamburger:hover { border-color: var(--or); box-shadow: var(--sh-or); }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--tx-dark); border-radius: 2px; transition: .2s; }
+    .hamburger:hover span { background: var(--or); }
+    /* Backdrop + panel lateral deslizante */
+    .m-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 200; opacity: 0; visibility: hidden; transition: .25s; }
+    .m-backdrop.open { opacity: 1; visibility: visible; }
+    .m-menu { position: fixed; top: 0; right: 0; height: 100%; width: 360px; max-width: 88vw; background: #fff; z-index: 210; padding: 22px; display: flex; flex-direction: column; gap: 8px; transform: translateX(105%); transition: transform .28s cubic-bezier(.4,0,.2,1); overflow-y: auto; box-shadow: -10px 0 40px rgba(15,23,42,.18); }
+    .m-menu.open { transform: translateX(0); }
+    .m-menu-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .close-x { font-size: 26px; cursor: pointer; color: var(--tx-mid); line-height: 1; padding: 4px; }
+    .m-sec-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--tx-lt); margin: 16px 0 8px; }
+    .m-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .m-qa { display: flex; flex-direction: column; gap: 4px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; text-decoration: none; color: var(--tx-dark); font-weight: 700; font-size: 14px; transition: .18s; background: #fff; }
+    .m-qa:hover { border-color: var(--or); background: var(--or-lt); transform: translateY(-2px); }
+    .m-qa .ic { font-size: 22px; }
+    .m-qa small { font-weight: 500; color: var(--tx-mid); font-size: 11px; line-height: 1.3; }
+    .m-qa.primary { background: linear-gradient(135deg, var(--or), var(--or-dk)); border-color: transparent; color: #fff; }
+    .m-qa.primary small { color: rgba(255,255,255,.9); }
+    .m-qa.primary:hover { background: linear-gradient(135deg, var(--or-dk), var(--or-dk)); }
+    .m-menu ul { list-style: none; display: flex; flex-direction: column; margin: 0; padding: 0; }
+    .m-menu ul a { display: block; padding: 13px 2px; font-size: 16px; font-weight: 600; color: var(--tx-dark); text-decoration: none; border-bottom: 1px solid var(--border); transition: color .15s; }
+    .m-menu ul a:hover { color: var(--or); }
 
     /* ── HERO ── */
     .hero {
@@ -519,7 +535,8 @@
 <!-- SCROLL PROGRESS -->
 <div id="pgbar"></div>
 
-<!-- MOBILE MENU -->
+<!-- BACKDROP + MENÚ LATERAL (acceso rápido) -->
+<div class="m-backdrop" id="mBackdrop" onclick="toggleMenu()"></div>
 <div class="m-menu" id="mMenu">
   <div class="m-menu-top">
     <div class="logo">
@@ -530,15 +547,26 @@
     </div>
     <span class="close-x" onclick="toggleMenu()">&#x2715;</span>
   </div>
+
+  <div class="m-sec-title">Accesos rápidos</div>
+  <div class="m-quick">
+    <a href="signup.html" class="m-qa primary"><span class="ic">✨</span>Probar gratis<small>30 días sin cargo</small></a>
+    <a href="login.html" class="m-qa"><span class="ic">🔑</span>Iniciar sesión<small>Mi restaurante</small></a>
+    <a href="mozo.html" class="m-qa"><span class="ic">🍽️</span>App del Mozo<small>Tomar pedidos</small></a>
+    <a href="vendedores.html" class="m-qa"><span class="ic">🤝</span>Ser Vendedor<small>Ganá 40%</small></a>
+  </div>
+
+  <div class="m-sec-title">El sistema</div>
   <ul>
     <li><a href="#problema"  onclick="toggleMenu()">El problema</a></li>
     <li><a href="#funciones" onclick="toggleMenu()">Funciones</a></li>
-    <li><a href="#app-equipo" onclick="toggleMenu()">App equipo</a></li>
+    <li><a href="#app-equipo" onclick="toggleMenu()">App para el equipo</a></li>
     <li><a href="#negocios"  onclick="toggleMenu()">Para tu negocio</a></li>
     <li><a href="#beneficios" onclick="toggleMenu()">Beneficios</a></li>
     <li><a href="#precios" onclick="toggleMenu()">Precios</a></li>
   </ul>
-  <a href="signup.html" class="btn btn-primary" onclick="toggleMenu()">Entrar al sistema →</a>
+
+  <a href="vendedor.html" class="m-qa" style="margin-top:14px;"><span class="ic">📊</span>Panel de Vendedor<small>Ya soy vendedor · ver mis ventas</small></a>
 </div>
 
 <!-- NAV -->
@@ -1340,7 +1368,9 @@
 <script>
   // ── mobile menu ──
   function toggleMenu() {
-    document.getElementById('mMenu').classList.toggle('open');
+    const open = document.getElementById('mMenu').classList.toggle('open');
+    document.getElementById('mBackdrop').classList.toggle('open', open);
+    document.body.style.overflow = open ? 'hidden' : '';
   }
 
   async function downloadTeamApk() {
