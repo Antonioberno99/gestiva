@@ -271,6 +271,32 @@ ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOL
 -- LANZAMIENTO: eliminar la cuenta demo de pruebas (ya no se usa).
 DELETE FROM tenants WHERE email = 'demo@gestiva.app';
 
+-- LIMPIEZA ÚNICA de datos de prueba (QA pre-lanzamiento).
+-- Corre UNA sola vez (marcada por la tabla _qa_cleaned) y NUNCA rompe el arranque
+-- (cualquier error queda capturado por el EXCEPTION). Borra restaurantes y vendedores
+-- de prueba creados en los tests; el CASCADE limpia mesas, pagos, comandas y comisiones.
+DO $$
+BEGIN
+  IF to_regclass('public._qa_cleaned') IS NULL THEN
+    BEGIN
+      UPDATE tenants SET vendor_id = NULL
+        WHERE vendor_id IN (
+          SELECT id FROM vendors
+          WHERE email ~* '^(qaven|vqa|qa)[a-z0-9]*@gmail\.com$' OR name ILIKE '%QA%'
+        );
+      DELETE FROM tenants
+        WHERE email ~* '^(probe|qa|launch|trial|rqa|rdir|rbad|vqa)[a-z0-9]*@gmail\.com$'
+           OR restaurant_name ILIKE '%QA%'
+           OR restaurant_name = 'Probe';
+      DELETE FROM vendors
+        WHERE email ~* '^(qaven|vqa|qa)[a-z0-9]*@gmail\.com$' OR name ILIKE '%QA%';
+      CREATE TABLE _qa_cleaned (done boolean DEFAULT true);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'Limpieza de datos de prueba omitida: %', SQLERRM;
+    END;
+  END IF;
+END $$;
+
 -- ============================================================
 -- PROGRAMA DE VENDEDORES (Partners / Resellers)
 -- ============================================================
