@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guía para vender Gestiva · Manual del Vendedor</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{--or:#f97316;--or-dk:#ea580c;--or-lt:#fff7ed;--or-100:#ffedd5;--ink:#0f172a;--ink2:#1e293b;--tx:#0f172a;--tx-mid:#475569;--tx-lt:#94a3b8;--border:#e2e8f0;--green:#10b981;--green-lt:#d1fae5;--ff-d:'Outfit',sans-serif;--ff:'Inter',sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--ff);color:var(--tx);background:#f1f5f9;-webkit-font-smoothing:antialiased;line-height:1.55;}
+  .page{width:210mm;min-height:296mm;margin:18px auto;background:#fff;padding:20mm 18mm;box-shadow:0 12px 40px rgba(15,23,42,.14);position:relative;}
+  h1,h2,h3{font-family:var(--ff-d);letter-spacing:-.02em;line-height:1.1;}
+  .kicker{font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--or-dk);}
+  .lead{color:var(--tx-mid);font-size:15px;}
+  .hr{height:1px;background:var(--border);margin:18px 0;}
+  /* Portada */
+  .cover{background:linear-gradient(150deg,var(--ink) 0%,#1e293b 60%,#33231a 100%);color:#fff;display:flex;flex-direction:column;justify-content:center;}
+  .cover .glow{position:absolute;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.4),transparent 70%);top:-160px;right:-160px;pointer-events:none;}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:40px;}
+  .brand .ic{width:46px;height:46px;border-radius:12px;background:#fff;display:grid;place-items:center;overflow:hidden;}
+  .brand .ic img{width:42px;height:42px;object-fit:contain;}
+  .brand .nm{font-family:var(--ff-d);font-weight:800;font-size:22px;}
+  .brand .bdg{font-size:11px;background:var(--or);padding:3px 10px;border-radius:999px;font-weight:700;letter-spacing:.05em;}
+  .cover h1{font-size:54px;font-weight:900;margin-bottom:14px;}
+  .cover .hl{color:var(--or);}
+  .cover p{font-size:18px;color:#cbd5e1;max-width:80%;}
+  .cover .pill{display:inline-flex;align-items:center;gap:8px;background:rgba(249,115,22,.15);border:1.5px solid rgba(249,115,22,.45);color:var(--or);padding:10px 18px;border-radius:999px;font-weight:700;font-size:15px;margin-top:34px;align-self:flex-start;}
+  .cover .foot{position:absolute;bottom:20mm;left:18mm;right:18mm;color:#94a3b8;font-size:13px;border-top:1px solid rgba(255,255,255,.12);padding-top:14px;}
+  /* Secciones */
+  .sec-h{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+  .sec-n{width:40px;height:40px;border-radius:11px;background:var(--or-lt);color:var(--or-dk);display:grid;place-items:center;font-family:var(--ff-d);font-weight:800;font-size:20px;flex:none;}
+  h2{font-size:27px;}
+  h3{font-size:18px;margin-bottom:4px;}
+  p{margin-bottom:10px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;}
+  .card{border:1px solid var(--border);border-radius:14px;padding:16px;}
+  .card .t{font-family:var(--ff-d);font-weight:800;font-size:16px;margin-bottom:4px;}
+  .card .d{font-size:13.5px;color:var(--tx-mid);}
+  .chk{display:flex;gap:10px;align-items:flex-start;margin:9px 0;font-size:14.5px;}
+  .chk svg{flex:none;color:var(--green);margin-top:2px;}
+  .callout{background:var(--or-lt);border:1px solid var(--or-100);border-radius:14px;padding:16px 18px;margin:16px 0;}
+  .callout .t{font-family:var(--ff-d);font-weight:800;color:var(--or-dk);margin-bottom:4px;}
+  /* Tabla planes */
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px;}
+  th,td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);}
+  th{font-family:var(--ff-d);font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--tx-mid);}
+  td .price{font-family:var(--ff-d);font-weight:800;color:var(--or-dk);font-size:17px;}
+  .tag-pop{background:var(--or);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;margin-left:6px;}
+  /* Mockups dibujados */
+  .mocks{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px;justify-content:center;}
+  .phone{width:150px;border:8px solid var(--ink);border-radius:24px;overflow:hidden;background:#fff;}
+  .phone .top{background:var(--ink);height:14px;}
+  .phone .scr{padding:8px;}
+  .mtitle{font-size:9px;font-weight:700;color:var(--tx-mid);margin-bottom:5px;}
+  .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;}
+  .tcell{aspect-ratio:1;border-radius:5px;display:grid;place-items:center;font-size:8px;font-weight:700;color:#fff;}
+  .tfree{background:#cbd5e1;color:#475569;} .tbusy{background:var(--or);} .tres{background:#8b5cf6;}
+  .ticket{width:150px;background:#fff;border:1px dashed #94a3b8;border-radius:6px;padding:10px;font-family:'Courier New',monospace;font-size:9px;color:#0f172a;}
+  .ticket .c{text-align:center;}
+  .ticket .big{font-size:15px;font-weight:800;text-align:center;margin:4px 0;}
+  .ticket .ln{border-top:1px dashed #94a3b8;margin:5px 0;}
+  .earn{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;text-align:center;}
+  .earn .b{border:1px solid var(--border);border-radius:14px;padding:16px 8px;}
+  .earn .n{font-family:var(--ff-d);font-weight:800;font-size:26px;color:var(--or-dk);}
+  .earn .l{font-size:12px;color:var(--tx-mid);margin-top:2px;}
+  .step{display:flex;gap:14px;margin:14px 0;align-items:flex-start;}
+  .step .num{width:30px;height:30px;border-radius:50%;background:var(--or);color:#fff;display:grid;place-items:center;font-family:var(--ff-d);font-weight:800;flex:none;}
+  .q{font-family:var(--ff-d);font-weight:800;color:var(--ink);font-size:15px;margin-bottom:2px;}
+  .a{font-size:14px;color:var(--tx-mid);margin-bottom:14px;}
+  /* Botón flotante (no se imprime) */
+  .dlbar{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:10px;align-items:center;background:#fff;border:1px solid var(--border);box-shadow:0 12px 30px rgba(15,23,42,.2);border-radius:999px;padding:8px 8px 8px 18px;}
+  .dlbar span{font-size:13px;color:var(--tx-mid);font-weight:600;}
+  .dlbtn{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none;font-family:var(--ff);font-weight:700;font-size:14px;padding:11px 20px;border-radius:999px;cursor:pointer;}
+  @media (max-width:760px){ .page{width:100%;padding:24px 18px;margin:10px auto;} .cover h1{font-size:38px;} .cover p{max-width:100%;} .grid2{grid-template-columns:1fr;} }
+  @media print{
+    body{background:#fff;}
+    .dlbar{display:none !important;}
+    .page{width:auto;min-height:auto;margin:0;box-shadow:none;padding:14mm 12mm;page-break-after:always;}
+    .page:last-child{page-break-after:auto;}
+    @page{size:A4;margin:0;}
+  }
+</style>
+</head>
+<body>
+
+<!-- PORTADA -->
+<section class="page cover">
+  <div class="glow"></div>
+  <div class="brand"><div class="ic"><img src="assets/logo-gestiva-icon.png" alt=""></div><span class="nm">Gestiva</span><span class="bdg">VENDEDORES</span></div>
+  <div class="kicker" style="color:var(--or)">Manual del Vendedor</div>
+  <h1>Aprendé a vender <span class="hl">Gestiva</span> en minutos</h1>
+  <p>La guía simple para presentar el sistema, convencer al dueño del restaurante y armar tu cartera de clientes.</p>
+  <div class="pill">Ganás 40% de comisión recurrente · todos los meses</div>
+  <div class="foot">Gestiva · Sistema de gestión para restaurantes y bares · gestiva.site</div>
+</section>
+
+<!-- 1. QUÉ ES -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">1</div><div><div class="kicker">Lo básico</div><h2>¿Qué es Gestiva?</h2></div></div>
+  <p class="lead">Es un sistema en la nube que ordena todo un restaurante o bar desde el celular o la computadora. Reemplaza los cuadernos, el Excel y el caos.</p>
+  <div class="grid2">
+    <div class="card"><div class="t">Mesas en tiempo real</div><div class="d">Ve qué mesa está libre, ocupada o reservada, y cuánto consume cada una.</div></div>
+    <div class="card"><div class="t">Caja sin sorpresas</div><div class="d">Cada peso que entra y sale queda registrado. El cierre del día cuadra solo.</div></div>
+    <div class="card"><div class="t">Comandas a la cocina</div><div class="d">El mozo manda el pedido y sale impreso o en pantalla. Sin papelitos ni gritos.</div></div>
+    <div class="card"><div class="t">Reportes claros</div><div class="d">Qué se vende más, qué mozo factura más, ventas por hora. Decisiones con datos.</div></div>
+    <div class="card"><div class="t">App para los mozos</div><div class="d">Toman pedidos desde su propio celular. Más rápido, menos errores.</div></div>
+    <div class="card"><div class="t">Menú QR</div><div class="d">El cliente escanea y ve la carta en su teléfono, siempre actualizada.</div></div>
+  </div>
+  <div class="callout"><div class="t">En una frase, para el dueño:</div>“Gestiva es el sistema que ordena tu negocio: mesas, caja, cocina y reportes, todo en un solo lugar y desde el celular.”</div>
+</section>
+
+<!-- 2. A QUIÉN -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">2</div><div><div class="kicker">Tu mercado</div><h2>¿A quién le vendo?</h2></div></div>
+  <p class="lead">Casi cualquier negocio que sirva comida o bebida. Estos son tus clientes ideales:</p>
+  <div class="grid2">
+    <div class="card"><div class="t">Restaurantes</div><div class="d">Parrillas, pizzerías, cocina de autor, familiares.</div></div>
+    <div class="card"><div class="t">Bares y cervecerías</div><div class="d">Mucho movimiento de mesas y rondas.</div></div>
+    <div class="card"><div class="t">Cafés y confiterías</div><div class="d">Necesitan caja prolija y carta QR.</div></div>
+    <div class="card"><div class="t">Boliches y after</div><div class="d">Barras rápidas, control de stock.</div></div>
+    <div class="card"><div class="t">Rotiserías y delivery</div><div class="d">Pedidos para llevar y comandas.</div></div>
+    <div class="card"><div class="t">Food trucks</div><div class="d">Todo desde el celular, sin instalar nada.</div></div>
+  </div>
+  <div class="callout"><div class="t">Dónde encontrarlos</div>Caminá tu zona, mirá los locales nuevos, preguntá en grupos de comerciantes, y pediles a tus clientes que te recomienden a otros dueños. Cada barrio tiene decenas.</div>
+</section>
+
+<!-- 3. POR QUÉ LO QUIEREN -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">3</div><div><div class="kicker">El gancho</div><h2>¿Por qué lo van a querer?</h2></div></div>
+  <p class="lead">Todo dueño de gastronomía sufre lo mismo. Tu trabajo es mostrarle que Gestiva lo resuelve.</p>
+  <div class="grid2">
+    <div class="card"><div class="t" style="color:#b91c1c">Sin Gestiva (el problema)</div><div class="d">Cuadernos y Excel. La caja “no cierra”. Comandas que se pierden. No sabe qué le rinde. Reportes a fin de mes que nunca llegan.</div></div>
+    <div class="card" style="border-color:var(--or-100);background:var(--or-lt)"><div class="t" style="color:var(--or-dk)">La solución → con Gestiva</div><div class="d">Todo registrado y en orden. La cocina recibe el pedido al toque. Ve sus números en vivo. Cierra el día tranquilo.</div></div>
+  </div>
+  <h3 style="margin-top:18px">Así se ve el sistema</h3>
+  <div class="mocks">
+    <div class="phone"><div class="top"></div><div class="scr"><div class="mtitle">Mesas</div><div class="tgrid">
+      <div class="tcell tbusy">1</div><div class="tcell tfree">2</div><div class="tcell tbusy">3</div>
+      <div class="tcell tres">4</div><div class="tcell tbusy">5</div><div class="tcell tfree">6</div>
+      <div class="tcell tfree">7</div><div class="tcell tbusy">8</div><div class="tcell tfree">9</div>
+    </div></div></div>
+    <div class="ticket"><div class="c" style="font-weight:800">LA PARRILLA</div><div class="ln"></div><div class="big">MESA 5</div><div class="c">Mozo: Carlos</div><div class="ln"></div>2x Milanesa<br>1x Coca 1.5L<br>1x Flan<div class="ln"></div><div class="c">-- COCINA --</div></div>
+    <div class="phone"><div class="top"></div><div class="scr"><div class="mtitle">Caja de hoy</div>
+      <div style="font-family:var(--ff-d);font-weight:800;font-size:18px;color:var(--or-dk)">$248.500</div>
+      <div style="font-size:8px;color:var(--tx-mid);margin-bottom:6px">47 pedidos</div>
+      <div style="height:5px;background:var(--or);border-radius:3px;width:90%;margin-bottom:3px"></div>
+      <div style="height:5px;background:#cbd5e1;border-radius:3px;width:60%;margin-bottom:3px"></div>
+      <div style="height:5px;background:#cbd5e1;border-radius:3px;width:75%"></div>
+    </div></div>
+  </div>
+  <p style="font-size:12px;color:var(--tx-lt);text-align:center;margin-top:10px">Mostrale esto desde tu celular entrando a gestiva.site. ¡Una imagen vale más que mil palabras!</p>
+</section>
+
+<!-- 4. PLANES -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">4</div><div><div class="kicker">Precios</div><h2>Los 3 planes</h2></div></div>
+  <p class="lead">Hay un plan para cada negocio. El dueño elige; vos cobrás el 40% del que sea.</p>
+  <table>
+    <tr><th>Plan</th><th>Precio / mes</th><th>Para quién</th></tr>
+    <tr><td><b>Start</b></td><td><span class="price">$18.900</span></td><td>Locales chicos: caja, comandas, hasta 5 mesas, menú QR.</td></tr>
+    <tr><td><b>Pro</b><span class="tag-pop">El más elegido</span></td><td><span class="price">$39.000</span></td><td>Mesas ilimitadas, cocina (KDS), app de mozos, stock y clientes.</td></tr>
+    <tr><td><b>Full</b></td><td><span class="price">$63.000</span></td><td>Todo lo de Pro + delivery, comisiones por mozo, varias cajas.</td></tr>
+  </table>
+  <div class="callout"><div class="t">El argumento de cierre</div>“Lo probás <b>30 días gratis</b>. No se te cobra nada hasta el mes siguiente, y si no te sirve lo cancelás cuando quieras, sin compromiso.” — Esto saca el miedo y hace que digan que sí.</div>
+</section>
+
+<!-- 5. CÓMO GANÁS VOS -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">5</div><div><div class="kicker">Tu plata</div><h2>Cómo ganás vos</h2></div></div>
+  <p class="lead">Ganás el <b>40% de lo que paga cada cliente, todos los meses</b> que siga usando Gestiva. Vendés una vez y cobrás siempre.</p>
+  <div class="earn">
+    <div class="b"><div class="n">$7.560</div><div class="l">por cada cliente Start / mes</div></div>
+    <div class="b"><div class="n">$15.600</div><div class="l">por cada cliente Pro / mes</div></div>
+    <div class="b"><div class="n">$25.200</div><div class="l">por cada cliente Full / mes</div></div>
+  </div>
+  <div class="callout"><div class="t">Ejemplo real</div>Si armás una cartera de <b>10 restaurantes en plan Pro</b>, cobrás <b>$156.000 por mes</b> de forma recurrente. Con 20 clientes, son <b>$312.000/mes</b>. Cuantos más sumás, más cobrás — mes a mes.</div>
+  <h3 style="margin-top:16px">Tu código es la llave</h3>
+  <div class="chk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg><div>Tenés un <b>código único</b> (ej: <i>JUAN-3X9K</i>). El restaurante lo pone al registrarse y queda asociado a vos para siempre.</div></div>
+  <div class="chk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg><div>También podés pasar tu <b>link directo</b> (ya trae el código). Lo compartís por WhatsApp y listo.</div></div>
+  <div class="chk"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg><div>La comisión se acredita cuando el cliente <b>paga su primer mes</b> (después de la prueba gratis) y se repite cada mes.</div></div>
+</section>
+
+<!-- 6. CÓMO PRESENTARLO + CERRAR -->
+<section class="page">
+  <div class="sec-h"><div class="sec-n">6</div><div><div class="kicker">Manos a la obra</div><h2>Cómo cerrar la venta</h2></div></div>
+  <div class="step"><div class="num">1</div><div><h3>Mostrale el sistema</h3><p style="margin:0;color:var(--tx-mid);font-size:14px">Entrá a <b>gestiva.site</b> desde tu celular y mostrale las mesas, la caja y la comanda. Que lo vea funcionando.</p></div></div>
+  <div class="step"><div class="num">2</div><div><h3>Contale el beneficio, no la función</h3><p style="margin:0;color:var(--tx-mid);font-size:14px">No digas “tiene reportes”. Decí “vas a saber qué plato te deja más plata”. Hablá de su negocio.</p></div></div>
+  <div class="step"><div class="num">3</div><div><h3>Sacá el riesgo</h3><p style="margin:0;color:var(--tx-mid);font-size:14px">“Probalo 30 días gratis. Si no te sirve, lo cancelás y no pagaste nada.” Nadie dice que no a probar gratis.</p></div></div>
+  <div class="step"><div class="num">4</div><div><h3>Ayudalo a registrarse con tu código</h3><p style="margin:0;color:var(--tx-mid);font-size:14px">Acompañalo: entra a gestiva.site, crea la cuenta, pone <b>tu código</b> y deja la tarjeta para activar el mes gratis. Listo: ya es tu cliente.</p></div></div>
+  <div class="hr"></div>
+  <h3>Respuestas a las dudas típicas</h3>
+  <div class="q">“¿Es caro?”</div><div class="a">Menos que perder plata por descontrol. Desde $18.900 y los primeros 30 días son gratis.</div>
+  <div class="q">“¿Es complicado?”</div><div class="a">Se usa desde el celular, sin instalar nada. En 5 minutos está andando y yo te ayudo a arrancar.</div>
+  <div class="q">“¿Y si no me sirve?”</div><div class="a">Lo cancelás cuando quieras, sin permanencia. Por eso probás gratis primero.</div>
+  <div class="q">“¿Necesito comprar algo?”</div><div class="a">No. Funciona en tu celular o compu. Si querés imprimir comandas, sirve cualquier impresora.</div>
+  <div class="callout" style="margin-top:18px"><div class="t">Recordá</div>Tu trabajo no es “vender un software”. Es ayudar a un dueño a tener su negocio ordenado y ganar más. Vendé eso. <b>¡Ahora salí a sumar tu primer cliente!</b></div>
+  <div class="foot" style="text-align:center;color:var(--tx-lt);font-size:12px;margin-top:24px;border-top:1px solid var(--border);padding-top:14px">Gestiva · Manual del Vendedor · Dudas: escribí al organizador del programa · gestiva.site</div>
+</section>
+
+<div class="dlbar">
+  <span>Guardá esta guía en tu celular</span>
+  <button class="dlbtn" onclick="window.print()">Descargar PDF</button>
+</div>
+<script>
+  // Si entran con ?print=1, abrimos directo el diálogo de guardar PDF
+  if (new URLSearchParams(location.search).get('print') === '1') {
+    window.addEventListener('load', () => setTimeout(() => window.print(), 600));
+  }
+</script>
+</body>
+</html>
