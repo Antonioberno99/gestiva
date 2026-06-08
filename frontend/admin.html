@@ -83,6 +83,22 @@
   .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--tx-mid)}
   .app-detail{font-size:12px;color:var(--tx-mid);line-height:1.5;margin-top:6px}
   .app-detail b{color:var(--tx-dark)}
+  /* Feed de actividad */
+  .feed{display:flex;flex-direction:column}
+  .fev{display:flex;gap:14px;padding:13px 4px;border-bottom:1px solid var(--border)}
+  .fev:last-child{border-bottom:none}
+  .fic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none}
+  .fic svg{width:19px;height:19px}
+  .fic.signup{background:#dbeafe;color:#1e40af}
+  .fic.trial{background:var(--yellow-lt);color:#b45309}
+  .fic.payment{background:var(--green-lt);color:#047857}
+  .fic.vendor_apply{background:#ede9fe;color:#6d28d9}
+  .fic.commission{background:var(--or-100);color:var(--or-dk)}
+  .fbody{flex:1;min-width:0}
+  .fbody .ft{font-size:14px;font-weight:600;color:var(--tx-dark)}
+  .fbody .fd{font-size:12.5px;color:var(--tx-mid);margin-top:1px}
+  .fbody .fmoney{font-weight:700;color:var(--green)}
+  .fwhen{font-size:12px;color:var(--tx-lt);white-space:nowrap;flex:none;align-self:center}
 
   @media (max-width:768px){ .kpis{grid-template-columns:repeat(2,1fr)} table.data{font-size:12px} .container{padding:18px 12px} }
 </style>
@@ -135,13 +151,15 @@
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="solicitudes" onclick="setTab('solicitudes')">Solicitudes <span class="count" id="cntPending" style="display:none">0</span></button>
+      <button class="tab active" data-tab="actividad" onclick="setTab('actividad')">Actividad</button>
+      <button class="tab" data-tab="solicitudes" onclick="setTab('solicitudes')">Solicitudes <span class="count" id="cntPending" style="display:none">0</span></button>
       <button class="tab" data-tab="vendedores" onclick="setTab('vendedores')">Vendedores</button>
       <button class="tab" data-tab="comisiones" onclick="setTab('comisiones')">Comisiones</button>
       <button class="tab" data-tab="restaurantes" onclick="setTab('restaurantes')">Restaurantes</button>
     </div>
 
-    <div class="panel active" id="panel-solicitudes"><h2>Solicitudes de vendedores</h2><div id="solicitudesBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel active" id="panel-actividad"><h2>Actividad reciente</h2><div id="actividadBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-solicitudes"><h2>Solicitudes de vendedores</h2><div id="solicitudesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-vendedores"><h2>Todos los vendedores</h2><div id="vendedoresBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-comisiones"><h2>Comisiones</h2><div id="comisionesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-restaurantes"><h2>Restaurantes (clientes)</h2><div id="restaurantesBox"><div class="empty">Cargando…</div></div></div>
@@ -219,7 +237,48 @@ async function loadAll(){
   $('#kVendorsSub').textContent = `${stats.vendors.pending} pendientes · ${stats.vendors.active} activos`;
   $('#kCommPending').textContent = fmt(stats.commissions.pending);
   if (stats.vendors.pending > 0){ const c=$('#cntPending'); c.textContent=stats.vendors.pending; c.style.display=''; }
-  loadSolicitudes(); loadVendedores(); loadComisiones(); loadRestaurantes();
+  loadActividad(); loadSolicitudes(); loadVendedores(); loadComisiones(); loadRestaurantes();
+}
+
+function timeAgo(d){
+  const s = Math.floor((Date.now() - new Date(d).getTime())/1000);
+  if (s < 60) return 'recién';
+  if (s < 3600) return 'hace ' + Math.floor(s/60) + ' min';
+  if (s < 86400) return 'hace ' + Math.floor(s/3600) + ' h';
+  if (s < 172800) return 'ayer';
+  return dt(d);
+}
+const FEED_ICON = {
+  signup:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  trial:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+  payment:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+  vendor_apply:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>',
+  commission:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.5-2.5 2-2.5 3.5"/><line x1="12" y1="17" x2="12" y2="17"/></svg>'
+};
+function feedText(ev){
+  const t = `<b>${ev.title||''}</b>`;
+  switch(ev.type){
+    case 'signup':       return { t:`${t} creó su cuenta`, d:ev.detail||'' };
+    case 'trial':        return { t:`${t} dejó la tarjeta · empezó el mes gratis`, d:ev.detail||'' };
+    case 'payment':      return { t:`${t} pagó la suscripción`, d:`<span class="fmoney">${fmt(ev.amount)}</span>` };
+    case 'vendor_apply': return { t:`${t} se postuló como vendedor`, d:ev.detail||'' };
+    case 'commission':   return { t:`Comisión generada para ${t}`, d:`<span class="fmoney">${fmt(ev.amount)}</span>${ev.detail?' · '+ev.detail:''}` };
+    default:             return { t, d:ev.detail||'' };
+  }
+}
+async function loadActividad(){
+  const data = await api('/admin/activity');
+  if (!data) return;
+  const box = $('#actividadBox');
+  if (!data.activity.length){ box.innerHTML='<div class="empty">Todavía no hay actividad. Cuando entren restaurantes y vendedores, aparece acá.</div>'; return; }
+  box.innerHTML = '<div class="feed">' + data.activity.map(ev=>{
+    const f = feedText(ev);
+    return `<div class="fev">
+      <div class="fic ${ev.type}">${FEED_ICON[ev.type]||''}</div>
+      <div class="fbody"><div class="ft">${f.t}</div><div class="fd">${f.d}</div></div>
+      <div class="fwhen">${timeAgo(ev.ts)}</div>
+    </div>`;
+  }).join('') + '</div>';
 }
 
 function appDetail(a){

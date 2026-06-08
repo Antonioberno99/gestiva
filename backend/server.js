@@ -1894,6 +1894,36 @@ app.post('/admin/commissions/:id/pay', requireAdminAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Feed de actividad reciente: todo lo que pasa en el negocio en un solo lugar
+app.get('/admin/activity', requireAdminAuth, async (req, res) => {
+  try {
+    const r = await q(`
+      SELECT * FROM (
+        SELECT created_at AS ts, 'signup' AS type, restaurant_name AS title, email AS detail, NULL::numeric AS amount
+          FROM tenants
+        UNION ALL
+        SELECT sp.paid_at,
+               CASE WHEN sp.status = 'trial_authorized' THEN 'trial' ELSE 'payment' END,
+               COALESCE(t.restaurant_name, 'Restaurante'), t.email, sp.amount
+          FROM subscription_payments sp LEFT JOIN tenants t ON t.id = sp.tenant_id
+        UNION ALL
+        SELECT created_at, 'vendor_apply', name, email, NULL::numeric FROM vendors
+        UNION ALL
+        SELECT vc.created_at, 'commission', COALESCE(v.name,'Vendedor'), COALESCE(t.restaurant_name,''), vc.commission_amt
+          FROM vendor_commissions vc
+          LEFT JOIN vendors v ON v.id = vc.vendor_id
+          LEFT JOIN tenants t ON t.id = vc.tenant_id
+      ) e
+      WHERE e.ts IS NOT NULL
+      ORDER BY e.ts DESC
+      LIMIT 50`);
+    res.json({ activity: r.rows });
+  } catch (e) {
+    console.error('[admin/activity]', e?.message || e);
+    res.status(500).json({ error: 'activity_error' });
+  }
+});
+
 // Listar todos los restaurantes (clientes del negocio)
 app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
   const r = await q(
