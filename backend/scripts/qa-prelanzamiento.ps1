@@ -1,6 +1,6 @@
 # QA integral de pre-lanzamiento de Gestiva (producción).
-# Cubre: backend, modelo "mes gratis con tarjeta", vendedores 40%, todas las páginas,
-# archivos nuevos (comandera) y textos clave. NO requiere tarjeta real.
+# Usa el namespace de prueba @gestiva-qa.test / nombres "[QA] ..." que la limpieza
+# del schema borra en cada deploy, así NO ensucia el panel de forma permanente.
 $ErrorActionPreference = 'Stop'
 $API  = 'https://gestiva-backend.onrender.com'
 $WEB  = 'https://gestiva.site'
@@ -22,6 +22,7 @@ function Status($method, $path, $tok) {
 function Page($path) {
   try { return (Invoke-WebRequest -Uri ($WEB+$path) -UseBasicParsing) } catch { return $null }
 }
+$NS = '@gestiva-qa.test'
 
 $log += "===== A. BACKEND ====="
 $health = Api 'GET' '/health' $null $null
@@ -30,8 +31,8 @@ $cfg = Api 'GET' '/admin/configured' $null $null
 Check 'Panel del dueno configurado' ($cfg.configured -eq $true)
 
 $log += "===== B. ALTA RESTAURANTE (mes gratis con tarjeta) ====="
-$email = 'qa' + (Get-Random) + '@gmail.com'
-$reg = Api 'POST' '/auth/register' @{ email=$email; password='test1234'; restaurantName='QA Pre-Lanzamiento'; plan='pro' } $null
+$email = 'qa' + (Get-Random) + $NS
+$reg = Api 'POST' '/auth/register' @{ email=$email; password='test1234'; restaurantName='[QA] Pre-Lanzamiento'; plan='pro' } $null
 $tok = $reg.token
 Check 'Registro crea cuenta' ($tok -ne $null)
 Check 'Estado inicial = pending (sin tarjeta no entra)' ($reg.user.subscriptionStatus -eq 'pending') $reg.user.subscriptionStatus
@@ -39,18 +40,21 @@ Check 'Sin dias de prueba hasta dejar tarjeta' ($reg.user.daysLeft -eq $null)
 Check 'Plan elegido = pro' ($reg.user.plan -eq 'pro')
 $login = Api 'POST' '/auth/login' @{ email=$email; password='test1234' } $null
 Check 'Login restaurante OK' ($login.token -ne $null)
+$badlogin = Status 'POST' '/auth/login' $null  # sin body -> 400/401
+Check 'Login sin datos rechazado' ($badlogin -ge 400)
 $me = Api 'GET' '/auth/me' $null $tok
 Check 'auth/me coincide y pending' ($me.user.email -eq $email -and $me.user.subscriptionStatus -eq 'pending')
 Check 'Sin tarjeta: /api/products bloqueado (402)' ((Status 'GET' '/api/products' $tok) -eq 402)
 Check 'Sin tarjeta: /api/tables bloqueado (402)' ((Status 'GET' '/api/tables' $tok) -eq 402)
+Check 'Sin token: /api/products = 401' ((Status 'GET' '/api/products' $null) -eq 401)
 $sub = $null; $subErr=''
 try { $sub = Api 'POST' '/billing/subscribe' $null $tok } catch { $subErr = $_.Exception.Message }
 Check 'MercadoPago genera link con mes gratis' ($sub -ne $null -and $sub.initPoint -like '*mercadopago*') $subErr
 Check 'Cancelar en pending = 400 (nada que cancelar)' ((Status 'POST' '/billing/cancel' $tok) -eq 400)
 
 $log += "===== C. VENDEDORES (40%) ====="
-$vmail = 'qaven' + (Get-Random) + '@gmail.com'
-$vreg = Api 'POST' '/vendor/register' @{ email=$vmail; password='vendor1234'; name='QA Vendedor'; phone='388-555-0000'; application=@{ zona='Jujuy'; experiencia='Si'; comoVende='Visitas'; comentarios='-' } } $null
+$vmail = 'qaven' + (Get-Random) + $NS
+$vreg = Api 'POST' '/vendor/register' @{ email=$vmail; password='vendor1234'; name='[QA] Vendedor'; phone='388-555-0000'; application=@{ zona='Jujuy'; experiencia='Si'; comoVende='Visitas'; comentarios='-' } } $null
 Check 'Vendedor registra (token)' ($vreg.token -ne $null)
 Check 'Vendedor queda pending' ($vreg.vendor.status -eq 'pending')
 Check 'Comision = 40%' ([double]$vreg.vendor.commissionPercent -eq 40)
@@ -59,22 +63,30 @@ $vlogin = Api 'POST' '/vendor/login' @{ email=$vmail; password='vendor1234' } $n
 Check 'Vendedor login OK' ($vlogin.token -ne $null)
 $vme = Api 'GET' '/vendor/me' $null $vlogin.token
 Check 'vendor/me pending' ($vme.vendor.status -eq 'pending')
+$vstats = Api 'GET' '/vendor/stats' $null $vlogin.token
+Check 'vendor/stats responde' ($vstats -ne $null)
+
+$log += "===== D. ENDPOINTS ADMIN (cableados y protegidos) ====="
+foreach ($ep in @('/admin/activity','/admin/stats','/admin/vendors','/admin/tenants','/admin/commissions')) {
+  $c = Status 'GET' $ep $null
+  Check ("Admin $ep protegido (401, no 404)") ($c -eq 401) $c
+}
 $adminWrong = $false
 try { Api 'POST' '/admin/login' @{ email='antonioberno99@gmail.com'; password='claveMala123' } $null } catch { $adminWrong = $true }
 Check 'Admin rechaza clave incorrecta' $adminWrong
 
-$log += "===== D. PAGINAS (cargan 200) ====="
-$pages = @('/landing','/signup','/login','/checkout','/billing-return','/mozo','/cocina','/menu','/vendedores','/vendedor','/admin')
+$log += "===== E. PAGINAS (cargan 200) ====="
+$pages = @('/landing','/signup','/login','/checkout','/billing-return','/mozo','/cocina','/menu','/vendedores','/vendedor','/admin','/guia-vendedores')
 foreach ($p in $pages) {
   $r = Page $p
   Check ("Pagina $p") ($r -ne $null -and $r.StatusCode -eq 200) $(if($r){$r.StatusCode}else{'sin respuesta'})
 }
 
-$log += "===== E. ARCHIVOS / FEATURES ====="
+$log += "===== F. ARCHIVOS / FEATURES ====="
 $cmdr = Page '/comandera.js'
 Check 'comandera.js publicado' ($cmdr -ne $null -and $cmdr.Content -match 'window.Comandera')
 
-$log += "===== F. TEXTOS CLAVE ====="
+$log += "===== G. TEXTOS CLAVE ====="
 $land = (Page '/landing').Content
 Check "Landing: boton 'Probar sistema gratis'" ($land -match 'Probar sistema gratis')
 Check "Landing: menu 'Accesos rapidos'" ($land -match 'Accesos r')
@@ -84,12 +96,18 @@ Check "Landing: menu sin emojis (sin class ic)" (-not ($land -match 'class="ic"'
 Check "Landing: 30 dias gratis" ($land -match '30 d')
 $sign = (Page '/signup').Content
 Check "Signup: 'mes gratis'" ($sign -match 'mes gratis')
+$adm = (Page '/admin').Content
+Check "Admin: pestana Actividad" ($adm -match 'data-tab=.actividad.')
 $mozo = (Page '/mozo').Content
-Check "Mozo: boton Comandera" ($mozo -match 'Comandera')
-Check "Mozo: incluye comandera.js" ($mozo -match 'comandera.js')
+Check "Mozo: boton Comandera + script" (($mozo -match 'Comandera') -and ($mozo -match 'comandera.js'))
 $ven = (Page '/vendedores').Content
 Check "Vendedores: comision 40%" ($ven -match '40%')
+$gui = (Page '/guia-vendedores').Content
+Check "Guia: ejemplo de comision 40%" ($gui -match '156.000')
+$vdor = (Page '/vendedor').Content
+Check "Panel vendedor: boton de guia PDF" ($vdor -match 'guia-vendedores')
 
 $log += ""
 $log += ("RESULTADO: " + $pass + " PASS / " + $fail + " FAIL")
+$log += ("Cuentas de prueba creadas en: " + $NS + " (se borran solas en el proximo deploy)")
 $log -join "`n"

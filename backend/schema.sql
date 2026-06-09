@@ -297,6 +297,18 @@ BEGIN
   END IF;
 END $$;
 
+-- Limpieza de datos de QA automatizado: usan el dominio @gestiva-qa.test y nombres "[QA] ..."
+-- que NINGÚN cliente real puede tener. Por eso es seguro borrarlos en CADA deploy.
+DO $$
+BEGIN
+  UPDATE tenants SET vendor_id = NULL
+    WHERE vendor_id IN (SELECT id FROM vendors WHERE email LIKE '%@gestiva-qa.test' OR name LIKE '[QA]%');
+  DELETE FROM tenants WHERE email LIKE '%@gestiva-qa.test' OR restaurant_name LIKE '[QA]%';
+  DELETE FROM vendors WHERE email LIKE '%@gestiva-qa.test' OR name LIKE '[QA]%';
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Limpieza QA namespace omitida: %', SQLERRM;
+END $$;
+
 -- ============================================================
 -- PROGRAMA DE VENDEDORES (Partners / Resellers)
 -- ============================================================
