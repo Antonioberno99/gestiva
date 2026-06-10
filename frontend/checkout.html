@@ -69,9 +69,9 @@ let user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
 if (!token || !user) location.href = 'login.html';
 
 const PLANS_INFO = {
-  start: { name: 'Start', price: 18900, label: '$18.900' },
-  pro:   { name: 'Pro',   price: 39000, label: '$39.000' },
-  full:  { name: 'Full',  price: 63000, label: '$63.000' }
+  start: { name: 'Start', price: 11000, label: '$11.000' },
+  pro:   { name: 'Pro',   price: 20000, label: '$20.000' },
+  full:  { name: 'Full',  price: 34000, label: '$34.000' }
 };
 let currentPlan = user?.plan && PLANS_INFO[user.plan] ? user.plan : 'pro';
 

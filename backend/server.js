@@ -26,7 +26,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod-gp';
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
-const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '39000'); // fallback = precio PRO
+const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '20000'); // fallback = precio PRO
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
 // Prueba gratis: usuarios nuevos arrancan con acceso completo (features Full) por TRIAL_DAYS días
 const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '30', 10);
@@ -36,12 +36,12 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 // ---------- Planes de suscripción ----------
 // Tres planes: start (más barato), pro (recomendado), full (premium)
-// Diseñados para ser $2.000 más baratos que los equivalentes de Fudo (Inicial $20.900 / Avanzado $41.000 / Pro $65.000)
+// Precios competitivos para el mercado gastronómico argentino.
 const PLANS = {
   start: {
     id: 'start',
     name: 'Start',
-    price: 18900,
+    price: 11000,
     description: 'Para food trucks, kioscos, take-away y emprendedores',
     features: [
       'Caja y arqueos',
@@ -59,7 +59,7 @@ const PLANS = {
   pro: {
     id: 'pro',
     name: 'Pro',
-    price: 39000,
+    price: 20000,
     description: 'Para restaurantes y bares en operación normal',
     recommended: true,
     features: [
@@ -79,7 +79,7 @@ const PLANS = {
   full: {
     id: 'full',
     name: 'Full',
-    price: 63000,
+    price: 34000,
     description: 'Para restaurantes grandes, bares de noche, boliches y multi-local',
     features: [
       'Todo lo de Pro',

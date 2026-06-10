@@ -61,7 +61,7 @@
   <div class="card">
     <div class="price-pill" id="planPill">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
-      <span id="planPillText">Plan Pro · $39.000 / mes · Sin compromisos</span>
+      <span id="planPillText">Plan Pro · $20.000 / mes · Sin compromisos</span>
     </div>
     <h1>Empezá tu mes gratis</h1>
     <p class="sub">Creá tu cuenta y dejá tu tarjeta para activar Gestiva. No se te cobra por 30 días y cancelás cuando quieras. <a href="landing.html#precios" style="color:var(--or-dk);">Ver planes</a></p>
@@ -117,9 +117,9 @@ const btn = document.getElementById('submitBtn');
 
 // Lee el plan del query string (?plan=start|pro|full) y lo refleja en la pill
 const PLAN_LABELS = {
-  start: { name: 'Start', price: '$18.900' },
-  pro:   { name: 'Pro',   price: '$39.000' },
-  full:  { name: 'Full',  price: '$63.000' }
+  start: { name: 'Start', price: '$11.000' },
+  pro:   { name: 'Pro',   price: '$20.000' },
+  full:  { name: 'Full',  price: '$34.000' }
 };
 const urlParams = new URLSearchParams(window.location.search);
 let selectedPlan = (urlParams.get('plan') || 'pro').toLowerCase();
