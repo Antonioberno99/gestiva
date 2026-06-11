@@ -302,6 +302,7 @@
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="gestiva-config.js"></script>
+<script src="comandera.js"></script>
 <script>
 // ============================================================
 //                   GASTROPANEL APP (API-backed)
@@ -1311,7 +1312,8 @@ async function chargeTable() {
       <div class="field"><label>Método de pago</label>
         <select id="payMethod" onchange="updateCustVisibility()">
           <option value="efectivo">Efectivo</option>
-          <option value="tarjeta">Tarjeta</option>
+          <option value="debito">Tarjeta de débito</option>
+          <option value="credito">Tarjeta de crédito</option>
           <option value="transferencia">Transferencia</option>
           <option value="mercadopago">MercadoPago</option>
           <option value="cuenta_corriente">Cuenta corriente</option>
@@ -1368,7 +1370,8 @@ function addSplitRow() {
   div.innerHTML = `
     <select class="splitMethod" onchange="updateCustVisibility()">
       <option value="efectivo">Efectivo</option>
-      <option value="tarjeta">Tarjeta</option>
+      <option value="debito">Tarjeta de débito</option>
+      <option value="credito">Tarjeta de crédito</option>
       <option value="transferencia">Transferencia</option>
       <option value="mercadopago">MercadoPago</option>
       <option value="cuenta_corriente">Cuenta corriente</option>
@@ -1433,15 +1436,65 @@ async function confirmCharge(total) {
     }
   }
   try {
-    await API.createOrder(payload);
+    const order = await API.createOrder(payload);
+    const sale = buildSaleFromCharge(order, payload);
     CASH_CACHE = null; CURRENT_DISCOUNT = 0; CURRENT_DISCOUNT_TYPE='amount';
     await refreshCashPill();
-    closeModal(); location.hash = '#/mesas'; toast('Cobro registrado','success');
+    toast('Cobro registrado','success');
+    showReceiptModal(sale);
   } catch(e) {
     toast(e.message === 'cash_not_open' ? 'Abrí la caja primero' :
           e.message === 'splits_mismatch' ? 'La suma de pagos no coincide con el total' :
           e.message, 'error');
   }
+}
+
+// Arma el comprobante de venta a partir de la orden cobrada
+function buildSaleFromCharge(order, payload) {
+  const prodMap = new Map((CURRENT_PRODUCTS||[]).map(p => [p.id, p]));
+  const items = (CURRENT_ITEMS||[]).map(it => {
+    const p = prodMap.get(it.productId);
+    return { name: (p && p.name) || 'Producto', qty: it.qty, price: itemUnitPrice(it, prodMap) };
+  });
+  let payments;
+  if (Array.isArray(payload.splits) && payload.splits.length) payments = payload.splits.map(s => ({ method:s.method, amount:s.amount }));
+  else payments = [{ method: payload.paymentMethod || 'efectivo', amount: (order.total!=null?order.total:window.__total) }];
+  return {
+    restaurant: (USER && USER.restaurantName) || 'Gestiva',
+    table: order.table_num || (CURRENT_TABLE && CURRENT_TABLE.num) || null,
+    waiter: order.waiter_name || null,
+    datetime: new Date(),
+    ref: order.id ? String(order.id).replace(/-/g,'').slice(-6).toUpperCase() : null,
+    items,
+    subtotal: order.subtotal,
+    discount: order.discount,
+    total: (order.total!=null?order.total:window.__total),
+    payments
+  };
+}
+
+// Pantalla de cierre con el detalle y opción de imprimir el comprobante para el cliente
+function showReceiptModal(sale, backHash) {
+  backHash = backHash || '#/mesas';
+  const payTxt = sale.payments.map(p => Comandera.payLabel(p.method) + (sale.payments.length>1 ? ' '+fmt(p.amount) : '')).join(' + ');
+  window.__lastSale = sale;
+  openModal('Cobro registrado', `
+    <div style="text-align:center;padding:4px 0;">
+      <div style="width:54px;height:54px;border-radius:50%;background:var(--green-lt,#d1fae5);display:grid;place-items:center;margin:0 auto 12px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div style="font-size:13px;color:var(--tx-mid);">Total cobrado${sale.table?' · Mesa '+sale.table:''}</div>
+      <div style="font-size:34px;font-weight:800;font-family:var(--ff-display);color:#10b981;">${fmt(sale.total)}</div>
+      <div style="margin-top:8px;font-size:14px;color:var(--tx-dark);">Forma de pago: <strong>${payTxt}</strong></div>
+      <div style="margin-top:4px;font-size:12px;color:var(--tx-lt);">Entregale el comprobante al cliente</div>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal();location.hash='${backHash}';">Listo</button>
+     <button class="btn btn-primary" onclick="printSaleReceipt()">Imprimir comprobante</button>`);
+}
+async function printSaleReceipt() {
+  if (!window.__lastSale || !window.Comandera) return;
+  try { await Comandera.printReceipt(window.__lastSale); }
+  catch(e) { toast('No se pudo imprimir: ' + (e.message||e), 'error'); }
 }
 
 // ---------- PEDIDOS (Delivery / Take Away) ----------
@@ -1658,6 +1711,14 @@ async function chargePending() {
   }, 0);
   if (subtotal === 0) return toast('Agregá items primero','error');
 
+  // Guardar items con precio para el comprobante
+  window.__pendingTotal = subtotal;
+  window.__pendingSaleItems = items.map(it => {
+    const p = prodMap.get(it.productId);
+    const mods = (it.modifiers||[]).reduce((x,m) => x + (parseFloat(m.price)||0), 0);
+    return { name: (p && p.name) || 'Producto', qty: it.qty, price: (p ? parseFloat(p.price) : 0) + mods };
+  });
+
   openModal('Cobrar pedido', `
     <div style="text-align:center;margin-bottom:18px;">
       <div style="font-size:13px;color:var(--tx-mid);">Total a cobrar</div>
@@ -1666,7 +1727,8 @@ async function chargePending() {
     <div class="field"><label>Método de pago</label>
       <select id="pcMethod" onchange="$('#pcCustBlock').style.display = this.value==='cuenta_corriente'?'':'none';">
         <option value="efectivo">Efectivo</option>
-        <option value="tarjeta">Tarjeta</option>
+        <option value="debito">Tarjeta de débito</option>
+        <option value="credito">Tarjeta de crédito</option>
         <option value="transferencia">Transferencia</option>
         <option value="mercadopago">MercadoPago</option>
         <option value="cuenta_corriente">Cuenta corriente</option>
@@ -1684,7 +1746,15 @@ async function confirmChargePending() {
   try {
     await API.pendingOrderCharge(window.__pendingId, { paymentMethod: method, customerId });
     CASH_CACHE = null; await refreshCashPill();
-    closeModal(); location.hash = '#/pedidos'; toast('Cobro registrado','success');
+    toast('Cobro registrado','success');
+    const sale = {
+      restaurant: (USER && USER.restaurantName) || 'Gestiva',
+      table: null, waiter: null, datetime: new Date(), ref: window.__pendingId ? String(window.__pendingId).replace(/-/g,'').slice(-6).toUpperCase() : null,
+      items: window.__pendingSaleItems || [],
+      subtotal: window.__pendingTotal, discount: 0, total: window.__pendingTotal,
+      payments: [{ method, amount: window.__pendingTotal }]
+    };
+    showReceiptModal(sale, '#/pedidos');
   } catch(e) { toast(e.message === 'cash_not_open' ? 'Abrí la caja primero' : e.message, 'error'); }
 }
 

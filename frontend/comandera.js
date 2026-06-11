@@ -463,9 +463,150 @@
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
   }
 
+  // ============================================================
+  //  COMPROBANTE DE VENTA (remito para el cliente, al cobrar)
+  // ============================================================
+  const PAY_LABELS = {
+    efectivo: 'Efectivo',
+    debito: 'Tarjeta de débito',
+    credito: 'Tarjeta de crédito',
+    tarjeta: 'Tarjeta',
+    transferencia: 'Transferencia',
+    mercadopago: 'MercadoPago',
+    cuenta_corriente: 'Cuenta corriente'
+  };
+  const payLabel = (m) => PAY_LABELS[m] || (m ? String(m) : 'Efectivo');
+  const money = (n) => '$' + Math.round(parseFloat(n) || 0).toLocaleString('es-AR');
+
+  // sale = { restaurant, table, waiter, datetime, ref, items:[{name,qty,price}],
+  //          subtotal, discount, total, payments:[{method,amount}] }
+  function normalizePayments(sale) {
+    if (Array.isArray(sale.payments) && sale.payments.length) return sale.payments;
+    return [{ method: sale.paymentMethod || 'efectivo', amount: sale.total }];
+  }
+
+  // ---- HTML (navegador / preview) ----
+  function receiptHTML(sale, cfg) {
+    cfg = cfg || getCfg();
+    const w = cfg.paper === 80 ? '76mm' : '54mm';
+    const head = (cfg.header || sale.restaurant || 'Gestiva');
+    const pays = normalizePayments(sale);
+    const fs = cfg.paper === 80 ? 14 : 12;
+    const rows = (sale.items || []).map(it => {
+      const line = (it.price != null) ? money(it.price * it.qty) : '';
+      return `<div class="ln"><span class="l">${escapeHTML(it.qty + 'x ' + it.name)}</span><span class="r">${line}</span></div>`;
+    }).join('');
+    const payRows = pays.map(p => `<div class="ln"><span class="l">${escapeHTML(payLabel(p.method))}</span><span class="r">${money(p.amount)}</span></div>`).join('');
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      @page { size: ${cfg.paper}mm auto; margin: 0; }
+      *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+      .tk{width:${w};padding:4mm 2mm;font-family:'Courier New',monospace;color:#000;font-size:${fs}px;}
+      .ctr{text-align:center;} .rest{font-size:${cfg.paper === 80 ? 19 : 16}px;font-weight:800;text-transform:uppercase;}
+      .doc{font-size:${fs}px;font-weight:700;letter-spacing:1px;} .tiny{font-size:10px;}
+      .hr{border-top:1px dashed #000;margin:5px 0;}
+      .ln{display:flex;justify-content:space-between;gap:8px;margin:2px 0;}
+      .ln .l{flex:1;} .ln .r{white-space:nowrap;font-variant-numeric:tabular-nums;}
+      .tot{display:flex;justify-content:space-between;font-size:${cfg.paper === 80 ? 22 : 18}px;font-weight:800;margin:4px 0;}
+      .pay-h{font-weight:700;margin-top:4px;} .foot{text-align:center;margin-top:8px;font-size:11px;}
+    </style></head><body><div class="tk">
+      <div class="ctr rest">${escapeHTML(head)}</div>
+      <div class="ctr doc">COMPROBANTE DE VENTA</div>
+      <div class="ctr tiny">No válido como factura</div>
+      <div class="hr"></div>
+      <div class="tiny">${fmtDateTime(sale.datetime)}${sale.ref ? ' · #' + shortRef(sale) : ''}</div>
+      <div class="tiny">${sale.table ? 'Mesa ' + escapeHTML(sale.table) : 'Mostrador'}${sale.waiter ? ' · ' + escapeHTML(sale.waiter) : ''}</div>
+      <div class="hr"></div>
+      ${rows || '<div class="ln"><span class="l">(sin items)</span></div>'}
+      <div class="hr"></div>
+      ${(sale.discount && sale.discount > 0) ? `<div class="ln"><span class="l">Subtotal</span><span class="r">${money(sale.subtotal)}</span></div><div class="ln"><span class="l">Descuento</span><span class="r">-${money(sale.discount)}</span></div>` : ''}
+      <div class="tot"><span>TOTAL</span><span>${money(sale.total)}</span></div>
+      <div class="hr"></div>
+      <div class="pay-h">FORMA DE PAGO</div>
+      ${payRows}
+      <div class="hr"></div>
+      <div class="foot">¡Gracias por su compra!<br>${escapeHTML(head)}<br><span class="tiny">Comprobante no fiscal</span></div>
+    </div></body></html>`;
+  }
+
+  // ---- ESC/POS (térmica) ----
+  function escposReceipt(sale, cfg) {
+    cfg = cfg || getCfg();
+    const W = charsPerLine(cfg.paper);
+    const enc = new TextEncoder();
+    const bytes = [];
+    const push = (arr) => { for (const b of arr) bytes.push(b & 0xFF); };
+    const text = (s) => push(Array.from(enc.encode(ascii(s))));
+    const line = (s) => { text(s); push([0x0A]); };
+    const center = (on) => push([0x1B, 0x61, on ? 1 : 0]);
+    const bold = (on) => push([0x1B, 0x45, on ? 1 : 0]);
+    const big = (on) => push([0x1D, 0x21, on ? 0x11 : 0x00]);
+    const sep = () => line('-'.repeat(W));
+    // Fila a 2 columnas: izquierda + derecha alineada
+    const row = (l, r) => {
+      l = ascii(l); r = ascii(r);
+      const space = Math.max(1, W - l.length - r.length);
+      if (l.length + r.length + 1 > W) { line(l); line(' '.repeat(Math.max(0, W - r.length)) + r); }
+      else line(l + ' '.repeat(space) + r);
+    };
+    const pays = normalizePayments(sale);
+    const head = cfg.header || sale.restaurant || 'Gestiva';
+
+    push([0x1B, 0x40]);
+    center(true); bold(true); big(true); line(head); big(false);
+    line('COMPROBANTE DE VENTA'); bold(false);
+    line('No valido como factura'); center(false);
+    sep();
+    line(fmtDateTime(sale.datetime) + (sale.ref ? '  #' + shortRef(sale) : ''));
+    line((sale.table ? 'Mesa ' + sale.table : 'Mostrador') + (sale.waiter ? '  ' + sale.waiter : ''));
+    sep();
+    for (const it of (sale.items || [])) {
+      row(it.qty + 'x ' + it.name, it.price != null ? money(it.price * it.qty) : '');
+    }
+    sep();
+    if (sale.discount && sale.discount > 0) {
+      row('Subtotal', money(sale.subtotal));
+      row('Descuento', '-' + money(sale.discount));
+    }
+    bold(true); big(true); row('TOTAL', money(sale.total)); big(false); bold(false);
+    sep();
+    bold(true); line('FORMA DE PAGO'); bold(false);
+    for (const p of pays) row(payLabel(p.method), money(p.amount));
+    sep();
+    center(true); line('Gracias por su compra!'); line(head);
+    line('Comprobante no fiscal'); center(false);
+    push([0x0A, 0x0A, 0x0A]);
+    push([0x1D, 0x56, 0x42, 0x00]);
+    return new Uint8Array(bytes);
+  }
+
+  async function printReceipt(sale, opts) {
+    const cfg = Object.assign(getCfg(), opts || {});
+    const copies = Math.max(1, Math.min(3, cfg.copies || 1));
+    if (cfg.method === 'screen' || cfg.method === 'browser') {
+      // El comprobante siempre se puede imprimir por navegador aunque la comandera
+      // esté en "solo pantalla" (al cliente hay que darle algo).
+      const html = receiptHTML(sale, cfg);
+      const ifr = document.createElement('iframe');
+      ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      document.body.appendChild(ifr);
+      await new Promise((resolve) => {
+        ifr.onload = () => { try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) {} setTimeout(() => { ifr.remove(); resolve(); }, 1500); };
+        const d = ifr.contentWindow.document; d.open(); d.write(html); d.close();
+      });
+      return { ok: true, method: 'browser' };
+    }
+    let bytes = escposReceipt(sale, cfg);
+    if (copies > 1) bytes = concatCopies(bytes, copies);
+    if (cfg.method === 'bluetooth') await printBluetooth(bytes);
+    else if (cfg.method === 'usb') await printUSB(bytes);
+    else if (cfg.method === 'network') await printNetwork(bytes, cfg);
+    return { ok: true, method: cfg.method };
+  }
+
   window.Comandera = {
     getCfg, setCfg, print, testPrint, ticketHTML, escpos, openConfig,
-    METHOD_LABELS,
+    receiptHTML, escposReceipt, printReceipt, payLabel,
+    METHOD_LABELS, PAY_LABELS,
     _methods: ['screen', 'browser', 'bluetooth', 'usb', 'network']
   };
 })();
