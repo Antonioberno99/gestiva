@@ -20,4 +20,16 @@
   // (ver instrucciones en docs/GOOGLE_OAUTH_SETUP.md)
   // ----------------------------------------------------------
   window.GOOGLE_CLIENT_ID = '677561332180-cjtc8rv31p8dfggnemb1b9r00onl530n.apps.googleusercontent.com';
+
+  // ----------------------------------------------------------
+  // Soporte: botón flotante de ayuda en todas las páginas del negocio.
+  // Se EXCLUYE el menú QR público (lo ven los comensales, no el dueño).
+  // El correo de soporte está en support.js: somosgestiva@gmail.com
+  // ----------------------------------------------------------
+  if (!/(^|\/)menu(\.html)?($|\/)/i.test(window.location.pathname)) {
+    var gvSup = document.createElement('script');
+    gvSup.src = 'support.js';
+    gvSup.defer = true;
+    (document.head || document.documentElement).appendChild(gvSup);
+  }
 })();
