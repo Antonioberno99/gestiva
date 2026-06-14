@@ -30,6 +30,8 @@ const SUB_PRICE = parseFloat(process.env.SUB_PRICE_ARS || '20000'); // fallback 
 const GRACE_DAYS = parseInt(process.env.GRACE_DAYS || '7', 10);
 // Prueba gratis: usuarios nuevos arrancan con acceso completo (features Full) por TRIAL_DAYS días
 const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS || '30', 10);
+// Cuentas de cortesía (acceso gratis por código): "para siempre" = ~100 años hasta que el dueño lo corte
+const COMP_DAYS = parseInt(process.env.COMP_DAYS || '36500', 10);
 // Panel del dueño (admin). Login con estas credenciales.
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
@@ -131,6 +133,7 @@ app.use(express.urlencoded({ extended: true }));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 240 });
+const trackLimiter = rateLimit({ windowMs: 60 * 1000, max: 300 });
 
 // ---------- Helpers ----------
 function signToken(tenant) {
@@ -199,12 +202,35 @@ async function creditVendorCommission(tenantId, paymentAmount) {
   } catch (e) { console.error('[commission]', e.message); }
 }
 
+// Resuelve el código del campo "ref" del registro: puede ser un código de ACCESO GRATIS
+// (cortesía, tabla access_codes) o un código de VENDEDOR (vendors.ref_code).
+// Devuelve { compCode, vendorId } — como mucho uno de los dos.
+async function resolveRefCode(ref) {
+  const out = { compCode: null, vendorId: null };
+  if (!ref || typeof ref !== 'string') return out;
+  const code = ref.toUpperCase().trim();
+  if (!code) return out;
+  // 1) ¿Código de acceso gratis, activo y con cupos disponibles?
+  let ac = null;
+  try {
+    ac = (await q(`SELECT code FROM access_codes WHERE code=$1 AND active=true
+                     AND (max_uses IS NULL OR uses < max_uses)`, [code])).rows[0];
+  } catch (e) { /* la tabla puede no existir en DBs viejas; seguimos con vendedor */ }
+  if (ac) { out.compCode = ac.code; return out; }
+  // 2) Si no, ¿código de vendedor activo?
+  const v = (await q('SELECT id FROM vendors WHERE ref_code=$1 AND status=$2', [code, 'active'])).rows[0];
+  if (v) out.vendorId = v.id;
+  return out;
+}
+
 function publicTenant(t) {
   const planId = t.plan || 'pro';
   const plan = planFor(planId);
   const isTrial = t.subscription_status === 'trial';
-  // Durante la prueba, el acceso es completo (límites del plan Full)
-  const effectiveLimits = isTrial ? planFor('full').limits : plan.limits;
+  const isComp = !!t.access_code;   // cuenta de cortesía (acceso gratis por código)
+  // En la prueba o en cuentas de cortesía el acceso es completo (features/límites del plan Full)
+  const fullAccess = isTrial || isComp;
+  const effectiveLimits = fullAccess ? planFor('full').limits : plan.limits;
   return {
     id: t.id, email: t.email,
     restaurantName: t.restaurant_name,
@@ -218,13 +244,14 @@ function publicTenant(t) {
     graceEndsAt: t.grace_ends_at,
     mpInitPoint: t.mp_init_point,
     cancelAtPeriodEnd: !!t.cancel_at_period_end,
-    daysLeft: computeDaysLeft(t),
+    daysLeft: isComp ? null : computeDaysLeft(t),
     isTrial,
+    isComp,                         // true = cuenta gratis de cortesía
     trialEndsAt: isTrial ? t.subscription_ends_at : null,
     plan: planId,                 // plan elegido (lo que pagará al terminar la prueba)
-    planName: plan.name,
-    planPrice: plan.price,
-    planFeatures: plan.features,
+    planName: isComp ? 'Cortesía' : plan.name,
+    planPrice: isComp ? 0 : plan.price,
+    planFeatures: fullAccess ? planFor('full').features : plan.features,
     planLimits: effectiveLimits
   };
 }
@@ -425,20 +452,21 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const chosenPlan = (plan && PLANS[plan]) ? plan : 'pro';
 
-    // Si vino con código de vendedor (ref), buscamos al vendor
-    let vendorId = null;
-    if (ref && typeof ref === 'string') {
-      const v = await q('SELECT id FROM vendors WHERE ref_code=$1 AND status=$2', [ref.toUpperCase().trim(), 'active']);
-      if (v.rows[0]) vendorId = v.rows[0].id;
-    }
+    // El campo "ref" puede traer un código de ACCESO GRATIS (cortesía) o de VENDEDOR.
+    const { compCode, vendorId } = await resolveRefCode(ref);
 
     // Modo de alta:
+    // - Código de cortesía: activo "para siempre" (acceso gratis sin tarjeta)
     // - SKIP_BILLING (dev): activo 1 año
     // - Producción: el dueño debe dejar la tarjeta para arrancar el mes gratis.
     //   Hasta que no autorice la suscripción en MercadoPago queda 'pending' (sin acceso).
     //   El estado pasa a 'trial' (mes gratis) cuando el webhook confirma la autorización.
     let initialStatus, endsAt, graceEndsAt, startedAt = new Date();
-    if (SKIP_BILLING) {
+    if (compCode) {
+      initialStatus = 'active';
+      endsAt = new Date(startedAt.getTime() + COMP_DAYS * 86400000);
+      graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+    } else if (SKIP_BILLING) {
       initialStatus = 'active';
       endsAt = new Date(startedAt.getTime() + 365 * 86400000);
       graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
@@ -450,12 +478,13 @@ app.post('/auth/register', authLimiter, async (req, res) => {
 
     const ins = await q(
       `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone,
-                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan, vendor_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                            subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan, vendor_id, access_code)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null,
-       initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan, vendorId]
+       initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan, vendorId, compCode]
     );
     const t = ins.rows[0];
+    if (compCode) await q('UPDATE access_codes SET uses = uses + 1 WHERE code=$1', [compCode]);
 
     // Seed: agregar 12 mesas y 1 mozo por defecto para empezar
     for (let i = 1; i <= 12; i++) {
@@ -547,8 +576,15 @@ app.post('/auth/google', authLimiter, async (req, res) => {
     } else {
       // Crear tenant nuevo (mismo modelo de alta que /auth/register)
       isNew = true;
+      // El campo "ref" puede traer un código de ACCESO GRATIS (cortesía) o de VENDEDOR.
+      const { compCode, vendorId } = await resolveRefCode(ref);
       let initialStatus, endsAt, graceEndsAt, startedAt = new Date();
-      if (SKIP_BILLING) {
+      if (compCode) {
+        // Cortesía: acceso gratis "para siempre" sin tarjeta.
+        initialStatus = 'active';
+        endsAt = new Date(startedAt.getTime() + COMP_DAYS * 86400000);
+        graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
+      } else if (SKIP_BILLING) {
         initialStatus = 'active';
         endsAt = new Date(startedAt.getTime() + 365 * 86400000);
         graceEndsAt = new Date(endsAt.getTime() + GRACE_DAYS * 86400000);
@@ -558,19 +594,14 @@ app.post('/auth/google', authLimiter, async (req, res) => {
         endsAt = null;
         graceEndsAt = null;
       }
-      // Asociar vendedor si vino con código (ref) válido y activo
-      let vendorId = null;
-      if (ref && typeof ref === 'string') {
-        const vv = await q('SELECT id FROM vendors WHERE ref_code=$1 AND status=$2', [ref.toUpperCase().trim(), 'active']);
-        if (vv.rows[0]) vendorId = vv.rows[0].id;
-      }
       const ins = await q(
         `INSERT INTO tenants (email, google_id, google_picture, restaurant_name, owner_name,
-                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-        [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt, vendorId]
+                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id, access_code)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt, vendorId, compCode]
       );
       t = ins.rows[0];
+      if (compCode) await q('UPDATE access_codes SET uses = uses + 1 WHERE code=$1', [compCode]);
       // Seed inicial: 12 mesas, 1 mozo, productos por defecto
       for (let i = 1; i <= 12; i++) {
         await q('INSERT INTO tables (tenant_id, num, seats) VALUES ($1,$2,$3)', [t.id, i, 4]);
@@ -1808,6 +1839,29 @@ app.get('/admin/stats', requireAdminAuth, async (req, res) => {
   });
 });
 
+// Métricas de tráfico de la web: cuántas personas exploran la web + embudo a registro.
+// Usamos ventanas móviles (24 h / 7 días) para evitar líos de zona horaria.
+app.get('/admin/visits', requireAdminAuth, async (req, res) => {
+  try {
+    const v = await q(`
+      SELECT
+        COUNT(DISTINCT visitor_id) FILTER (WHERE type='visit')::int AS visitors_total,
+        COUNT(DISTINCT visitor_id) FILTER (WHERE type='visit' AND created_at >= now() - interval '24 hours')::int AS visitors_24h,
+        COUNT(DISTINCT visitor_id) FILTER (WHERE type='visit' AND created_at >= now() - interval '7 days')::int AS visitors_7d,
+        COUNT(*) FILTER (WHERE type='visit')::int AS views_total,
+        COUNT(*) FILTER (WHERE type='visit' AND created_at >= now() - interval '7 days')::int AS views_7d
+      FROM site_events`);
+    const s = await q(`SELECT
+        count(*)::int AS total,
+        count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
+      FROM tenants`);
+    res.json({ visits: v.rows[0], signups: s.rows[0] });
+  } catch (e) {
+    console.error('[admin/visits]', e?.message || e);
+    res.status(500).json({ error: 'visits_error' });
+  }
+});
+
 // Listar vendedores (con filtro opcional ?status=pending)
 app.get('/admin/vendors', requireAdminAuth, async (req, res) => {
   const status = req.query.status;
@@ -1928,16 +1982,94 @@ app.get('/admin/activity', requireAdminAuth, async (req, res) => {
 app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
   const r = await q(
     `SELECT t.id, t.restaurant_name, t.email, t.phone, t.subscription_status, t.plan,
-            t.created_at, t.last_payment_at, t.last_payment_amount, v.name AS vendor_name
+            t.access_code, t.created_at, t.last_payment_at, t.last_payment_amount, v.name AS vendor_name
      FROM tenants t LEFT JOIN vendors v ON v.id=t.vendor_id
      ORDER BY t.created_at DESC LIMIT 500`
   );
   res.json({ tenants: r.rows });
 });
 
+// ----- CÓDIGOS DE ACCESO GRATIS (cuentas de cortesía) -----
+// Un código que el dueño reparte; quien lo usa al registrarse entra con acceso
+// completo, gratis y sin tarjeta. Se ingresa en el mismo campo "ref" del signup.
+app.get('/admin/access-codes', requireAdminAuth, async (req, res) => {
+  const r = await q(`SELECT ac.*,
+      (SELECT count(*)::int FROM tenants t WHERE t.access_code = ac.code) AS tenants_count
+    FROM access_codes ac ORDER BY ac.created_at DESC`);
+  res.json({ codes: r.rows });
+});
+
+app.post('/admin/access-codes', requireAdminAuth, async (req, res) => {
+  const code = (req.body?.code || '').toUpperCase().trim();
+  if (!/^[A-Z0-9][A-Z0-9-]{2,31}$/.test(code)) return res.status(400).json({ error: 'invalid_code' });
+  const label = (req.body?.label || '').trim() || null;
+  const maxRaw = req.body?.maxUses;
+  const max = (maxRaw === '' || maxRaw == null) ? NaN : parseInt(maxRaw, 10);
+  const maxUses = (Number.isInteger(max) && max > 0) ? max : null;
+  try {
+    const r = await q('INSERT INTO access_codes (code, label, max_uses) VALUES ($1,$2,$3) RETURNING *',
+      [code, label, maxUses]);
+    res.json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'code_taken' });
+    throw e;
+  }
+});
+
+app.post('/admin/access-codes/:id/toggle', requireAdminAuth, async (req, res) => {
+  const r = await q('UPDATE access_codes SET active = NOT active WHERE id=$1 RETURNING *', [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json(r.rows[0]);
+});
+
+app.delete('/admin/access-codes/:id', requireAdminAuth, async (req, res) => {
+  await q('DELETE FROM access_codes WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+// Cortar / restaurar el acceso de cortesía de un restaurante puntual.
+// 'grant' también sirve para regalarle el acceso a CUALQUIER restaurante desde el panel.
+app.post('/admin/tenants/:id/access', requireAdminAuth, async (req, res) => {
+  const action = req.body?.action;
+  const now = new Date();
+  if (action === 'revoke') {
+    await q(`UPDATE tenants SET subscription_status='expired', subscription_ends_at=$1, grace_ends_at=$1 WHERE id=$2`,
+      [now, req.params.id]);
+  } else if (action === 'grant') {
+    const ends = new Date(now.getTime() + COMP_DAYS * 86400000);
+    const grace = new Date(ends.getTime() + GRACE_DAYS * 86400000);
+    await q(`UPDATE tenants SET subscription_status='active',
+             subscription_started_at=COALESCE(subscription_started_at, $1),
+             subscription_ends_at=$2, grace_ends_at=$3,
+             access_code=COALESCE(access_code, 'CORTESIA')
+             WHERE id=$4`, [now, ends, grace, req.params.id]);
+  } else {
+    return res.status(400).json({ error: 'invalid_action' });
+  }
+  const t = (await q('SELECT * FROM tenants WHERE id=$1', [req.params.id])).rows[0];
+  if (!t) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true, tenant: publicTenant(t) });
+});
+
 // ============================================================
 //                       Health
 // ============================================================
+
+// ----- TRACKING DE VISITAS (público, sin auth) -----
+// La web (landing) llama acá para contar cuánta gente la explora. Best-effort:
+// nunca rompe la navegación si falla. Solo guarda un id anónimo de navegador.
+app.post('/public/track', trackLimiter, async (req, res) => {
+  try {
+    const { type, visitorId, path } = req.body || {};
+    if (!['visit', 'demo'].includes(type)) return res.status(400).json({ error: 'invalid_type' });
+    const vid = (typeof visitorId === 'string' && visitorId) ? visitorId.slice(0, 64) : null;
+    const p = (typeof path === 'string' && path) ? path.slice(0, 128) : null;
+    await q('INSERT INTO site_events (type, visitor_id, path) VALUES ($1,$2,$3)', [type, vid, p]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.json({ ok: false }); // nunca romper la web por un evento de tracking
+  }
+});
 
 // ----- MENÚ PÚBLICO (QR carta digital, sin auth) -----
 app.get('/public/menu/:tenantId', async (req, res) => {

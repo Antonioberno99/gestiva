@@ -357,3 +357,37 @@ CREATE TABLE IF NOT EXISTS vendor_commissions (
 );
 CREATE INDEX IF NOT EXISTS idx_vc_vendor ON vendor_commissions(vendor_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_vc_tenant ON vendor_commissions(tenant_id);
+
+-- ============================================================
+-- CÓDIGOS DE ACCESO GRATIS (cuentas de cortesía)
+-- El dueño crea códigos desde su panel y los reparte (amigos, pruebas).
+-- Quien lo usa al registrarse entra con acceso completo, gratis y sin tarjeta.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS access_codes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code        TEXT UNIQUE NOT NULL,          -- código que se tipea en el registro (mayúsculas)
+  label       TEXT,                          -- nota para el dueño ("Amigos del bar", "Juan")
+  active      BOOLEAN DEFAULT true,          -- desactivar frena nuevos registros con este código
+  max_uses    INT,                           -- null = ilimitado
+  uses        INT DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
+
+-- Marca en el tenant qué código de cortesía usó (null = cuenta normal/paga).
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS access_code TEXT;
+
+-- ============================================================
+-- VISITAS A LA WEB (cuántas personas exploran la web)
+-- Evento anónimo y liviano: solo un id de visitante generado en el navegador
+-- (localStorage), sin datos personales. Sirve para medir tráfico en el panel.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS site_events (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type        TEXT NOT NULL,           -- 'visit' | 'demo'
+  visitor_id  TEXT,                    -- id anónimo por navegador (no es PII)
+  path        TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_site_events_created ON site_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_events_type ON site_events(type, created_at DESC);

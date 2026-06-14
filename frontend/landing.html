@@ -1365,7 +1365,22 @@
   </div>
 </footer>
 
+<script src="gestiva-config.js"></script>
 <script>
+  // ── tracking de visitas: cuántas personas exploran la web (anónimo, sin datos personales) ──
+  (function trackVisit(){
+    try {
+      let vid = localStorage.getItem('gestiva_vid');
+      if (!vid) { vid = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('gestiva_vid', vid); }
+      if (window.API_URL) {
+        fetch(window.API_URL + '/public/track', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'visit', visitorId: vid, path: location.pathname })
+        }).catch(function(){});
+      }
+    } catch (e) {}
+  })();
+
   // ── mobile menu ──
   function toggleMenu() {
     const open = document.getElementById('mMenu').classList.toggle('open');

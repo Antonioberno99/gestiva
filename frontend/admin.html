@@ -46,7 +46,7 @@
   .container{max-width:1240px;margin:0 auto;padding:28px 24px}
 
   /* KPIs */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:14px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:14px}
   .kpi{background:#fff;border:1px solid var(--border);border-radius:16px;padding:20px}
   .kpi-label{font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
   .kpi-val{font-family:var(--ff-display);font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
@@ -83,6 +83,56 @@
   .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--tx-mid)}
   .app-detail{font-size:12px;color:var(--tx-mid);line-height:1.5;margin-top:6px}
   .app-detail b{color:var(--tx-dark)}
+  /* Códigos de acceso gratis */
+  .hint{color:var(--tx-mid);font-size:13px;margin:-8px 0 16px;line-height:1.5}
+  .code-form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px}
+  .code-form .fld{flex:1;min-width:150px}
+  .code-form .fld.sm{flex:0 0 110px}
+  .code-form label{display:block;font-size:12px;font-weight:600;color:var(--tx-mid);margin-bottom:5px}
+  .code-form input{width:100%;padding:10px 12px;border-radius:9px;border:1px solid var(--border);font-size:14px;font-family:inherit}
+  .code-form input:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+  .code-form button{padding:11px 20px;border:none;border-radius:10px;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer;background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff}
+  .code-pill{font-family:monospace;font-weight:700;background:#f1f5f9;padding:3px 8px;border-radius:6px;font-size:12px}
+  /* Código gratis destacado arriba del panel */
+  .freecode{background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1px solid #fed7aa;border-radius:16px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .freecode .fc-label{font-size:12px;color:var(--or-dk);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+  .freecode .fc-code{font-family:monospace;font-size:22px;font-weight:800;color:var(--ink);background:#fff;border:1px dashed var(--or);border-radius:10px;padding:6px 14px;letter-spacing:.02em}
+  .freecode .fc-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+  .freecode button{padding:9px 14px;border-radius:9px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+  .freecode .fc-copy{background:var(--or);color:#fff}
+  .freecode .fc-ghost{background:#fff;border:1px solid #fed7aa;color:var(--or-dk)}
+
+  /* Menú de tres líneas (drawer lateral) */
+  .hamb{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:9px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:#fff;flex:none}
+  .hamb svg{width:20px;height:20px}
+  .drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
+  .drawer-backdrop.open{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;left:0;height:100vh;width:280px;max-width:84vw;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.3);transform:translateX(-100%);transition:transform .25s ease;z-index:50;display:flex;flex-direction:column;padding:18px 14px;overflow-y:auto}
+  .drawer.open{transform:translateX(0)}
+  .drawer-brand{display:flex;align-items:center;gap:8px;padding:6px 10px 16px;border-bottom:1px solid var(--border);margin-bottom:8px}
+  .drawer-brand .name{font-family:var(--ff-display);font-weight:800;font-size:18px;color:var(--or)}
+  .drawer-brand .badge{font-size:10px;background:var(--or);color:#fff;padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:.04em}
+  .drawer-item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:10px;color:var(--ink2);font-weight:600;font-size:14px;cursor:pointer;text-decoration:none;border:none;background:none;font-family:inherit;width:100%;text-align:left}
+  .drawer-item:hover{background:var(--or-lt);color:var(--or-dk)}
+  .drawer-item svg{width:18px;height:18px;flex:none;opacity:.85}
+  .drawer-item.danger{color:var(--red)}
+  .drawer-item.danger:hover{background:#fee2e2}
+  .drawer-sep{height:1px;background:var(--border);margin:8px 4px}
+
+  /* Panel principal (dashboard) */
+  .dash{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .dcard{background:#fff;border:1px solid var(--border);border-radius:16px;padding:18px 20px}
+  .dcard-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .dcard-h h3{font-family:var(--ff-display);font-size:15px;margin:0}
+  .lnk{background:none;border:none;color:var(--or-dk);font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .dstat-row{display:flex;gap:10px;flex-wrap:wrap}
+  .dstat{flex:1;min-width:68px;background:#f8fafc;border-radius:12px;padding:12px;text-align:center}
+  .dnum{font-family:var(--ff-display);font-size:22px;font-weight:800;letter-spacing:-.02em}
+  .dlbl{font-size:11px;color:var(--tx-mid);margin-top:2px}
+  .drow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+  .drow:last-child{border-bottom:none}
+  .drow .sub{font-size:12px;color:var(--tx-mid)}
+  @media (max-width:880px){ .dash{grid-template-columns:1fr} }
   /* Feed de actividad */
   .feed{display:flex;flex-direction:column}
   .fev{display:flex;gap:14px;padding:13px 4px;border-bottom:1px solid var(--border)}
@@ -100,7 +150,7 @@
   .fbody .fmoney{font-weight:700;color:var(--green)}
   .fwhen{font-size:12px;color:var(--tx-lt);white-space:nowrap;flex:none;align-self:center}
 
-  @media (max-width:768px){ .kpis{grid-template-columns:repeat(2,1fr)} table.data{font-size:12px} .container{padding:18px 12px} }
+  @media (max-width:768px){ .kpis{grid-template-columns:repeat(2,1fr)} table.data{font-size:12px} .container{padding:18px 12px} .tabs{display:none} }
 </style>
 </head>
 <body>
@@ -132,6 +182,9 @@
 <div id="panelView" style="display:none">
   <header class="topbar">
     <div class="topbar-left">
+      <button class="hamb" id="hambBtn" onclick="toggleDrawer()" aria-label="Abrir menú">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <div class="logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
       <span class="name">Gestiva</span>
       <span class="badge">DUEÑO</span>
@@ -142,27 +195,63 @@
     </div>
   </header>
 
+  <!-- Menú de tres líneas (drawer) -->
+  <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+  <nav class="drawer" id="drawer">
+    <div class="drawer-brand"><span class="name">Gestiva</span><span class="badge">DUEÑO</span></div>
+    <button class="drawer-item" onclick="goTab('inicio')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Panel principal</button>
+    <button class="drawer-item" onclick="goTab('actividad')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Actividad</button>
+    <button class="drawer-item" onclick="goTab('visitas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Visitas</button>
+    <button class="drawer-item" onclick="goTab('solicitudes')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg> Solicitudes</button>
+    <button class="drawer-item" onclick="goTab('vendedores')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Vendedores</button>
+    <button class="drawer-item" onclick="goTab('comisiones')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Comisiones</button>
+    <button class="drawer-item" onclick="goTab('restaurantes')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Restaurantes</button>
+    <button class="drawer-item" onclick="goTab('codigos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3"/></svg> Códigos gratis</button>
+    <div class="drawer-sep"></div>
+    <a class="drawer-item" href="/" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg> Ver la web</a>
+    <button class="drawer-item danger" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg> Cerrar sesión</button>
+  </nav>
+
   <div class="container">
+    <div class="freecode" id="freeCodeBar" style="display:none"></div>
     <div class="kpis">
       <div class="kpi"><div class="kpi-label">Restaurantes</div><div class="kpi-val" id="kTenants">0</div><div class="kpi-sub" id="kTenantsSub"></div></div>
       <div class="kpi"><div class="kpi-label">MRR (ingreso mensual)</div><div class="kpi-val money" id="kMrr">$0</div><div class="kpi-sub">de clientes activos</div></div>
       <div class="kpi"><div class="kpi-label">Vendedores</div><div class="kpi-val" id="kVendors">0</div><div class="kpi-sub" id="kVendorsSub"></div></div>
       <div class="kpi"><div class="kpi-label">Comisiones a pagar</div><div class="kpi-val money" id="kCommPending">$0</div><div class="kpi-sub">pendientes</div></div>
+      <div class="kpi"><div class="kpi-label">Visitas (7 días)</div><div class="kpi-val" id="kVisits">0</div><div class="kpi-sub">personas en la web</div></div>
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="actividad" onclick="setTab('actividad')">Actividad</button>
+      <button class="tab active" data-tab="inicio" onclick="setTab('inicio')">Panel</button>
+      <button class="tab" data-tab="actividad" onclick="setTab('actividad')">Actividad</button>
+      <button class="tab" data-tab="visitas" onclick="setTab('visitas')">Visitas</button>
       <button class="tab" data-tab="solicitudes" onclick="setTab('solicitudes')">Solicitudes <span class="count" id="cntPending" style="display:none">0</span></button>
       <button class="tab" data-tab="vendedores" onclick="setTab('vendedores')">Vendedores</button>
       <button class="tab" data-tab="comisiones" onclick="setTab('comisiones')">Comisiones</button>
       <button class="tab" data-tab="restaurantes" onclick="setTab('restaurantes')">Restaurantes</button>
+      <button class="tab" data-tab="codigos" onclick="setTab('codigos')">Códigos gratis</button>
     </div>
 
-    <div class="panel active" id="panel-actividad"><h2>Actividad reciente</h2><div id="actividadBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel active" id="panel-inicio"><h2>Panel principal</h2><div id="inicioBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-actividad"><h2>Actividad reciente</h2><div id="actividadBox"><div class="empty">Cargando…</div></div></div>
+    <div class="panel" id="panel-visitas"><h2>Cuánta gente explora la web</h2><div id="visitasBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-solicitudes"><h2>Solicitudes de vendedores</h2><div id="solicitudesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-vendedores"><h2>Todos los vendedores</h2><div id="vendedoresBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-comisiones"><h2>Comisiones</h2><div id="comisionesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-restaurantes"><h2>Restaurantes (clientes)</h2><div id="restaurantesBox"><div class="empty">Cargando…</div></div></div>
+
+    <div class="panel" id="panel-codigos">
+      <h2>Códigos de acceso gratis</h2>
+      <p class="hint">Creá un código y dáselo a quien quieras (amigos, pruebas). Quien lo use al registrarse entra con <b>acceso completo, gratis y sin tarjeta</b>. Se ingresa en el campo “Código” del registro o con el link directo de abajo.</p>
+      <form class="code-form" id="codeForm">
+        <div class="fld"><label>Código</label><input id="cCode" placeholder="AMIGOS2026" style="text-transform:uppercase" maxlength="32" /></div>
+        <div class="fld"><label>Nota (solo la ves vos)</label><input id="cLabel" placeholder="Ej: Amigos del bar" /></div>
+        <div class="fld sm"><label>Máx. usos</label><input id="cMax" type="number" min="1" placeholder="∞" /></div>
+        <button type="submit">Crear código</button>
+      </form>
+      <div id="codigosBox"><div class="empty">Cargando…</div></div>
+    </div>
   </div>
 </div>
 
@@ -225,6 +314,59 @@ function setTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+name));
 }
+// Menú de tres líneas (drawer)
+function toggleDrawer(){ const d=$('#drawer'), b=$('#drawerBackdrop'); const open=d.classList.toggle('open'); b.classList.toggle('open', open); }
+function closeDrawer(){ $('#drawer').classList.remove('open'); $('#drawerBackdrop').classList.remove('open'); }
+function goTab(name){ setTab(name); closeDrawer(); window.scrollTo({top:0,behavior:'smooth'}); }
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeDrawer(); });
+
+// PANEL PRINCIPAL: junta lo más importante de todas las secciones en una sola vista
+async function loadInicio(){
+  const box = $('#inicioBox');
+  const [stats, vis, act, pend, tenants] = await Promise.all([
+    api('/admin/stats'), api('/admin/visits'), api('/admin/activity'),
+    api('/admin/vendors?status=pending'), api('/admin/tenants')
+  ]);
+  if (!stats) return;
+  const n = (x)=>Number(x||0).toLocaleString('es-AR');
+  const v = (vis && vis.visits) || {};
+  const conv = v.visitors_total > 0 ? Math.round((Number(vis.signups?.total||0)/v.visitors_total)*100) : 0;
+  const pendList = (pend && pend.vendors) || [];
+  const recent = ((tenants && tenants.tenants) || []).slice(0,6);
+  const acts = ((act && act.activity) || []).slice(0,6);
+  const STATUS_LBL = {trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'};
+  box.innerHTML = `<div class="dash">
+    <div class="dcard">
+      <div class="dcard-h"><h3>Visitas a la web</h3><button class="lnk" onclick="goTab('visitas')">Ver detalle</button></div>
+      <div class="dstat-row">
+        <div class="dstat"><div class="dnum">${n(v.visitors_24h)}</div><div class="dlbl">hoy (24h)</div></div>
+        <div class="dstat"><div class="dnum">${n(v.visitors_7d)}</div><div class="dlbl">7 días</div></div>
+        <div class="dstat"><div class="dnum">${n(v.visitors_total)}</div><div class="dlbl">total</div></div>
+        <div class="dstat"><div class="dnum" style="color:var(--or-dk)">${conv}%</div><div class="dlbl">se registran</div></div>
+      </div>
+    </div>
+    <div class="dcard">
+      <div class="dcard-h"><h3>Solicitudes de vendedores</h3><button class="lnk" onclick="goTab('solicitudes')">Ver todas</button></div>
+      ${pendList.length ? pendList.slice(0,4).map(vd=>`<div class="drow">
+          <div><strong>${vd.name}</strong><div class="sub">${vd.email}</div></div>
+          <div style="white-space:nowrap">
+            <button class="btn-act btn-approve" onclick="approve('${vd.id}')">Aprobar</button>
+            <button class="btn-act btn-reject" onclick="reject('${vd.id}')">Rechazar</button>
+          </div></div>`).join('') : '<div class="empty" style="padding:14px 0">No hay solicitudes pendientes 🎉</div>'}
+    </div>
+    <div class="dcard">
+      <div class="dcard-h"><h3>Actividad reciente</h3><button class="lnk" onclick="goTab('actividad')">Ver todo</button></div>
+      ${acts.length ? '<div class="feed">'+acts.map(ev=>{const f=feedText(ev);return `<div class="fev"><div class="fic ${ev.type}">${FEED_ICON[ev.type]||''}</div><div class="fbody"><div class="ft">${f.t}</div><div class="fd">${f.d}</div></div><div class="fwhen">${timeAgo(ev.ts)}</div></div>`;}).join('')+'</div>' : '<div class="empty" style="padding:14px 0">Sin actividad todavía</div>'}
+    </div>
+    <div class="dcard">
+      <div class="dcard-h"><h3>Últimos restaurantes</h3><button class="lnk" onclick="goTab('restaurantes')">Ver todos</button></div>
+      ${recent.length ? recent.map(t=>`<div class="drow">
+          <div><strong>${t.restaurant_name}</strong><div class="sub">${t.email}</div></div>
+          <div>${t.access_code?'<span class="badge2 trial">Cortesía</span>':`<span class="badge2 ${t.subscription_status}">${STATUS_LBL[t.subscription_status]||t.subscription_status}</span>`}</div>
+        </div>`).join('') : '<div class="empty" style="padding:14px 0">Todavía no hay restaurantes</div>'}
+    </div>
+  </div>`;
+}
 
 async function loadAll(){
   const stats = await api('/admin/stats');
@@ -237,7 +379,7 @@ async function loadAll(){
   $('#kVendorsSub').textContent = `${stats.vendors.pending} pendientes · ${stats.vendors.active} activos`;
   $('#kCommPending').textContent = fmt(stats.commissions.pending);
   if (stats.vendors.pending > 0){ const c=$('#cntPending'); c.textContent=stats.vendors.pending; c.style.display=''; }
-  loadActividad(); loadSolicitudes(); loadVendedores(); loadComisiones(); loadRestaurantes();
+  loadInicio(); loadActividad(); loadVisits(); loadSolicitudes(); loadVendedores(); loadComisiones(); loadRestaurantes(); loadAccessCodes();
 }
 
 function timeAgo(d){
@@ -353,15 +495,29 @@ async function loadRestaurantes(){
   if (!data) return;
   const box = $('#restaurantesBox');
   if (!data.tenants.length){ box.innerHTML='<div class="empty">Todavía no hay restaurantes.</div>'; return; }
-  box.innerHTML = `<table class="data"><thead><tr><th>Restaurante</th><th>Contacto</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th></tr></thead><tbody>
-    ${data.tenants.map(t=>`<tr>
-      <td><strong>${t.restaurant_name}</strong></td>
-      <td>${t.email}<br><span style="color:var(--tx-mid)">${t.phone||'—'}</span></td>
-      <td style="text-transform:capitalize">${t.plan||'pro'}</td>
-      <td><span class="badge2 ${t.subscription_status}">${({trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'})[t.subscription_status]||t.subscription_status}</span></td>
-      <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
-      <td style="text-align:right;color:var(--tx-mid)">${dt(t.created_at)}</td>
-    </tr>`).join('')}
+  const STATUS_LBL = {trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'};
+  box.innerHTML = `<table class="data"><thead><tr><th>Restaurante</th><th>Contacto</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th><th>Acción</th></tr></thead><tbody>
+    ${data.tenants.map(t=>{
+      const isComp = !!t.access_code;
+      const isActive = ['active','grace','trial'].includes(t.subscription_status);
+      const statusCell = isComp
+        ? `<span class="badge2 trial">Cortesía</span>`
+        : `<span class="badge2 ${t.subscription_status}">${STATUS_LBL[t.subscription_status]||t.subscription_status}</span>`;
+      const action = (isComp && isActive)
+        ? `<button class="btn-act btn-reject" onclick="cutAccess('${t.id}')">Cortar acceso</button>`
+        : (isComp
+            ? `<button class="btn-act btn-approve" onclick="grantAccess('${t.id}')">Restaurar</button>`
+            : `<button class="btn-act btn-ghost" onclick="grantAccess('${t.id}')">Dar gratis</button>`);
+      return `<tr>
+        <td><strong>${t.restaurant_name}</strong>${isComp?` <span class="code-pill">${t.access_code}</span>`:''}</td>
+        <td>${t.email}<br><span style="color:var(--tx-mid)">${t.phone||'—'}</span></td>
+        <td style="text-transform:capitalize">${t.plan||'pro'}</td>
+        <td>${statusCell}</td>
+        <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
+        <td style="text-align:right;color:var(--tx-mid)">${dt(t.created_at)}</td>
+        <td style="white-space:nowrap">${action}</td>
+      </tr>`;
+    }).join('')}
   </tbody></table>`;
 }
 
@@ -370,6 +526,106 @@ async function reject(id){ if(!confirm('¿Rechazar esta solicitud?'))return; awa
 async function pause(id){ if(!confirm('¿Pausar este vendedor? No podrá captar nuevos clientes.'))return; await api('/admin/vendors/'+id+'/status',{method:'POST',body:JSON.stringify({status:'paused'})}); loadAll(); }
 async function reactivate(id){ await api('/admin/vendors/'+id+'/status',{method:'POST',body:JSON.stringify({status:'active'})}); loadAll(); }
 async function payComm(id){ if(!confirm('¿Marcar esta comisión como pagada al vendedor?'))return; await api('/admin/commissions/'+id+'/pay',{method:'POST'}); loadAll(); }
+
+// ----- CÓDIGOS DE ACCESO GRATIS -----
+async function loadAccessCodes(){
+  const data = await api('/admin/access-codes');
+  const box = $('#codigosBox');
+  if (!data || !Array.isArray(data.codes)){ renderFreeCodeBar([]); box.innerHTML='<div class="empty">No se pudieron cargar los códigos. (Si es la primera vez, asegurate de haber aplicado el schema.sql actualizado en la base.)</div>'; return; }
+  renderFreeCodeBar(data.codes);
+  if (!data.codes.length){ box.innerHTML='<div class="empty">Todavía no creaste ningún código. Usá el botón “Generar mi código” de arriba, o creá uno con el formulario.</div>'; return; }
+  box.innerHTML = `<table class="data"><thead><tr><th>Código</th><th>Nota</th><th style="text-align:center">Usos</th><th>Estado</th><th>Creado</th><th>Acción</th></tr></thead><tbody>
+    ${data.codes.map(c=>{
+      const link = `${location.origin}/signup.html?ref=${encodeURIComponent(c.code)}`;
+      const usos = c.max_uses ? `${c.tenants_count} / ${c.max_uses}` : `${c.tenants_count}`;
+      return `<tr>
+        <td><span class="code-pill">${c.code}</span></td>
+        <td>${c.label||'—'}<br><a href="${link}" target="_blank" style="font-size:11px;color:var(--or-dk)">link de registro ↗</a></td>
+        <td style="text-align:center">${usos}</td>
+        <td><span class="badge2 ${c.active?'active':'paused'}">${c.active?'Activo':'Desactivado'}</span></td>
+        <td style="color:var(--tx-mid)">${dt(c.created_at)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-act btn-ghost" onclick="toggleCode('${c.id}')">${c.active?'Desactivar':'Activar'}</button>
+          <button class="btn-act btn-reject" onclick="deleteCode('${c.id}','${c.code}')">Borrar</button>
+        </td></tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+$('#codeForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const code = $('#cCode').value.trim().toUpperCase();
+  if (!code) return;
+  const r = await api('/admin/access-codes', { method:'POST', body: JSON.stringify({
+    code, label: $('#cLabel').value.trim() || null, maxUses: $('#cMax').value || null
+  })});
+  if (r && r.error){ alert(r.error==='code_taken'?'Ese código ya existe':(r.error==='invalid_code'?'Código inválido: usá 3 a 32 letras, números o guiones (sin espacios).':r.error)); return; }
+  $('#cCode').value=''; $('#cLabel').value=''; $('#cMax').value='';
+  loadAccessCodes();
+});
+async function toggleCode(id){ await api('/admin/access-codes/'+id+'/toggle',{method:'POST'}); loadAccessCodes(); }
+async function deleteCode(id, code){ if(!confirm(`¿Borrar el código ${code}? Los restaurantes que ya lo usaron mantienen su acceso gratis.`))return; await api('/admin/access-codes/'+id,{method:'DELETE'}); loadAccessCodes(); }
+async function cutAccess(id){ if(!confirm('¿Cortar el acceso gratis de este restaurante? No va a poder usar el sistema hasta que lo restaures.'))return; await api('/admin/tenants/'+id+'/access',{method:'POST',body:JSON.stringify({action:'revoke'})}); loadRestaurantes(); }
+async function grantAccess(id){ if(!confirm('¿Dar acceso gratis (cortesía) a este restaurante? Va a poder usar todo sin pagar.'))return; await api('/admin/tenants/'+id+'/access',{method:'POST',body:JSON.stringify({action:'grant'})}); loadRestaurantes(); }
+
+// ----- VISITAS A LA WEB (cuánta gente explora) -----
+async function loadVisits(){
+  const data = await api('/admin/visits');
+  if (!data || !data.visits) return;
+  const v = data.visits, s = data.signups || {};
+  const n = (x)=>Number(x||0).toLocaleString('es-AR');
+  $('#kVisits').textContent = n(v.visitors_7d);
+  const conv = v.visitors_total > 0 ? Math.round((Number(s.total||0) / v.visitors_total) * 100) : 0;
+  $('#visitasBox').innerHTML = `
+    <div class="kpis" style="margin-bottom:18px">
+      <div class="kpi"><div class="kpi-label">Visitantes hoy (24 h)</div><div class="kpi-val">${n(v.visitors_24h)}</div><div class="kpi-sub">personas distintas</div></div>
+      <div class="kpi"><div class="kpi-label">Visitantes 7 días</div><div class="kpi-val">${n(v.visitors_7d)}</div><div class="kpi-sub">personas distintas</div></div>
+      <div class="kpi"><div class="kpi-label">Visitantes total</div><div class="kpi-val">${n(v.visitors_total)}</div><div class="kpi-sub">desde el inicio</div></div>
+      <div class="kpi"><div class="kpi-label">Aperturas totales</div><div class="kpi-val">${n(v.views_total)}</div><div class="kpi-sub">veces que abrieron la web</div></div>
+    </div>
+    <table class="data"><thead><tr><th>Embudo</th><th style="text-align:right">Personas</th><th style="text-align:right">Conversión</th></tr></thead><tbody>
+      <tr><td>Exploraron la web</td><td style="text-align:right;font-weight:700">${n(v.visitors_total)}</td><td style="text-align:right;color:var(--tx-mid)">100%</td></tr>
+      <tr><td>Se registraron (crearon cuenta)</td><td style="text-align:right;font-weight:700;color:var(--green)">${n(s.total)}</td><td style="text-align:right;color:var(--or-dk);font-weight:700">${conv}%</td></tr>
+    </tbody></table>
+    <p class="hint" style="margin-top:14px">“Personas” = navegadores distintos que abrieron la web, medido de forma anónima (sin datos personales). Ventanas móviles: “24 h” = último día, “7 días” = última semana.</p>`;
+}
+
+// ----- CÓDIGO GRATIS DESTACADO (arriba del panel) -----
+function renderFreeCodeBar(codes){
+  const bar = $('#freeCodeBar');
+  if (!bar) return;
+  const active = (codes||[]).filter(c=>c.active);
+  bar.style.display = '';
+  if (!active.length){
+    bar.innerHTML = `<div>
+        <div class="fc-label">Tu código para instalar gratis</div>
+        <div style="color:var(--tx-mid);font-size:13px;margin-top:4px">Generá tu código y compartilo con quien quieras, o usalo vos para probar la web gratis.</div>
+      </div>
+      <div class="fc-actions"><button class="fc-copy" onclick="quickCreateCode()">Generar mi código</button></div>`;
+    return;
+  }
+  const c = active[0];
+  const link = `${location.origin}/signup.html?ref=${encodeURIComponent(c.code)}`;
+  bar.innerHTML = `<div>
+      <div class="fc-label">Tu código para instalar gratis</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap">
+        <span class="fc-code">${c.code}</span>
+        <span style="color:var(--tx-mid);font-size:12.5px">Dáselo a quien quieras o usalo vos para probar la web</span>
+      </div>
+    </div>
+    <div class="fc-actions">
+      <button class="fc-copy" onclick="copyText('${c.code}', this)">Copiar código</button>
+      <button class="fc-ghost" onclick="copyText('${link}', this)">Copiar link</button>
+    </div>`;
+}
+function copyText(t, btn){
+  navigator.clipboard.writeText(t).then(()=>{ const o=btn.textContent; btn.textContent='¡Copiado!'; setTimeout(()=>{ btn.textContent=o; },1200); }).catch(()=>{ prompt('Copiá esto:', t); });
+}
+async function quickCreateCode(){
+  const code = 'GRATIS-' + Math.random().toString(36).slice(2,6).toUpperCase();
+  const r = await api('/admin/access-codes', { method:'POST', body: JSON.stringify({ code, label:'Mi código' }) });
+  if (r && r.error){ alert('No se pudo crear el código: ' + r.error); return; }
+  loadAccessCodes();
+}
 </script>
 </body>
 </html>
