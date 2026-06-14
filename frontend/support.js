@@ -31,7 +31,9 @@
     + '.gv-sup-actions a,.gv-sup-actions button{flex:1;text-align:center;border-radius:10px;padding:10px;font-size:13px;'
     + 'font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;border:none}'
     + '.gv-sup-write{background:linear-gradient(135deg,#f97316,#ea580c);color:#fff}'
-    + '.gv-sup-copy{background:#fff;border:1px solid #e2e8f0;color:#0f172a}';
+    + '.gv-sup-copy{background:#fff;border:1px solid #e2e8f0;color:#0f172a}'
+    + '.gv-sup-alt{display:block;text-align:center;margin-top:10px;font-size:12px;color:#64748b;text-decoration:none}'
+    + '.gv-sup-alt:hover{color:#ea580c;text-decoration:underline}';
 
   function build() {
     var style = document.createElement('style');
@@ -47,15 +49,19 @@
       + '8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 '
       + '8.48 0 0 1 8 8v.5z"/></svg><span>Soporte</span>';
 
+    var GMAIL = 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(EMAIL) + '&su=' + encodeURIComponent(SUBJECT);
+    var MAILTO = 'mailto:' + EMAIL + '?subject=' + encodeURIComponent(SUBJECT);
+
     var pop = document.createElement('div');
     pop.className = 'gv-sup-pop';
     pop.innerHTML = '<h4>¿Necesitás ayuda?</h4>'
       + '<p>Cualquier duda, consulta o problema, escribinos y te respondemos a la brevedad.</p>'
       + '<span class="gv-sup-mail">' + EMAIL + '</span>'
       + '<div class="gv-sup-actions">'
-      + '<a class="gv-sup-write" href="mailto:' + EMAIL + '?subject=' + encodeURIComponent(SUBJECT) + '">Escribir correo</a>'
+      + '<a class="gv-sup-write" href="' + GMAIL + '" target="_blank" rel="noopener">Escribir por Gmail</a>'
       + '<button class="gv-sup-copy" type="button">Copiar email</button>'
-      + '</div>';
+      + '</div>'
+      + '<a class="gv-sup-alt" href="' + MAILTO + '">¿Usás otra app de correo? Abrila acá</a>';
 
     document.body.appendChild(pop);
     document.body.appendChild(btn);
