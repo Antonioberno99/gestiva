@@ -344,6 +344,7 @@ async function loadInicio(){
         <div class="dstat"><div class="dnum">${n(v.visitors_total)}</div><div class="dlbl">total</div></div>
         <div class="dstat"><div class="dnum" style="color:var(--or-dk)">${conv}%</div><div class="dlbl">se registran</div></div>
       </div>
+      ${visitsChartSVG(vis && vis.daily)}
     </div>
     <div class="dcard">
       <div class="dcard-h"><h3>Solicitudes de vendedores</h3><button class="lnk" onclick="goTab('solicitudes')">Ver todas</button></div>
@@ -568,6 +569,29 @@ async function cutAccess(id){ if(!confirm('¿Cortar el acceso gratis de este res
 async function grantAccess(id){ if(!confirm('¿Dar acceso gratis (cortesía) a este restaurante? Va a poder usar todo sin pagar.'))return; await api('/admin/tenants/'+id+'/access',{method:'POST',body:JSON.stringify({action:'grant'})}); loadRestaurantes(); }
 
 // ----- VISITAS A LA WEB (cuánta gente explora) -----
+// Gráfico SVG de subida y bajada (visitantes por día). Sin librerías, autocontenido.
+function visitsChartSVG(daily){
+  if (!Array.isArray(daily) || !daily.length) return '<div class="empty" style="padding:20px 0">Todavía no hay datos de visitas para graficar.</div>';
+  const W=640,H=200,pl=34,pr=14,pt=16,pb=28, iw=W-pl-pr, ih=H-pt-pb, n=daily.length;
+  const max=Math.max(1,...daily.map(d=>d.visitors||0));
+  const X=i=> pl + (n===1? iw/2 : i*(iw/(n-1)));
+  const Y=v=> pt + ih - (Math.max(0,v)/max)*ih;
+  const pts=daily.map((d,i)=>[X(i),Y(d.visitors||0)]);
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area='M'+X(0).toFixed(1)+' '+(pt+ih).toFixed(1)+' '+pts.map(p=>'L'+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')+' L'+X(n-1).toFixed(1)+' '+(pt+ih).toFixed(1)+' Z';
+  const grid=[0,0.5,1].map(f=>{const yy=pt+ih-f*ih;const val=Math.round(f*max);return '<line x1="'+pl+'" y1="'+yy.toFixed(1)+'" x2="'+(W-pr)+'" y2="'+yy.toFixed(1)+'" stroke="#eef2f7"/><text x="'+(pl-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="10" fill="#94a3b8">'+val+'</text>';}).join('');
+  const step=Math.ceil(n/7);
+  const labels=daily.map((d,i)=>{ if(i%step!==0 && i!==n-1) return ''; const parts=(d.day||'').split('-'); const lbl=parts.length===3?parts[2]+'/'+parts[1]:''; return '<text x="'+X(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="10" fill="#94a3b8">'+lbl+'</text>'; }).join('');
+  const dots=pts.map((p,i)=>'<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="'+(i===n-1?3.5:2)+'" fill="'+(i===n-1?'#ea580c':'#f97316')+'"/>').join('');
+  const gid='gvArea'+Math.random().toString(36).slice(2,7);
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%">'
+    +'<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f97316" stop-opacity="0.28"/><stop offset="100%" stop-color="#f97316" stop-opacity="0"/></linearGradient></defs>'
+    +grid
+    +'<path d="'+area+'" fill="url(#'+gid+')"/>'
+    +'<path d="'+line+'" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    +dots+labels
+    +'</svg>';
+}
 async function loadVisits(){
   const data = await api('/admin/visits');
   if (!data || !data.visits) return;
@@ -581,6 +605,10 @@ async function loadVisits(){
       <div class="kpi"><div class="kpi-label">Visitantes 7 días</div><div class="kpi-val">${n(v.visitors_7d)}</div><div class="kpi-sub">personas distintas</div></div>
       <div class="kpi"><div class="kpi-label">Visitantes total</div><div class="kpi-val">${n(v.visitors_total)}</div><div class="kpi-sub">desde el inicio</div></div>
       <div class="kpi"><div class="kpi-label">Aperturas totales</div><div class="kpi-val">${n(v.views_total)}</div><div class="kpi-sub">veces que abrieron la web</div></div>
+    </div>
+    <div class="dcard" style="margin-bottom:18px">
+      <div class="dcard-h"><h3>Visitantes por día — últimos 14 días</h3></div>
+      ${visitsChartSVG(data.daily)}
     </div>
     <table class="data"><thead><tr><th>Embudo</th><th style="text-align:right">Personas</th><th style="text-align:right">Conversión</th></tr></thead><tbody>
       <tr><td>Exploraron la web</td><td style="text-align:right;font-weight:700">${n(v.visitors_total)}</td><td style="text-align:right;color:var(--tx-mid)">100%</td></tr>

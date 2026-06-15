@@ -1855,7 +1855,21 @@ app.get('/admin/visits', requireAdminAuth, async (req, res) => {
         count(*)::int AS total,
         count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS last7
       FROM tenants`);
-    res.json({ visits: v.rows[0], signups: s.rows[0] });
+    // Serie diaria (últimos 14 días) para el gráfico de subida y bajada. Zona horaria AR.
+    const daily = await q(`
+      SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
+             COALESCE(COUNT(DISTINCT se.visitor_id), 0)::int AS visitors,
+             COALESCE(COUNT(se.id), 0)::int AS views
+      FROM generate_series(
+             ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - interval '13 days'),
+             ((now() AT TIME ZONE 'America/Argentina/Buenos_Aires')::date),
+             interval '1 day') AS d(day)
+      LEFT JOIN site_events se
+        ON se.type='visit'
+       AND (se.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date = d.day::date
+      GROUP BY d.day
+      ORDER BY d.day`);
+    res.json({ visits: v.rows[0], signups: s.rows[0], daily: daily.rows });
   } catch (e) {
     console.error('[admin/visits]', e?.message || e);
     res.status(500).json({ error: 'visits_error' });
