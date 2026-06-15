@@ -11,6 +11,10 @@ services:
     buildCommand: npm install
     startCommand: npm run start:render
     healthCheckPath: /health
+    # Auto-deploy: cada push a la rama conectada despliega solo.
+    # Aplica si el servicio está vinculado por Blueprint. Si fue creado a mano,
+    # Render ignora este flag y hay que activar Auto-Deploy una vez en el dashboard.
+    autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
@@ -18,10 +22,13 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
+      # Cobro real vs prueba: se administran en el dashboard de Render.
+      # sync:false evita que un re-sync del blueprint los pise (p.ej. apagar el
+      # cobro en producción sin querer). Cambialos desde Render, no desde acá.
       - key: MP_TEST_MODE
-        value: "1"
+        sync: false
       - key: SKIP_BILLING
-        value: "1"
+        sync: false
       - key: SUB_PRICE_ARS
         value: "40000"
       - key: GRACE_DAYS
