@@ -4,6 +4,19 @@
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- ANALYTICS EVENTS (visitas web y eventos de marketing)
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  page       TEXT NOT NULL,          -- 'landing', 'signup', 'checkout', etc.
+  event      TEXT NOT NULL,          -- 'pageview', 'click_precios', 'click_probar', 'signup', etc.
+  referrer   TEXT,
+  ua         TEXT,
+  ip         TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_page ON analytics_events(page, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_event ON analytics_events(event, created_at DESC);
+
 -- TENANTS (one per restaurant / business)
 CREATE TABLE IF NOT EXISTS tenants (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

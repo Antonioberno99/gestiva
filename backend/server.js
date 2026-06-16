@@ -2119,6 +2119,92 @@ app.put('/api/tables/:id/position', requireAuth, requireSubscription, async (req
   res.json(r.rows[0]);
 });
 
+// ============================================================
+// ANALYTICS
+// ============================================================
+
+// POST /track — registro de evento desde frontend (sin auth)
+app.post('/track', async (req, res) => {
+  try {
+    const { page, event, referrer } = req.body || {};
+    if (!page || !event) return res.status(400).json({ error: 'page and event required' });
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const ua = req.headers['user-agent'] || '';
+    await q(`INSERT INTO analytics_events (page, event, referrer, ua, ip) VALUES ($1,$2,$3,$4,$5)`,
+      [String(page).slice(0,64), String(event).slice(0,64), (referrer||'').slice(0,512), ua.slice(0,256), ip.slice(0,64)]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[track]', e);
+    res.json({ ok: false });
+  }
+});
+
+// GET /admin/analytics — stats de marketing para el panel del dueño
+app.get('/admin/analytics', requireAdmin, async (req, res) => {
+  try {
+    const days = parseInt(req.query.days || '30', 10);
+
+    // Visitas diarias (pageview) últimos N días
+    const dailyViews = await q(`
+      SELECT date_trunc('day', created_at AT TIME ZONE 'America/Argentina/Buenos_Aires') AS day,
+             COUNT(*) AS total
+      FROM analytics_events
+      WHERE event = 'pageview'
+        AND created_at >= now() - ($1 || ' days')::interval
+      GROUP BY 1 ORDER BY 1
+    `, [days]);
+
+    // Totales por evento (últimos N días)
+    const byEvent = await q(`
+      SELECT event, COUNT(*) AS total
+      FROM analytics_events
+      WHERE created_at >= now() - ($1 || ' days')::interval
+      GROUP BY event ORDER BY total DESC
+    `, [days]);
+
+    // Visitas por página (últimas N días)
+    const byPage = await q(`
+      SELECT page, COUNT(*) AS total
+      FROM analytics_events
+      WHERE event = 'pageview'
+        AND created_at >= now() - ($1 || ' days')::interval
+      GROUP BY page ORDER BY total DESC
+    `, [days]);
+
+    // Funnel: visita landing → click precios → click probar → signup
+    const funnel = await q(`
+      SELECT
+        COUNT(*) FILTER (WHERE event='pageview' AND page='landing')         AS visitas,
+        COUNT(*) FILTER (WHERE event='click_precios')                        AS click_precios,
+        COUNT(*) FILTER (WHERE event='click_probar')                         AS click_probar,
+        COUNT(*) FILTER (WHERE event='signup')                               AS signups
+      FROM analytics_events
+      WHERE created_at >= now() - ($1 || ' days')::interval
+    `, [days]);
+
+    // Fuente de tráfico (referrer top 10)
+    const topReferrers = await q(`
+      SELECT COALESCE(NULLIF(referrer,''), 'Directo') AS referrer, COUNT(*) AS total
+      FROM analytics_events
+      WHERE event='pageview'
+        AND created_at >= now() - ($1 || ' days')::interval
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    `, [days]);
+
+    res.json({
+      days,
+      dailyViews: dailyViews.rows,
+      byEvent: byEvent.rows,
+      byPage: byPage.rows,
+      funnel: funnel.rows[0],
+      topReferrers: topReferrers.rows
+    });
+  } catch (e) {
+    console.error('[admin/analytics]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 app.get('/', (req, res) => res.json({ ok: true, service: 'gestiva-backend', time: new Date().toISOString() }));
 app.get('/health', async (req, res) => {
   try {

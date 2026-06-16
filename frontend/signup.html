@@ -235,6 +235,13 @@ function translate(code) {
   };
   return map[code] || code;
 }
+
+// Analytics
+(function(){
+  const API = window.API_URL || 'https://gestiva-backend.onrender.com';
+  function track(event){ fetch(API+'/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({page:'signup',event,referrer:document.referrer||''}),keepalive:true}).catch(()=>{}); }
+  track('pageview');
+})();
 </script>
 </body>
 </html>

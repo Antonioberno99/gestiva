@@ -150,6 +150,30 @@
   .fbody .fmoney{font-weight:700;color:var(--green)}
   .fwhen{font-size:12px;color:var(--tx-lt);white-space:nowrap;flex:none;align-self:center}
 
+  /* Analytics */
+  .an-period{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+  .an-period button{padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--tx-mid);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+  .an-period button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .an-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+  .an-kpi{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px}
+  .an-kpi-label{font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+  .an-kpi-val{font-family:var(--ff-display);font-size:26px;font-weight:800;margin-top:4px}
+  .an-kpi-sub{font-size:11px;color:var(--tx-mid);margin-top:2px}
+  .an-charts{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:20px}
+  .an-chart-box{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px}
+  .an-chart-box h3{font-size:13px;font-weight:700;color:var(--tx-mid);text-transform:uppercase;letter-spacing:.04em;margin:0 0 14px}
+  .an-funnel{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+  .an-funnel-row{display:flex;align-items:center;gap:12px}
+  .an-funnel-label{font-size:13px;color:var(--tx-mid);width:140px;flex:none}
+  .an-funnel-bar-wrap{flex:1;background:#e2e8f0;border-radius:999px;height:20px;overflow:hidden}
+  .an-funnel-bar{height:100%;border-radius:999px;background:var(--or);transition:width .5s}
+  .an-funnel-n{font-size:13px;font-weight:700;color:var(--tx-dark);width:50px;text-align:right;flex:none}
+  .an-funnel-pct{font-size:11px;color:var(--tx-lt);width:40px;text-align:right;flex:none}
+  .an-referrer-table{width:100%;border-collapse:collapse;font-size:13px}
+  .an-referrer-table td{padding:7px 0;border-bottom:1px solid var(--border);vertical-align:middle}
+  .an-referrer-table td:last-child{text-align:right;font-weight:700;color:var(--tx-dark)}
+  @media (max-width:768px){ .an-kpis{grid-template-columns:repeat(2,1fr)} .an-charts{grid-template-columns:1fr} }
+
   @media (max-width:768px){ .kpis{grid-template-columns:repeat(2,1fr)} table.data{font-size:12px} .container{padding:18px 12px} .tabs{display:none} }
 </style>
 </head>
@@ -231,6 +255,7 @@
       <button class="tab" data-tab="comisiones" onclick="setTab('comisiones')">Comisiones</button>
       <button class="tab" data-tab="restaurantes" onclick="setTab('restaurantes')">Restaurantes</button>
       <button class="tab" data-tab="codigos" onclick="setTab('codigos')">Códigos gratis</button>
+      <button class="tab" data-tab="marketing" onclick="setTab('marketing');loadMarketing()">Marketing</button>
     </div>
 
     <div class="panel active" id="panel-inicio"><h2>Panel principal</h2><div id="inicioBox"><div class="empty">Cargando…</div></div></div>
@@ -241,20 +266,50 @@
     <div class="panel" id="panel-comisiones"><h2>Comisiones</h2><div id="comisionesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-restaurantes"><h2>Restaurantes (clientes)</h2><div id="restaurantesBox"><div class="empty">Cargando…</div></div></div>
 
-    <div class="panel" id="panel-codigos">
+    <div class=”panel” id=”panel-codigos”>
       <h2>Códigos de acceso gratis</h2>
-      <p class="hint">Creá un código y dáselo a quien quieras (amigos, pruebas). Quien lo use al registrarse entra con <b>acceso completo, gratis y sin tarjeta</b>. Se ingresa en el campo “Código” del registro o con el link directo de abajo.</p>
-      <form class="code-form" id="codeForm">
-        <div class="fld"><label>Código</label><input id="cCode" placeholder="AMIGOS2026" style="text-transform:uppercase" maxlength="32" /></div>
-        <div class="fld"><label>Nota (solo la ves vos)</label><input id="cLabel" placeholder="Ej: Amigos del bar" /></div>
-        <div class="fld sm"><label>Máx. usos</label><input id="cMax" type="number" min="1" placeholder="∞" /></div>
-        <button type="submit">Crear código</button>
+      <p class=”hint”>Creá un código y dáselo a quien quieras (amigos, pruebas). Quien lo use al registrarse entra con <b>acceso completo, gratis y sin tarjeta</b>. Se ingresa en el campo “Código” del registro o con el link directo de abajo.</p>
+      <form class=”code-form” id=”codeForm”>
+        <div class=”fld”><label>Código</label><input id=”cCode” placeholder=”AMIGOS2026” style=”text-transform:uppercase” maxlength=”32” /></div>
+        <div class=”fld”><label>Nota (solo la ves vos)</label><input id=”cLabel” placeholder=”Ej: Amigos del bar” /></div>
+        <div class=”fld sm”><label>Máx. usos</label><input id=”cMax” type=”number” min=”1” placeholder=”∞” /></div>
+        <button type=”submit”>Crear código</button>
       </form>
-      <div id="codigosBox"><div class="empty">Cargando…</div></div>
+      <div id=”codigosBox”><div class=”empty”>Cargando…</div></div>
+    </div>
+
+    <div class=”panel” id=”panel-marketing”>
+      <h2>Marketing · Tráfico web</h2>
+      <div class=”an-period”>
+        <button class=”active” onclick=”setAnPeriod(7,this)”>7 días</button>
+        <button onclick=”setAnPeriod(30,this)”>30 días</button>
+        <button onclick=”setAnPeriod(90,this)”>3 meses</button>
+      </div>
+      <div class=”an-kpis”>
+        <div class=”an-kpi”><div class=”an-kpi-label”>Visitas landing</div><div class=”an-kpi-val” id=”anVisitas”>—</div><div class=”an-kpi-sub”>pageviews</div></div>
+        <div class=”an-kpi”><div class=”an-kpi-label”>Vieron precios</div><div class=”an-kpi-val” id=”anPrecios”>—</div><div class=”an-kpi-sub”>clicks en precios</div></div>
+        <div class=”an-kpi”><div class=”an-kpi-val” id=”anProbar” style=”color:var(--or-dk)”>—</div><div class=”an-kpi-label”>Hicieron click en probar</div></div>
+        <div class=”an-kpi”><div class=”an-kpi-label”>Registros</div><div class=”an-kpi-val” id=”anSignups” style=”color:var(--green)”>—</div><div class=”an-kpi-sub”>se registraron</div></div>
+      </div>
+      <div class=”an-charts”>
+        <div class=”an-chart-box”>
+          <h3>Visitas por día</h3>
+          <canvas id=”chartVisitas” height=”140”></canvas>
+        </div>
+        <div class=”an-chart-box”>
+          <h3>Fuente de tráfico</h3>
+          <table class=”an-referrer-table” id=”refTable”><tr><td colspan=”2” style=”color:var(--tx-lt)”>Cargando…</td></tr></table>
+        </div>
+      </div>
+      <div class=”an-chart-box” style=”margin-bottom:0”>
+        <h3>Funnel de conversión</h3>
+        <div class=”an-funnel” id=”anFunnel”><div class=”empty”>Cargando…</div></div>
+      </div>
     </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="gestiva-config.js"></script>
 <script>
@@ -653,6 +708,70 @@ async function quickCreateCode(){
   const r = await api('/admin/access-codes', { method:'POST', body: JSON.stringify({ code, label:'Mi código' }) });
   if (r && r.error){ alert('No se pudo crear el código: ' + r.error); return; }
   loadAccessCodes();
+}
+
+// ── Marketing / Analytics ──
+let anDays = 7;
+let chartVisitas = null;
+
+function setAnPeriod(days, btn) {
+  anDays = days;
+  document.querySelectorAll('.an-period button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadMarketing();
+}
+
+async function loadMarketing() {
+  const data = await api('/admin/analytics?days=' + anDays);
+  if (!data) return;
+
+  const f = data.funnel || {};
+  const visitas = parseInt(f.visitas        || 0);
+  const precios = parseInt(f.click_precios  || 0);
+  const probar  = parseInt(f.click_probar   || 0);
+  const signups = parseInt(f.signups        || 0);
+
+  document.getElementById('anVisitas').textContent = visitas.toLocaleString('es-AR');
+  document.getElementById('anPrecios').textContent = precios.toLocaleString('es-AR');
+  document.getElementById('anProbar').textContent  = probar.toLocaleString('es-AR');
+  document.getElementById('anSignups').textContent = signups.toLocaleString('es-AR');
+
+  const labels = (data.dailyViews || []).map(r => {
+    const d = new Date(r.day);
+    return d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit' });
+  });
+  const values = (data.dailyViews || []).map(r => parseInt(r.total));
+
+  if (chartVisitas) chartVisitas.destroy();
+  const ctx = document.getElementById('chartVisitas').getContext('2d');
+  chartVisitas = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Visitas', data:values, backgroundColor:'rgba(249,115,22,0.75)', borderRadius:5, borderSkipped:false }] },
+    options: { responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 }, grid:{ color:'#f1f5f9' } }, x:{ grid:{ display:false } } } }
+  });
+
+  const refs = data.topReferrers || [];
+  document.getElementById('refTable').innerHTML = refs.length
+    ? refs.map(r => `<tr><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-mid)">${r.referrer}</td><td>${parseInt(r.total).toLocaleString('es-AR')}</td></tr>`).join('')
+    : '<tr><td colspan="2" style="color:var(--tx-lt)">Sin datos aún</td></tr>';
+
+  const steps = [
+    { label:'Visitas landing', n:visitas, base:visitas },
+    { label:'Vieron precios',  n:precios, base:visitas },
+    { label:'Click "Probar"',  n:probar,  base:visitas },
+    { label:'Se registraron',  n:signups, base:visitas },
+  ];
+  const colors = ['#3b82f6','#f59e0b','#f97316','#10b981'];
+  document.getElementById('anFunnel').innerHTML = steps.map((s, i) => {
+    const pct = s.base ? Math.round(s.n / s.base * 100) : 0;
+    const w   = s.base ? Math.max(4, Math.round(s.n / s.base * 100)) : 0;
+    return `<div class="an-funnel-row">
+      <div class="an-funnel-label">${s.label}</div>
+      <div class="an-funnel-bar-wrap"><div class="an-funnel-bar" style="width:${w}%;background:${colors[i]}"></div></div>
+      <div class="an-funnel-n">${s.n.toLocaleString('es-AR')}</div>
+      <div class="an-funnel-pct">${pct}%</div>
+    </div>`;
+  }).join('');
 }
 </script>
 </body>

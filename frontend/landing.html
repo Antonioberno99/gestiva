@@ -1423,6 +1423,31 @@
   }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
 
   document.querySelectorAll('.fade').forEach(el => io.observe(el));
+
+  // ── Analytics tracking ──
+  (function(){
+    const API = (window.API_URL || 'https://gestiva-backend.onrender.com');
+    function track(event) {
+      fetch(API + '/track', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ page:'landing', event, referrer: document.referrer || '' }),
+        keepalive: true
+      }).catch(()=>{});
+    }
+    // Pageview al cargar
+    track('pageview');
+    // Click en sección precios (scroll o link)
+    document.querySelectorAll('a[href="#precios"], a[href="signup.html"]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (el.getAttribute('href') === '#precios') track('click_precios');
+        else track('click_probar');
+      });
+    });
+    // Click en hamburger "Probar gratis"
+    document.querySelectorAll('.m-qa.primary').forEach(el => {
+      el.addEventListener('click', () => track('click_probar'));
+    });
+  })();
 </script>
 </body>
 </html>
