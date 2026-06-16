@@ -2140,7 +2140,7 @@ app.post('/track', async (req, res) => {
 });
 
 // GET /admin/analytics — stats de marketing para el panel del dueño
-app.get('/admin/analytics', requireAdmin, async (req, res) => {
+app.get('/admin/analytics', requireAdminAuth, async (req, res) => {
   try {
     const days = parseInt(req.query.days || '30', 10);
 
