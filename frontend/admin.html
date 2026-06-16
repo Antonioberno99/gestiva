@@ -83,6 +83,13 @@
   .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--tx-mid)}
   .app-detail{font-size:12px;color:var(--tx-mid);line-height:1.5;margin-top:6px}
   .app-detail b{color:var(--tx-dark)}
+  /* Barra de correos (registros) */
+  .email-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px}
+  .email-bar-info{font-size:13px;color:var(--tx-mid)}
+  .email-bar-info strong{color:var(--tx-dark);font-weight:700}
+  .email-bar-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .email-link{color:var(--or-dk);text-decoration:none;font-weight:600}
+  .email-link:hover{text-decoration:underline}
   /* Códigos de acceso gratis */
   .hint{color:var(--tx-mid);font-size:13px;margin:-8px 0 16px;line-height:1.5}
   .code-form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px}
@@ -266,44 +273,44 @@
     <div class="panel" id="panel-comisiones"><h2>Comisiones</h2><div id="comisionesBox"><div class="empty">Cargando…</div></div></div>
     <div class="panel" id="panel-restaurantes"><h2>Restaurantes (clientes)</h2><div id="restaurantesBox"><div class="empty">Cargando…</div></div></div>
 
-    <div class=”panel” id=”panel-codigos”>
+    <div class="panel" id="panel-codigos">
       <h2>Códigos de acceso gratis</h2>
-      <p class=”hint”>Creá un código y dáselo a quien quieras (amigos, pruebas). Quien lo use al registrarse entra con <b>acceso completo, gratis y sin tarjeta</b>. Se ingresa en el campo “Código” del registro o con el link directo de abajo.</p>
-      <form class=”code-form” id=”codeForm”>
-        <div class=”fld”><label>Código</label><input id=”cCode” placeholder=”AMIGOS2026” style=”text-transform:uppercase” maxlength=”32” /></div>
-        <div class=”fld”><label>Nota (solo la ves vos)</label><input id=”cLabel” placeholder=”Ej: Amigos del bar” /></div>
-        <div class=”fld sm”><label>Máx. usos</label><input id=”cMax” type=”number” min=”1” placeholder=”∞” /></div>
-        <button type=”submit”>Crear código</button>
+      <p class="hint">Creá un código y dáselo a quien quieras (amigos, pruebas). Quien lo use al registrarse entra con <b>acceso completo, gratis y sin tarjeta</b>. Se ingresa en el campo "Código" del registro o con el link directo de abajo.</p>
+      <form class="code-form" id="codeForm">
+        <div class="fld"><label>Código</label><input id="cCode" placeholder="AMIGOS2026" style="text-transform:uppercase" maxlength="32" /></div>
+        <div class="fld"><label>Nota (solo la ves vos)</label><input id="cLabel" placeholder="Ej: Amigos del bar" /></div>
+        <div class="fld sm"><label>Máx. usos</label><input id="cMax" type="number" min="1" placeholder="∞" /></div>
+        <button type="submit">Crear código</button>
       </form>
-      <div id=”codigosBox”><div class=”empty”>Cargando…</div></div>
+      <div id="codigosBox"><div class="empty">Cargando…</div></div>
     </div>
 
-    <div class=”panel” id=”panel-marketing”>
+    <div class="panel" id="panel-marketing">
       <h2>Marketing · Tráfico web</h2>
-      <div class=”an-period”>
-        <button class=”active” onclick=”setAnPeriod(7,this)”>7 días</button>
-        <button onclick=”setAnPeriod(30,this)”>30 días</button>
-        <button onclick=”setAnPeriod(90,this)”>3 meses</button>
+      <div class="an-period">
+        <button class="active" onclick="setAnPeriod(7,this)">7 días</button>
+        <button onclick="setAnPeriod(30,this)">30 días</button>
+        <button onclick="setAnPeriod(90,this)">3 meses</button>
       </div>
-      <div class=”an-kpis”>
-        <div class=”an-kpi”><div class=”an-kpi-label”>Visitas landing</div><div class=”an-kpi-val” id=”anVisitas”>—</div><div class=”an-kpi-sub”>pageviews</div></div>
-        <div class=”an-kpi”><div class=”an-kpi-label”>Vieron precios</div><div class=”an-kpi-val” id=”anPrecios”>—</div><div class=”an-kpi-sub”>clicks en precios</div></div>
-        <div class=”an-kpi”><div class=”an-kpi-val” id=”anProbar” style=”color:var(--or-dk)”>—</div><div class=”an-kpi-label”>Hicieron click en probar</div></div>
-        <div class=”an-kpi”><div class=”an-kpi-label”>Registros</div><div class=”an-kpi-val” id=”anSignups” style=”color:var(--green)”>—</div><div class=”an-kpi-sub”>se registraron</div></div>
+      <div class="an-kpis">
+        <div class="an-kpi"><div class="an-kpi-label">Visitas landing</div><div class="an-kpi-val" id="anVisitas">—</div><div class="an-kpi-sub">pageviews</div></div>
+        <div class="an-kpi"><div class="an-kpi-label">Vieron precios</div><div class="an-kpi-val" id="anPrecios">—</div><div class="an-kpi-sub">clicks en precios</div></div>
+        <div class="an-kpi"><div class="an-kpi-label">Hicieron click en probar</div><div class="an-kpi-val" id="anProbar" style="color:var(--or-dk)">—</div><div class="an-kpi-sub">clicks en probar</div></div>
+        <div class="an-kpi"><div class="an-kpi-label">Registros</div><div class="an-kpi-val" id="anSignups" style="color:var(--green)">—</div><div class="an-kpi-sub">se registraron</div></div>
       </div>
-      <div class=”an-charts”>
-        <div class=”an-chart-box”>
+      <div class="an-charts">
+        <div class="an-chart-box">
           <h3>Visitas por día</h3>
-          <canvas id=”chartVisitas” height=”140”></canvas>
+          <canvas id="chartVisitas" height="140"></canvas>
         </div>
-        <div class=”an-chart-box”>
+        <div class="an-chart-box">
           <h3>Fuente de tráfico</h3>
-          <table class=”an-referrer-table” id=”refTable”><tr><td colspan=”2” style=”color:var(--tx-lt)”>Cargando…</td></tr></table>
+          <table class="an-referrer-table" id="refTable"><tr><td colspan="2" style="color:var(--tx-lt)">Cargando…</td></tr></table>
         </div>
       </div>
-      <div class=”an-chart-box” style=”margin-bottom:0”>
+      <div class="an-chart-box" style="margin-bottom:0">
         <h3>Funnel de conversión</h3>
-        <div class=”an-funnel” id=”anFunnel”><div class=”empty”>Cargando…</div></div>
+        <div class="an-funnel" id="anFunnel"><div class="empty">Cargando…</div></div>
       </div>
     </div>
   </div>
@@ -546,14 +553,24 @@ async function loadComisiones(){
   </tbody></table>`;
 }
 
+let _tenants = [];
 async function loadRestaurantes(){
   const data = await api('/admin/tenants');
   if (!data) return;
+  _tenants = data.tenants || [];
   const box = $('#restaurantesBox');
-  if (!data.tenants.length){ box.innerHTML='<div class="empty">Todavía no hay restaurantes.</div>'; return; }
+  if (!_tenants.length){ box.innerHTML='<div class="empty">Todavía no hay restaurantes.</div>'; return; }
   const STATUS_LBL = {trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'};
-  box.innerHTML = `<table class="data"><thead><tr><th>Restaurante</th><th>Contacto</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th><th>Acción</th></tr></thead><tbody>
-    ${data.tenants.map(t=>{
+  const emails = _tenants.map(t=>t.email).filter(Boolean);
+  const bar = `<div class="email-bar">
+      <div class="email-bar-info"><strong>${_tenants.length}</strong> ${_tenants.length===1?'restaurante registrado':'restaurantes registrados'} · <strong>${emails.length}</strong> ${emails.length===1?'correo':'correos'}</div>
+      <div class="email-bar-actions">
+        <button class="btn-act btn-ghost" onclick="copyAllEmails(this)">📋 Copiar todos los correos</button>
+        <button class="btn-act btn-ghost" onclick="downloadEmailsCSV()">⬇ Descargar CSV</button>
+      </div>
+    </div>`;
+  box.innerHTML = bar + `<table class="data"><thead><tr><th>Restaurante</th><th>Correo</th><th>Teléfono</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th><th>Acción</th></tr></thead><tbody>
+    ${_tenants.map(t=>{
       const isComp = !!t.access_code;
       const isActive = ['active','grace','trial'].includes(t.subscription_status);
       const statusCell = isComp
@@ -566,7 +583,8 @@ async function loadRestaurantes(){
             : `<button class="btn-act btn-ghost" onclick="grantAccess('${t.id}')">Dar gratis</button>`);
       return `<tr>
         <td><strong>${t.restaurant_name}</strong>${isComp?` <span class="code-pill">${t.access_code}</span>`:''}</td>
-        <td>${t.email}<br><span style="color:var(--tx-mid)">${t.phone||'—'}</span></td>
+        <td><a href="mailto:${t.email}" class="email-link">${t.email}</a></td>
+        <td style="color:var(--tx-mid)">${t.phone||'—'}</td>
         <td style="text-transform:capitalize">${t.plan||'pro'}</td>
         <td>${statusCell}</td>
         <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
@@ -575,6 +593,22 @@ async function loadRestaurantes(){
       </tr>`;
     }).join('')}
   </tbody></table>`;
+}
+function copyAllEmails(btn){
+  const emails = _tenants.map(t=>t.email).filter(Boolean).join(', ');
+  if (!emails) return;
+  navigator.clipboard.writeText(emails).then(()=>{ const o=btn.textContent; btn.textContent='✓ ¡Copiados!'; setTimeout(()=>{btn.textContent=o;},1400); }).catch(()=>{ prompt('Copiá los correos:', emails); });
+}
+function downloadEmailsCSV(){
+  const rows = [['Restaurante','Correo','Telefono','Plan','Estado','Vendedor','Alta']];
+  _tenants.forEach(t=>rows.push([t.restaurant_name||'', t.email||'', t.phone||'', t.plan||'pro', t.access_code?'cortesia':(t.subscription_status||''), t.vendor_name||'directo', t.created_at?new Date(t.created_at).toLocaleDateString('es-AR'):'']));
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'registros-gestiva-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 async function approve(id){ if(!confirm('¿Aprobar este vendedor? Va a recibir un email con su link.'))return; await api('/admin/vendors/'+id+'/approve',{method:'POST'}); loadAll(); }
