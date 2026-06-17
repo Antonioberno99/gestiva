@@ -1811,9 +1811,12 @@ app.post('/admin/google', authLimiter, async (req, res) => {
 app.get('/admin/stats', requireAdminAuth, async (req, res) => {
   const tenants = await q(`SELECT
       count(*)::int AS total,
+      count(*) FILTER (WHERE subscription_status='pending')::int AS pending,
       count(*) FILTER (WHERE subscription_status='trial')::int AS trial,
       count(*) FILTER (WHERE subscription_status='active')::int AS active,
-      count(*) FILTER (WHERE subscription_status IN ('expired','cancelled','grace'))::int AS inactive
+      count(*) FILTER (WHERE subscription_status='grace')::int AS grace,
+      count(*) FILTER (WHERE subscription_status IN ('expired','cancelled'))::int AS inactive,
+      count(*) FILTER (WHERE subscription_status IN ('trial','active','grace'))::int AS using_now
     FROM tenants`);
   const vendors = await q(`SELECT
       count(*)::int AS total,
@@ -1996,7 +1999,8 @@ app.get('/admin/activity', requireAdminAuth, async (req, res) => {
 app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
   const r = await q(
     `SELECT t.id, t.restaurant_name, t.email, t.phone, t.subscription_status, t.plan,
-            t.access_code, t.created_at, t.last_payment_at, t.last_payment_amount, v.name AS vendor_name
+            t.access_code, t.created_at, t.last_payment_at, t.last_payment_amount,
+            (t.mp_preapproval_id IS NOT NULL) AS has_card, v.name AS vendor_name
      FROM tenants t LEFT JOIN vendors v ON v.id=t.vendor_id
      ORDER BY t.created_at DESC LIMIT 500`
   );
@@ -2063,6 +2067,27 @@ app.post('/admin/tenants/:id/access', requireAdminAuth, async (req, res) => {
   const t = (await q('SELECT * FROM tenants WHERE id=$1', [req.params.id])).rows[0];
   if (!t) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true, tenant: publicTenant(t) });
+});
+
+// Borrar un restaurante puntual. El ON DELETE CASCADE del schema limpia
+// automáticamente sus mesas, productos, órdenes, caja, pagos y comisiones.
+app.delete('/admin/tenants/:id', requireAdminAuth, async (req, res) => {
+  const r = await q('DELETE FROM tenants WHERE id=$1 RETURNING email', [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+  res.json({ ok: true, deleted: r.rows[0].email });
+});
+
+// Vaciar TODOS los datos de prueba: borra todos los restaurantes (y por CASCADE
+// sus datos y comisiones) + los eventos de visitas/analytics. NO toca vendedores
+// ni códigos de acceso (son configuración tuya, no datos de clientes de prueba).
+// Requiere confirmación explícita en el body para evitar borrados accidentales.
+app.post('/admin/reset-test-data', requireAdminAuth, async (req, res) => {
+  if (req.body?.confirm !== true) return res.status(400).json({ error: 'confirm_required' });
+  const t = await q('DELETE FROM tenants RETURNING id');
+  let analytics = 0, visits = 0;
+  try { analytics = (await q('DELETE FROM analytics_events RETURNING id')).rowCount; } catch (e) {}
+  try { visits = (await q('DELETE FROM site_events RETURNING id')).rowCount; } catch (e) {}
+  res.json({ ok: true, tenants: t.rowCount, analytics, visits });
 });
 
 // ============================================================

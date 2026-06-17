@@ -90,6 +90,25 @@
   .email-bar-actions{display:flex;gap:8px;flex-wrap:wrap}
   .email-link{color:var(--or-dk);text-decoration:none;font-weight:600}
   .email-link:hover{text-decoration:underline}
+  /* Resumen de uso (quién está usando de verdad) */
+  .usage-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+  .us-card{border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px;border:1px solid var(--border)}
+  .us-card .us-n{font-family:var(--ff-display);font-size:34px;font-weight:800;line-height:1}
+  .us-card .us-l{font-size:13px;font-weight:700;color:var(--tx-dark);line-height:1.3}
+  .us-card .us-l span{font-weight:500;color:var(--tx-mid);font-size:11.5px}
+  .us-using{background:var(--green-lt);border-color:#a7f3d0}
+  .us-using .us-n{color:#047857}
+  .us-pending{background:var(--yellow-lt);border-color:#fde68a}
+  .us-pending .us-n{color:#b45309}
+  .us-off{background:#f1f5f9;border-color:var(--border)}
+  .us-off .us-n{color:var(--tx-mid)}
+  .flow-note{background:var(--or-lt);border:1px solid #fed7aa;border-radius:12px;padding:11px 16px;font-size:13px;color:var(--tx-dark);line-height:1.5;margin-bottom:16px}
+  .flow-note b{color:var(--or-dk)}
+  .btn-del{background:#fff;color:var(--red);border:1px solid #fecaca}
+  .btn-del:hover{background:#fee2e2}
+  tr.row-using{background:rgba(16,185,129,.045)}
+  tr.row-off{opacity:.6}
+  @media (max-width:768px){ .usage-summary{grid-template-columns:1fr} }
   /* Códigos de acceso gratis */
   .hint{color:var(--tx-mid);font-size:13px;margin:-8px 0 16px;line-height:1.5}
   .code-form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px}
@@ -246,7 +265,7 @@
   <div class="container">
     <div class="freecode" id="freeCodeBar" style="display:none"></div>
     <div class="kpis">
-      <div class="kpi"><div class="kpi-label">Restaurantes</div><div class="kpi-val" id="kTenants">0</div><div class="kpi-sub" id="kTenantsSub"></div></div>
+      <div class="kpi"><div class="kpi-label">Usando Gestiva</div><div class="kpi-val" id="kTenants">0</div><div class="kpi-sub" id="kTenantsSub"></div></div>
       <div class="kpi"><div class="kpi-label">MRR (ingreso mensual)</div><div class="kpi-val money" id="kMrr">$0</div><div class="kpi-sub">de clientes activos</div></div>
       <div class="kpi"><div class="kpi-label">Vendedores</div><div class="kpi-val" id="kVendors">0</div><div class="kpi-sub" id="kVendorsSub"></div></div>
       <div class="kpi"><div class="kpi-label">Comisiones a pagar</div><div class="kpi-val money" id="kCommPending">$0</div><div class="kpi-sub">pendientes</div></div>
@@ -435,8 +454,8 @@ async function loadAll(){
   const stats = await api('/admin/stats');
   if (!stats) return;
   $('#adminEmail').textContent = '';
-  $('#kTenants').textContent = stats.tenants.total;
-  $('#kTenantsSub').textContent = `${stats.tenants.trial} prueba · ${stats.tenants.active} activos`;
+  $('#kTenants').textContent = (stats.tenants.using_now ?? stats.tenants.total);
+  $('#kTenantsSub').textContent = `${stats.tenants.trial} en prueba · ${stats.tenants.active} pagando${stats.tenants.pending ? ` · ${stats.tenants.pending} sin tarjeta` : ''}`;
   $('#kMrr').textContent = fmt(stats.mrr);
   $('#kVendors').textContent = stats.vendors.total;
   $('#kVendorsSub').textContent = `${stats.vendors.pending} pendientes · ${stats.vendors.active} activos`;
@@ -554,45 +573,83 @@ async function loadComisiones(){
 }
 
 let _tenants = [];
+// Clasifica cada restaurante para mostrar CLARO en qué etapa está.
+function tenantUsage(t){
+  if (t.access_code) return { group:'using', badge:'<span class="badge2 trial">🎁 Cortesía</span>', card:'Gratis' };
+  switch (t.subscription_status){
+    case 'trial':  return { group:'using', badge:'<span class="badge2 active">🟢 Probando (mes gratis)</span>', card:'Sí' };
+    case 'active':  return { group:'using', badge:'<span class="badge2 active">🟢 Pagando</span>', card:'Sí' };
+    case 'grace':   return { group:'using', badge:'<span class="badge2 grace">🟡 En gracia</span>', card:'Sí' };
+    case 'pending': return { group:'pending', badge:'<span class="badge2 pending">⏳ Sin tarjeta</span>', card:'No' };
+    case 'expired': return { group:'off', badge:'<span class="badge2 expired">⚪ Vencido</span>', card: t.has_card?'Sí':'—' };
+    case 'cancelled': return { group:'off', badge:'<span class="badge2 cancelled">⚪ Cancelado</span>', card: t.has_card?'Sí':'—' };
+    default: return { group:'off', badge:`<span class="badge2 paused">${t.subscription_status||'—'}</span>`, card:'—' };
+  }
+}
 async function loadRestaurantes(){
   const data = await api('/admin/tenants');
   if (!data) return;
   _tenants = data.tenants || [];
   const box = $('#restaurantesBox');
-  if (!_tenants.length){ box.innerHTML='<div class="empty">Todavía no hay restaurantes.</div>'; return; }
-  const STATUS_LBL = {trial:'Prueba',active:'Activo',grace:'Gracia',expired:'Vencido',cancelled:'Cancelado',pending:'Pendiente'};
+  if (!_tenants.length){
+    box.innerHTML = `<div class="flow-note">📋 Cómo funciona: la gente se registra y <b>carga su tarjeta</b> para empezar. El <b>primer mes es gratis</b> y recién al mes siguiente se les cobra. Acá vas a ver claro quién ya está usando Gestiva.</div><div class="empty">Todavía no hay nadie registrado. Cuando alguien cargue su tarjeta y empiece la prueba, aparece acá.</div>`;
+    return;
+  }
+  const using = _tenants.filter(t=>tenantUsage(t).group==='using').length;
+  const pending = _tenants.filter(t=>tenantUsage(t).group==='pending').length;
+  const off = _tenants.filter(t=>tenantUsage(t).group==='off').length;
   const emails = _tenants.map(t=>t.email).filter(Boolean);
+  const summary = `<div class="usage-summary">
+      <div class="us-card us-using"><div class="us-n">${using}</div><div class="us-l">🟢 Usando Gestiva<br><span>en prueba o pagando (con tarjeta)</span></div></div>
+      <div class="us-card us-pending"><div class="us-n">${pending}</div><div class="us-l">⏳ Solo se anotaron<br><span>todavía sin cargar tarjeta</span></div></div>
+      <div class="us-card us-off"><div class="us-n">${off}</div><div class="us-l">⚪ Inactivos<br><span>vencidos o cancelados</span></div></div>
+    </div>
+    <div class="flow-note">El <b>primer mes es gratis</b>, pero para probar ya tienen que cargar la tarjeta. Por eso "🟢 Usando Gestiva" son los que realmente arrancaron.</div>`;
   const bar = `<div class="email-bar">
-      <div class="email-bar-info"><strong>${_tenants.length}</strong> ${_tenants.length===1?'restaurante registrado':'restaurantes registrados'} · <strong>${emails.length}</strong> ${emails.length===1?'correo':'correos'}</div>
+      <div class="email-bar-info"><strong>${_tenants.length}</strong> ${_tenants.length===1?'registro':'registros'} en total · <strong>${emails.length}</strong> ${emails.length===1?'correo':'correos'}</div>
       <div class="email-bar-actions">
         <button class="btn-act btn-ghost" onclick="copyAllEmails(this)">📋 Copiar todos los correos</button>
         <button class="btn-act btn-ghost" onclick="downloadEmailsCSV()">⬇ Descargar CSV</button>
+        <button class="btn-act btn-reject" onclick="resetTestData()">🗑 Vaciar datos de prueba</button>
       </div>
     </div>`;
-  box.innerHTML = bar + `<table class="data"><thead><tr><th>Restaurante</th><th>Correo</th><th>Teléfono</th><th>Plan</th><th>Estado</th><th>Vendedor</th><th style="text-align:right">Alta</th><th>Acción</th></tr></thead><tbody>
+  box.innerHTML = summary + bar + `<table class="data"><thead><tr><th>Restaurante</th><th>Correo</th><th>Teléfono</th><th>Plan</th><th>Estado</th><th style="text-align:center">Tarjeta</th><th>Vendedor</th><th style="text-align:right">Alta</th><th>Acción</th></tr></thead><tbody>
     ${_tenants.map(t=>{
+      const u = tenantUsage(t);
       const isComp = !!t.access_code;
       const isActive = ['active','grace','trial'].includes(t.subscription_status);
-      const statusCell = isComp
-        ? `<span class="badge2 trial">Cortesía</span>`
-        : `<span class="badge2 ${t.subscription_status}">${STATUS_LBL[t.subscription_status]||t.subscription_status}</span>`;
-      const action = (isComp && isActive)
-        ? `<button class="btn-act btn-reject" onclick="cutAccess('${t.id}')">Cortar acceso</button>`
+      const accionCortesia = (isComp && isActive)
+        ? `<button class="btn-act btn-reject" onclick="cutAccess('${t.id}')">Cortar</button>`
         : (isComp
             ? `<button class="btn-act btn-approve" onclick="grantAccess('${t.id}')">Restaurar</button>`
             : `<button class="btn-act btn-ghost" onclick="grantAccess('${t.id}')">Dar gratis</button>`);
-      return `<tr>
+      return `<tr class="row-${u.group}">
         <td><strong>${t.restaurant_name}</strong>${isComp?` <span class="code-pill">${t.access_code}</span>`:''}</td>
         <td><a href="mailto:${t.email}" class="email-link">${t.email}</a></td>
         <td style="color:var(--tx-mid)">${t.phone||'—'}</td>
         <td style="text-transform:capitalize">${t.plan||'pro'}</td>
-        <td>${statusCell}</td>
+        <td>${u.badge}</td>
+        <td style="text-align:center">${u.card==='Sí'?'<span style="color:var(--green);font-weight:700">Sí ✓</span>':(u.card==='No'?'<span style="color:var(--tx-lt)">No</span>':u.card)}</td>
         <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
         <td style="text-align:right;color:var(--tx-mid)">${dt(t.created_at)}</td>
-        <td style="white-space:nowrap">${action}</td>
+        <td style="white-space:nowrap">${accionCortesia} <button class="btn-act btn-del" onclick="deleteTenant('${t.id}','${(t.restaurant_name||'').replace(/'/g,"\\'")}')">Borrar</button></td>
       </tr>`;
     }).join('')}
   </tbody></table>`;
+}
+async function deleteTenant(id, name){
+  if (!confirm(`¿Borrar definitivamente "${name}"?\n\nSe elimina su cuenta y todos sus datos (mesas, productos, ventas). Esto no se puede deshacer.`)) return;
+  const r = await api('/admin/tenants/'+id, { method:'DELETE' });
+  if (r && r.error){ alert('No se pudo borrar: '+r.error); return; }
+  loadAll();
+}
+async function resetTestData(){
+  if (!confirm('¿Vaciar TODOS los datos de prueba?\n\nBorra todos los restaurantes registrados y los datos de visitas/marketing. NO toca tus vendedores ni tus códigos de acceso.\n\nUsalo para empezar limpio antes de salir a vender. Esto no se puede deshacer.')) return;
+  if (!confirm('Última confirmación: se van a borrar TODOS los registros actuales. ¿Seguro?')) return;
+  const r = await api('/admin/reset-test-data', { method:'POST', body: JSON.stringify({ confirm:true }) });
+  if (r && r.error){ alert('No se pudo vaciar: '+r.error); return; }
+  alert(`Listo ✓\n\nBorrados: ${r.tenants} restaurantes, ${r.visits} visitas, ${r.analytics} eventos de marketing.\n\nYa podés empezar limpio.`);
+  loadAll();
 }
 function copyAllEmails(btn){
   const emails = _tenants.map(t=>t.email).filter(Boolean).join(', ');
