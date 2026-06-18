@@ -2466,11 +2466,10 @@ async function changePlan(plan) {
 // ---------- INIT ----------
 $('#mobileBtn').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
 
-setInterval(() => {
-  const current = (location.hash.slice(2) || 'dashboard').split('/')[0];
-  if (document.hidden || $('#modalRoot').innerHTML || !['dashboard', 'mesas'].includes(current)) return;
-  navigate().catch(console.error);
-}, 15000);
+// (QUITADO) Auto-refresco cada 15s del Dashboard/Mesas. Re-renderizaba toda la vista
+// y se sentía como que "se actualizaba solo" (parpadeo, salto de scroll, pérdida de estado).
+// Ahora las vistas se actualizan al navegar o al hacer una acción. Los badges del sidebar
+// (cocina/pedidos) siguen refrescándose porque solo cambian un número, sin re-dibujar nada.
 
 // Badge de pedidos pendientes en cocina (sidebar)
 async function refreshKdsBadge() {
