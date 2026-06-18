@@ -999,23 +999,25 @@ app.get('/api/products', async (req, res) => {
   res.json(r.rows);
 });
 app.post('/api/products', async (req, res) => {
-  const { name, cat, price, available, stock, lowStockAlert, modifiers, photoUrl } = req.body || {};
+  const { name, cat, segment, price, available, stock, lowStockAlert, modifiers, photoUrl, description } = req.body || {};
   if (!name || price == null) return res.status(400).json({ error: 'missing_fields' });
-  const r = await q(`INSERT INTO products (tenant_id, name, cat, price, available, stock, low_stock_alert, modifiers, photo_url)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-    [req.tenant.id, name, cat || 'Sin categoría', price,
-     available !== false, stock ?? null, lowStockAlert || 5, JSON.stringify(modifiers || []), photoUrl || null]);
+  const r = await q(`INSERT INTO products (tenant_id, name, cat, segment, price, available, stock, low_stock_alert, modifiers, photo_url, description)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [req.tenant.id, name, cat || 'Sin categoría', segment || null, price,
+     available !== false, stock ?? null, lowStockAlert || 5, JSON.stringify(modifiers || []), photoUrl || null, description || null]);
   res.json(r.rows[0]);
 });
 app.put('/api/products/:id', async (req, res) => {
-  const { name, cat, price, available, stock, lowStockAlert, modifiers, photoUrl } = req.body || {};
+  const { name, cat, segment, price, available, stock, lowStockAlert, modifiers, photoUrl, description } = req.body || {};
   const r = await q(`UPDATE products SET name=$1, cat=$2, price=$3, available=$4,
                      stock=$5, low_stock_alert=COALESCE($6, low_stock_alert),
                      modifiers=COALESCE($7::jsonb, modifiers),
-                     photo_url=COALESCE($8, photo_url)
-                     WHERE id=$9 AND tenant_id=$10 RETURNING *`,
+                     photo_url=COALESCE($8, photo_url),
+                     segment=$9, description=$10
+                     WHERE id=$11 AND tenant_id=$12 RETURNING *`,
     [name, cat, price, available, stock ?? null, lowStockAlert || null,
-     modifiers ? JSON.stringify(modifiers) : null, photoUrl ?? null, req.params.id, req.tenant.id]);
+     modifiers ? JSON.stringify(modifiers) : null, photoUrl ?? null,
+     segment ?? null, description ?? null, req.params.id, req.tenant.id]);
   if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(r.rows[0]);
 });
@@ -2115,8 +2117,8 @@ app.get('/public/menu/:tenantId', async (req, res) => {
   try {
     const t = (await q('SELECT id, restaurant_name, currency, phone FROM tenants WHERE id=$1', [req.params.tenantId])).rows[0];
     if (!t) return res.status(404).json({ error: 'not_found' });
-    const products = (await q(`SELECT id, name, cat, price, photo_url, available FROM products
-                               WHERE tenant_id=$1 AND available=true ORDER BY cat, name`, [t.id])).rows;
+    const products = (await q(`SELECT id, name, cat, segment, price, photo_url, description, available FROM products
+                               WHERE tenant_id=$1 AND available=true ORDER BY cat, segment NULLS FIRST, name`, [t.id])).rows;
     // Agrupar por categoría
     const grouped = {};
     for (const p of products) {

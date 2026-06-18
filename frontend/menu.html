@@ -55,6 +55,11 @@
     font-family: var(--ff-display); font-size: 22px; font-weight: 800;
     margin: 0 0 14px; color: var(--or-dk); letter-spacing: -0.02em;
   }
+  .segment-title {
+    font-family: var(--ff-display); font-size: 14px; font-weight: 700;
+    margin: 16px 0 4px; color: var(--tx-mid); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .segment-title:first-child { margin-top: 0; }
   .item {
     display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--soft);
     align-items: flex-start;
@@ -154,20 +159,7 @@ function render(data) {
         ${cats.map(c => `
           <div class="category" data-cat="${c.name}">
             <h2 class="category-title">${c.name}</h2>
-            ${c.items.map(it => {
-              const init = (it.name||'?').slice(0,2).toUpperCase();
-              const tone = (function(s){let h=0;for(let i=0;i<s.length;i++)h=(h<<5)-h+s.charCodeAt(i),h|=0;return Math.abs(h);})(c.name||'') % 7;
-              const img = it.photo_url
-                ? `<img src="${it.photo_url}" alt="" loading="lazy"/>`
-                : `<div class="item-img-fb cat-tone-${tone}">${init}</div>`;
-              return `<div class="item">
-                <div class="item-img">${img}</div>
-                <div class="item-info">
-                  <p class="item-name">${it.name}</p>
-                </div>
-                <div class="item-price">${fmt(it.price)}</div>
-              </div>`;
-            }).join('')}
+            ${segmentsHTML(c.items, c.name, fmt)}
           </div>`).join('')}
       </div>
       <div class="footer">
@@ -186,6 +178,38 @@ function render(data) {
       });
     };
   });
+}
+
+// Color del tile por categoría (mismo hash que la app)
+function toneOf(s){ let h=0; s=s||''; for(let i=0;i<s.length;i++){ h=(h<<5)-h+s.charCodeAt(i); h|=0; } return Math.abs(h)%7; }
+
+// Un producto de la carta (con descripción si la tiene)
+function itemHTML(it, catName, fmt){
+  const init = (it.name||'?').slice(0,2).toUpperCase();
+  const img = it.photo_url
+    ? `<img src="${it.photo_url}" alt="" loading="lazy"/>`
+    : `<div class="item-img-fb cat-tone-${toneOf(catName)}">${init}</div>`;
+  return `<div class="item">
+    <div class="item-img">${img}</div>
+    <div class="item-info">
+      <p class="item-name">${it.name}</p>
+      ${it.description ? `<p class="item-desc">${it.description}</p>` : ''}
+    </div>
+    <div class="item-price">${fmt(it.price)}</div>
+  </div>`;
+}
+
+// Segundo nivel: agrupa los productos de un tipo por sub-segmento (Coctelería, Botellas...)
+function segmentsHTML(items, catName, fmt){
+  const groups = []; const idx = {};
+  (items||[]).forEach(it => {
+    const s = (it.segment||'').trim();
+    if (!(s in idx)) { idx[s] = groups.length; groups.push({ seg:s, items:[] }); }
+    groups[idx[s]].items.push(it);
+  });
+  return groups.map(g =>
+    `${g.seg ? `<h3 class="segment-title">${g.seg}</h3>` : ''}${g.items.map(it => itemHTML(it, catName, fmt)).join('')}`
+  ).join('');
 }
 </script>
 </body>

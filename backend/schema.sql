@@ -168,6 +168,11 @@ ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS low_stock_alert INT DEFA
 ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS modifiers JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS photo_url TEXT;
 
+-- Carta de dos niveles: cat = tipo (Tragos, Comida...), segment = sub-segmento
+-- (Coctelería, Botellas, Entradas...) + descripción del producto (se muestra en la carta).
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS segment TEXT;
+ALTER TABLE IF EXISTS products ADD COLUMN IF NOT EXISTS description TEXT;
+
 -- Descuentos y splits en mesas y órdenes
 ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0;
 ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS discount_type TEXT;

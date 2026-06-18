@@ -1778,7 +1778,7 @@ route('productos', async () => {
       ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Agregá un producto para que aparezca como botón al abrir una mesa y armar una comanda.</p><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div>` :
         filtered.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
           ${productVisual(p, 'lg')}
-          <div class="prod-cat">${p.cat}</div>
+          <div class="prod-cat">${p.cat}${p.segment?' · '+p.segment:''}</div>
           <div class="prod-name">${p.name}</div>
           <div class="prod-price">${fmt(p.price)}</div>
           ${!p.available?'<span class="badge red">No disponible</span>':''}
@@ -1788,24 +1788,33 @@ route('productos', async () => {
 function setProdFilter(c) { PROD_FILTER = c; navigate(); }
 
 async function editProduct(id) {
-  let p = { name:'', cat:'', price:0, photo_url:'', available:true, stock:null, low_stock_alert:5, modifiers:[] };
-  if (id) { const list = await API.products(); p = list.find(p => p.id === id) || p; }
-  const allCats = [...new Set([...PRODUCT_TYPES, ...(await API.products()).map(p => p.cat).filter(Boolean)])];
+  let p = { name:'', cat:'', segment:'', price:0, photo_url:'', description:'', available:true, stock:null, low_stock_alert:5, modifiers:[] };
+  const allProducts = await API.products();
+  if (id) { p = allProducts.find(x => x.id === id) || p; }
+  const allCats = [...new Set([...PRODUCT_TYPES, ...allProducts.map(x => x.cat).filter(Boolean)])];
+  const allSegs = [...new Set(allProducts.map(x => x.segment).filter(Boolean))];
   window.__editingMods = JSON.parse(JSON.stringify(p.modifiers || []));
   openModal(id?'Editar producto':'Nuevo producto', `
-    <div class="field"><label>Nombre</label><input id="pName" value="${p.name||''}" placeholder="Ej: Hamburguesa, Trago especial"/></div>
+    <div class="field"><label>Nombre</label><input id="pName" value="${p.name||''}" placeholder="Ej: Gin Tonic, Hamburguesa"/></div>
     <div class="grid grid-2" style="gap:12px;">
       <div class="field"><label>Tipo</label><input id="pCat" list="catList" value="${p.cat||'Comida'}" placeholder="Comida, Tragos, Bebidas..."/>
         <datalist id="catList">${allCats.map(c => `<option value="${c}">`).join('')}</datalist></div>
-      <div class="field"><label>Precio</label><input id="pPrice" type="number" value="${p.price||0}" min="0" step="100"/></div>
+      <div class="field"><label>Sub-segmento <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
+        <input id="pSeg" list="segList" value="${p.segment||''}" placeholder="Ej: Coctelería, Botellas, Entradas"/>
+        <datalist id="segList">${allSegs.map(s => `<option value="${s}">`).join('')}</datalist></div>
     </div>
+    <div class="grid grid-2" style="gap:12px;">
+      <div class="field"><label>Precio</label><input id="pPrice" type="number" value="${p.price||0}" min="0" step="100"/></div>
+      <div class="field"><label>Disponible</label>
+        <select id="pAvail"><option value="1" ${p.available?'selected':''}>Sí</option><option value="0" ${!p.available?'selected':''}>No</option></select></div>
+    </div>
+    <div class="field"><label>Descripción <span style="color:var(--tx-lt);font-weight:400;">(opcional · aparece en la carta)</span></label>
+      <textarea id="pDesc" rows="2" placeholder="Ej: Gin, agua tónica, pepino y enebro">${p.description||''}</textarea></div>
     <div class="field">
       <label>Foto del producto (URL opcional)</label>
       <input id="pPhoto" value="${p.photo_url||''}" placeholder="https://... (opcional)"/>
       <p style="font-size:11px;color:var(--tx-mid);margin-top:4px;">Si lo dejás vacío se muestra un tile con las iniciales y color de categoría.</p>
     </div>
-    <div class="field"><label>Disponible</label>
-      <select id="pAvail"><option value="1" ${p.available?'selected':''}>Sí</option><option value="0" ${!p.available?'selected':''}>No</option></select></div>
     <details style="margin-top:8px;border:1px solid var(--border-soft);border-radius:8px;padding:10px 12px;">
       <summary style="cursor:pointer;font-weight:600;font-size:13px;">Stock e inventario</summary>
       <div class="grid grid-2" style="gap:12px;margin-top:12px;">
@@ -1838,7 +1847,9 @@ function addModRow() {
 async function saveProduct(id) {
   const stockVal = $('#pStock').value;
   const data = { name: $('#pName').value.trim(), cat: $('#pCat').value.trim() || 'Sin categoría',
+    segment: $('#pSeg').value.trim() || null,
     price: parseFloat($('#pPrice').value)||0,
+    description: $('#pDesc').value.trim() || null,
     photoUrl: $('#pPhoto').value.trim(),
     available: $('#pAvail').value === '1',
     stock: stockVal === '' ? null : parseInt(stockVal),
