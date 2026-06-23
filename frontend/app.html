@@ -1770,6 +1770,7 @@ route('productos', async () => {
       <div><h1 class="page-title">Productos</h1>
         <div class="page-subtitle">${list.length} productos · ${list.filter(p=>p.available).length} disponibles</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="goToCartaPdf()">📄 Cargar carta PDF</button>
         <button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button>
       </div>
     </div>
@@ -1783,7 +1784,9 @@ route('productos', async () => {
           <div class="prod-price">${fmt(p.price)}</div>
           ${!p.available?'<span class="badge red">No disponible</span>':''}
         </div>`).join('')}
-    </div>`;
+    </div>
+    ${cartaQrCardHTML()}`;
+  loadMenuSettings();
 });
 function setProdFilter(c) { PROD_FILTER = c; navigate(); }
 
@@ -2356,47 +2359,8 @@ route('ajustes', async () => {
     <div class="grid grid-2" style="align-items:start;">
       <div class="card" style="grid-column:1/-1;">
         <h3 style="margin-bottom:8px;">Carta digital QR</h3>
-        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Imprimí este QR y ponelo en cada mesa. Los clientes lo escanean y ven tu carta al instante (sin descargar nada).</p>
-
-        <div style="margin-bottom:16px;">
-          <div style="font-weight:600;margin-bottom:8px;font-size:14px;">¿Cómo querés mostrar tu carta?</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <label class="mm-opt" id="mmOptManual" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
-              <input type="radio" name="menuMode" value="manual" onchange="setMenuMode('manual')" style="margin-top:3px;">
-              <span style="font-size:13px;line-height:1.4;"><b>Cargada a mano</b><br><small style="color:var(--tx-mid);">Cargás los productos y los clientes ven precios siempre actualizados. Es la que ya tenés.</small></span>
-            </label>
-            <label class="mm-opt" id="mmOptPdf" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
-              <input type="radio" name="menuMode" value="pdf" onchange="setMenuMode('pdf')" style="margin-top:3px;">
-              <span style="font-size:13px;line-height:1.4;"><b>Subir un PDF</b><br><small style="color:var(--tx-mid);">Subís tu carta en PDF y los clientes la ven tal cual desde el QR.</small></span>
-            </label>
-          </div>
-        </div>
-
-        <div id="menuPdfBox" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
-          <div id="pdfStatus" style="font-size:13px;color:var(--tx-mid);margin-bottom:10px;">Cargando…</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <input type="file" id="pdfInput" accept="application/pdf" style="font-size:13px;">
-            <button class="btn btn-primary btn-sm" id="pdfUpBtn" onclick="uploadMenuPdf()">Subir PDF</button>
-            <button class="btn btn-secondary btn-sm" id="pdfDelBtn" onclick="deleteMenuPdf()" style="display:none;color:var(--red);">Borrar PDF</button>
-          </div>
-          <div style="font-size:11px;color:var(--tx-lt);margin-top:8px;">Máximo 10 MB. Si subís un PDF nuevo, reemplaza al anterior.</div>
-        </div>
-
-        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
-          <div style="background:white;padding:14px;border-radius:14px;border:1px solid var(--border);">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(location.origin + '/menu.html?id=' + USER.id)}" alt="QR menú" style="display:block;width:180px;height:180px;"/>
-          </div>
-          <div style="flex:1;min-width:200px;">
-            <div style="font-weight:600;margin-bottom:6px;">Link público:</div>
-            <div style="background:var(--bg);padding:8px 10px;border-radius:8px;font-size:12px;font-family:monospace;word-break:break-all;margin-bottom:10px;">${location.origin}/menu.html?id=${USER.id}</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <a class="btn btn-secondary btn-sm" href="menu.html?id=${USER.id}" target="_blank">Ver menú</a>
-              <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${location.origin}/menu.html?id=${USER.id}').then(()=>toast('Link copiado','success'))">Copiar link</button>
-              <a class="btn btn-secondary btn-sm" href="https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(location.origin + '/menu.html?id=' + USER.id)}" download="gestiva-qr-menu.png" target="_blank">Descargar QR</a>
-              <button class="btn btn-primary btn-sm" onclick="printQR()">🖨 Imprimir QR</button>
-            </div>
-          </div>
-        </div>
+        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Tu carta digital, el código QR y la opción de subir un PDF ahora están en la sección <b>Productos</b>, todo junto.</p>
+        <a class="btn btn-primary" href="#/productos">Ir a Productos para ver el QR</a>
       </div>
       <div class="card">
         <h3 style="margin-bottom:16px;">Datos del negocio</h3>
@@ -2436,7 +2400,6 @@ route('ajustes', async () => {
               : `<a href="checkout.html" class="btn btn-secondary btn-block">Gestionar suscripción</a>`)}
       </div>
     </div>`;
-  loadMenuSettings();
 });
 async function cancelSubscription() {
   if (!confirm('¿Cancelar tu suscripción? Mantenés el acceso hasta que termine el período actual y no se te cobra más. Podés reactivar cuando quieras.')) return;
@@ -2564,6 +2527,61 @@ function printQR(){
   const img = w.document.querySelector('img');
   if (img) { img.onload = () => setTimeout(()=>{ try{w.focus();w.print();}catch(e){} }, 200); }
   else setTimeout(()=>{ try{w.focus();w.print();}catch(e){} }, 700);
+}
+// HTML de la card de Carta QR (se muestra en la sección Productos)
+function cartaQrCardHTML(){
+  const url = location.origin + '/menu.html?id=' + USER.id;
+  const qr = (size) => 'https://api.qrserver.com/v1/create-qr-code/?size='+size+'x'+size+'&margin='+(size>300?20:10)+'&data=' + encodeURIComponent(url);
+  return `
+    <div class="card" id="cartaQrCard" style="margin-top:22px;">
+      <h3 style="margin-bottom:8px;">Carta digital QR</h3>
+      <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Generá el QR de tu carta para imprimirlo y ponerlo en las mesas. Los clientes lo escanean y ven tu carta al instante.</p>
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:600;margin-bottom:8px;font-size:14px;">¿Cómo querés mostrar tu carta?</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <label class="mm-opt" id="mmOptManual" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
+            <input type="radio" name="menuMode" value="manual" onchange="setMenuMode('manual')" style="margin-top:3px;">
+            <span style="font-size:13px;line-height:1.4;"><b>Cargada a mano</b><br><small style="color:var(--tx-mid);">Usás los productos de arriba. Los clientes ven precios siempre actualizados.</small></span>
+          </label>
+          <label class="mm-opt" id="mmOptPdf" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
+            <input type="radio" name="menuMode" value="pdf" onchange="setMenuMode('pdf')" style="margin-top:3px;">
+            <span style="font-size:13px;line-height:1.4;"><b>Subir un PDF</b><br><small style="color:var(--tx-mid);">Subís tu carta en PDF y los clientes la ven tal cual desde el QR.</small></span>
+          </label>
+        </div>
+      </div>
+      <div id="menuPdfBox" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+        <div id="pdfStatus" style="font-size:13px;color:var(--tx-mid);margin-bottom:10px;">Cargando…</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="file" id="pdfInput" accept="application/pdf" style="font-size:13px;">
+          <button class="btn btn-primary btn-sm" id="pdfUpBtn" onclick="uploadMenuPdf()">Subir PDF</button>
+          <button class="btn btn-secondary btn-sm" id="pdfDelBtn" onclick="deleteMenuPdf()" style="display:none;color:var(--red);">Borrar PDF</button>
+        </div>
+        <div style="font-size:11px;color:var(--tx-lt);margin-top:8px;">Máximo 10 MB. Si subís un PDF nuevo, reemplaza al anterior.</div>
+      </div>
+      <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+        <div style="background:white;padding:14px;border-radius:14px;border:1px solid var(--border);">
+          <img src="${qr(180)}" alt="QR menú" style="display:block;width:180px;height:180px;"/>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-weight:600;margin-bottom:6px;">Link público:</div>
+          <div style="background:var(--bg);padding:8px 10px;border-radius:8px;font-size:12px;font-family:monospace;word-break:break-all;margin-bottom:10px;">${url}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a class="btn btn-secondary btn-sm" href="menu.html?id=${USER.id}" target="_blank">Ver carta</a>
+            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${url}').then(()=>toast('Link copiado','success'))">Copiar link</button>
+            <a class="btn btn-secondary btn-sm" href="${qr(600)}" download="gestiva-qr-carta.png" target="_blank">Descargar QR</a>
+            <button class="btn btn-primary btn-sm" onclick="printQR()">🖨 Imprimir QR</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+// Botón "Cargar carta PDF": baja a la card y activa el modo PDF
+function goToCartaPdf(){
+  const card = document.getElementById('cartaQrCard');
+  if (card) card.scrollIntoView({ behavior:'smooth', block:'start' });
+  const radio = document.querySelector('input[name="menuMode"][value="pdf"]');
+  if (radio) radio.checked = true;
+  setMenuMode('pdf');
 }
 
 async function changePlan(plan) {
