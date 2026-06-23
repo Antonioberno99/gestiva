@@ -319,6 +319,15 @@
     network: '🌐 Red / WiFi (impresora con IP)'
   };
 
+  // Tarjetas visuales: cada tipo de comandera con su explicación simple.
+  const METHOD_CARDS = [
+    { k: 'browser',   icon: '🖨️', name: 'Por navegador',  desc: 'Cualquier impresora de esta compu o tablet. Lo más fácil.' },
+    { k: 'bluetooth', icon: '📶', name: 'Bluetooth',      desc: 'Térmica portátil, sin cables. (Chrome en Android)' },
+    { k: 'usb',       icon: '🔌', name: 'USB',            desc: 'Térmica conectada con cable USB.' },
+    { k: 'network',   icon: '🌐', name: 'Red / WiFi',     desc: 'Impresora con IP en la red. Necesita el puente.' },
+    { k: 'screen',    icon: '🖥️', name: 'Solo pantalla',  desc: 'Va a la pantalla de cocina. Sin imprimir.' }
+  ];
+
   function openConfig() {
     const cfg = getCfg();
     const existing = document.getElementById('cmdr-modal');
@@ -328,68 +337,97 @@
     wrap.innerHTML = `
       <style>
         #cmdr-modal{position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.55);display:flex;align-items:flex-end;justify-content:center;font-family:'Inter',system-ui,sans-serif;}
-        #cmdr-modal .sheet{background:#fff;width:100%;max-width:460px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px 28px;box-shadow:0 -10px 40px rgba(0,0,0,.25);}
+        #cmdr-modal .sheet{background:#fff;width:100%;max-width:480px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px 28px;box-shadow:0 -10px 40px rgba(0,0,0,.25);}
         @media(min-width:560px){#cmdr-modal{align-items:center}#cmdr-modal .sheet{border-radius:20px}}
-        #cmdr-modal h2{font-size:18px;margin:0 0 2px;font-weight:800;color:#0f172a;}
-        #cmdr-modal .sub{font-size:12px;color:#64748b;margin:0 0 16px;}
-        #cmdr-modal label{display:block;font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;}
-        #cmdr-modal select,#cmdr-modal input[type=text],#cmdr-modal input[type=number]{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;}
-        #cmdr-modal .row{display:flex;gap:10px;}
-        #cmdr-modal .row>*{flex:1;}
+        #cmdr-modal h2{font-size:19px;margin:0 0 2px;font-weight:800;color:#0f172a;}
+        #cmdr-modal .sub{font-size:12.5px;color:#64748b;margin:0 0 16px;line-height:1.5;}
+        #cmdr-modal label{display:block;font-size:12px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.04em;margin:18px 0 8px;}
+        #cmdr-modal label .step{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#f97316;color:#fff;font-size:11px;margin-right:6px;vertical-align:middle;}
+        #cmdr-modal input[type=text],#cmdr-modal input[type=number]{width:100%;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;}
+        #cmdr-modal .row{display:flex;gap:10px;} #cmdr-modal .row>*{flex:1;}
+        #cmdr-modal .cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+        #cmdr-modal .card{display:flex;flex-direction:column;gap:3px;padding:12px;border:2px solid #e2e8f0;border-radius:14px;background:#fff;cursor:pointer;text-align:left;font-family:inherit;transition:.12s;}
+        #cmdr-modal .card:hover{border-color:#fdba74;}
+        #cmdr-modal .card.on{border-color:#f97316;background:#fff7ed;}
+        #cmdr-modal .card .ic{font-size:22px;line-height:1;}
+        #cmdr-modal .card .nm{font-weight:800;font-size:14px;color:#0f172a;}
+        #cmdr-modal .card .ds{font-size:11px;color:#64748b;line-height:1.35;}
+        #cmdr-modal .card.wide{grid-column:1 / -1;flex-direction:row;align-items:center;gap:10px;}
+        #cmdr-modal .card.wide .ds{flex:1;}
+        #cmdr-modal .panel{margin-top:12px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}
+        #cmdr-modal .panel.hide{display:none;}
+        #cmdr-modal .status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:10px;}
+        #cmdr-modal .dot{width:9px;height:9px;border-radius:50%;background:#cbd5e1;flex:none;}
+        #cmdr-modal .status.ok .dot{background:#10b981;} #cmdr-modal .status.ok{color:#047857;}
+        #cmdr-modal .status.off{color:#64748b;}
+        #cmdr-modal .btn-connect{width:100%;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;}
         #cmdr-modal .seg{display:flex;gap:6px;flex-wrap:wrap;}
         #cmdr-modal .seg button{flex:1;min-width:64px;padding:10px;border:1px solid #e2e8f0;background:#fff;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;color:#475569;font-family:inherit;}
         #cmdr-modal .seg button.on{background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border-color:transparent;}
-        #cmdr-modal .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;}
+        #cmdr-modal .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;}
         #cmdr-modal .toggle span{font-size:14px;font-weight:600;color:#0f172a;text-transform:none;letter-spacing:0;}
         #cmdr-modal .sw{width:46px;height:26px;border-radius:999px;background:#cbd5e1;position:relative;cursor:pointer;flex:none;transition:.15s;}
         #cmdr-modal .sw.on{background:#10b981;}
         #cmdr-modal .sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s;}
         #cmdr-modal .sw.on::after{left:23px;}
-        #cmdr-modal .net{display:none;}
         #cmdr-modal .btns{display:flex;gap:10px;margin-top:22px;}
         #cmdr-modal .btn{flex:1;padding:13px;border:none;border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;}
         #cmdr-modal .btn-primary{background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;}
         #cmdr-modal .btn-ghost{background:#f1f5f9;color:#475569;}
-        #cmdr-modal .btn-test{width:100%;margin-top:12px;padding:12px;border:1px dashed #f97316;background:#fff7ed;color:#ea580c;border-radius:12px;font-weight:700;cursor:pointer;font-family:inherit;}
-        #cmdr-modal .hint{font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.5;}
+        #cmdr-modal .btn-test{width:100%;margin-top:14px;padding:12px;border:1px dashed #f97316;background:#fff7ed;color:#ea580c;border-radius:12px;font-weight:700;cursor:pointer;font-family:inherit;}
+        #cmdr-modal .hint{font-size:11.5px;color:#94a3b8;margin-top:8px;line-height:1.5;}
         #cmdr-modal .msg{font-size:13px;margin-top:10px;padding:10px;border-radius:8px;display:none;}
         #cmdr-modal .msg.ok{display:block;background:#d1fae5;color:#047857;}
         #cmdr-modal .msg.err{display:block;background:#fee2e2;color:#b91c1c;}
       </style>
       <div class="sheet">
-        <h2>Comandera</h2>
-        <p class="sub">Cómo se imprime el pedido cuando lo enviás a cocina. Se guarda en este dispositivo.</p>
+        <h2>Conectar comandera</h2>
+        <p class="sub">Elegí cómo querés que se impriman los pedidos cuando los mandás a cocina. Queda guardado en este dispositivo.</p>
 
-        <label>Forma de imprimir</label>
-        <select id="cmdr-method">
-          ${Object.entries(METHOD_LABELS).map(([k, v]) => `<option value="${k}" ${cfg.method === k ? 'selected' : ''}>${v}</option>`).join('')}
-        </select>
+        <label><span class="step">1</span>¿Qué comandera tenés?</label>
+        <div class="cards" id="cmdr-cards">
+          ${METHOD_CARDS.map(m => `
+            <button type="button" class="card ${m.k === 'screen' ? 'wide ' : ''}${cfg.method === m.k ? 'on' : ''}" data-k="${m.k}">
+              <span class="ic">${m.icon}</span>
+              <span class="nm">${m.name}</span>
+              <span class="ds">${m.desc}</span>
+            </button>`).join('')}
+        </div>
 
-        <div id="cmdr-connect-wrap" style="margin-top:10px;display:none;">
-          <button class="btn-test" id="cmdr-connect">🔗 Conectar impresora</button>
+        <div class="panel hide" id="cmdr-connect-panel">
+          <div class="status off" id="cmdr-status"><span class="dot"></span><span id="cmdr-status-txt">Sin conectar</span></div>
+          <button type="button" class="btn-connect" id="cmdr-connect">🔗 Conectar impresora</button>
           <div class="hint" id="cmdr-connect-hint"></div>
         </div>
 
-        <div class="net" id="cmdr-net">
-          <label>IP de la impresora</label>
+        <div class="panel hide" id="cmdr-net">
+          <label style="margin-top:0">IP de la impresora</label>
           <div class="row">
             <input type="text" id="cmdr-ip" placeholder="192.168.0.50" value="${escapeHTML(cfg.printerIp)}">
             <input type="number" id="cmdr-port" placeholder="9100" value="${cfg.printerPort}" style="max-width:90px;">
           </div>
-          <div class="hint">Necesitás el puente <b>comandera-bridge</b> corriendo en esta PC. Mirá las instrucciones que te pasamos.</div>
           <label>URL del puente</label>
           <input type="text" id="cmdr-bridge" value="${escapeHTML(cfg.bridgeUrl)}">
+          <div class="hint">Necesitás el programa <b>comandera-bridge</b> corriendo en una PC de la red. Tocá "Imprimir prueba" para verificar.</div>
         </div>
 
-        <label>Ancho de papel</label>
-        <div class="seg" id="cmdr-paper">
-          <button data-v="58" class="${cfg.paper === 58 ? 'on' : ''}">58 mm</button>
-          <button data-v="80" class="${cfg.paper === 80 ? 'on' : ''}">80 mm</button>
+        <div class="panel hide" id="cmdr-browser-note">
+          <div class="hint" style="margin:0;color:#475569;font-size:12.5px;">✅ No hace falta conectar nada. Al enviar el pedido se abre la impresión y elegís tu impresora (la primera vez). Ideal para impresoras comunes o térmicas por USB ya instaladas.</div>
         </div>
 
-        <label>Copias por pedido</label>
-        <div class="seg" id="cmdr-copies">
-          ${[1, 2, 3].map(n => `<button data-v="${n}" class="${cfg.copies === n ? 'on' : ''}">${n}</button>`).join('')}
+        <label><span class="step">2</span>Ajustes de impresión</label>
+        <div class="row">
+          <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Ancho de papel</div>
+            <div class="seg" id="cmdr-paper">
+              <button type="button" data-v="58" class="${cfg.paper === 58 ? 'on' : ''}">58 mm</button>
+              <button type="button" data-v="80" class="${cfg.paper === 80 ? 'on' : ''}">80 mm</button>
+            </div>
+          </div>
+          <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Copias</div>
+            <div class="seg" id="cmdr-copies">
+              ${[1, 2, 3].map(n => `<button type="button" data-v="${n}" class="${cfg.copies === n ? 'on' : ''}">${n}</button>`).join('')}
+            </div>
+          </div>
         </div>
 
         <label>Encabezado (opcional)</label>
@@ -402,12 +440,12 @@
           <div class="sw ${cfg.autoprint ? 'on' : ''}" id="cmdr-auto"></div>
         </div>
 
-        <button class="btn-test" id="cmdr-test">🧾 Imprimir prueba</button>
+        <button type="button" class="btn-test" id="cmdr-test">🧾 Imprimir una prueba</button>
         <div class="msg" id="cmdr-msg"></div>
 
         <div class="btns">
-          <button class="btn btn-ghost" id="cmdr-close">Cerrar</button>
-          <button class="btn btn-primary" id="cmdr-save">Guardar</button>
+          <button type="button" class="btn btn-ghost" id="cmdr-close">Cerrar</button>
+          <button type="button" class="btn btn-primary" id="cmdr-save">Guardar</button>
         </div>
       </div>`;
     document.body.appendChild(wrap);
@@ -416,17 +454,38 @@
     const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
     const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint };
 
+    function isConnected() {
+      if (state.method === 'bluetooth') return !!(_btChar && _btChar.service.device.gatt.connected);
+      if (state.method === 'usb') return !!(_usbDev && _usbDev.opened);
+      return false;
+    }
+    function refreshStatus() {
+      const s = $('#cmdr-status'); if (!s) return;
+      const ok = isConnected();
+      s.className = 'status ' + (ok ? 'ok' : 'off');
+      $('#cmdr-status-txt').textContent = ok ? 'Impresora conectada' : 'Sin conectar';
+      $('#cmdr-connect').textContent = ok ? '🔄 Volver a conectar' : '🔗 Conectar impresora';
+    }
     function refreshMethodUI() {
-      $('#cmdr-net').style.display = state.method === 'network' ? 'block' : 'none';
+      $('#cmdr-net').classList.toggle('hide', state.method !== 'network');
       const needsConnect = (state.method === 'bluetooth' || state.method === 'usb');
-      $('#cmdr-connect-wrap').style.display = needsConnect ? 'block' : 'none';
-      $('#cmdr-connect-hint').textContent = state.method === 'bluetooth'
-        ? 'Encendé la impresora y tocá Conectar para emparejarla (Chrome en Android).'
-        : 'Conectá la impresora por USB y tocá Conectar para autorizarla.';
+      $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
+      $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
+      if (needsConnect) {
+        $('#cmdr-connect-hint').textContent = state.method === 'bluetooth'
+          ? 'Encendé la impresora y tocá Conectar para emparejarla. Funciona con Chrome en Android.'
+          : 'Conectá la impresora por USB y tocá Conectar para autorizarla. Funciona con Chrome en compu o Android (OTG).';
+        refreshStatus();
+      }
+    }
+    function selectMethod(k) {
+      state.method = k;
+      wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.classList.toggle('on', c.dataset.k === k));
+      refreshMethodUI();
     }
     refreshMethodUI();
 
-    $('#cmdr-method').addEventListener('change', (e) => { state.method = e.target.value; refreshMethodUI(); });
+    wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.onclick = () => selectMethod(c.dataset.k));
     wrap.querySelectorAll('#cmdr-paper button').forEach(b => b.onclick = () => {
       state.paper = +b.dataset.v; wrap.querySelectorAll('#cmdr-paper button').forEach(x => x.classList.toggle('on', x === b));
     });
@@ -446,16 +505,18 @@
     }
 
     $('#cmdr-connect').onclick = async () => {
+      const btn = $('#cmdr-connect'); btn.disabled = true;
       try {
         msg('Buscando impresora...', true);
         if (state.method === 'bluetooth') await getBluetoothChar();
         else await getUsbDevice();
-        msg('Impresora conectada ✓', true);
+        msg('Impresora conectada ✓ Probá imprimir abajo.', true);
       } catch (e) { msg(e.message || 'No se pudo conectar.', false); }
+      btn.disabled = false; refreshStatus();
     };
     $('#cmdr-test').onclick = async () => {
       setCfg(collect());
-      try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); }
+      try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); refreshStatus(); }
       catch (e) { msg(e.message || 'No se pudo imprimir.', false); }
     };
     $('#cmdr-save').onclick = () => { setCfg(collect()); wrap.remove(); if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg()); };
