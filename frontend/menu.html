@@ -92,6 +92,19 @@
   }
   .footer a { color: var(--or-dk); text-decoration: none; font-weight: 600; }
 
+  /* Carta en PDF */
+  .pdf-frame {
+    background: white; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06); height: 74vh; min-height: 420px;
+  }
+  .pdf-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .pdf-open {
+    display: block; text-align: center; margin: 16px auto 0; max-width: 360px;
+    background: var(--or); color: #fff !important; padding: 14px 18px; border-radius: 12px;
+    text-decoration: none; font-weight: 700; font-size: 15px;
+    box-shadow: 0 6px 16px rgba(249,115,22,.3);
+  }
+
   .loading, .error {
     text-align: center; padding: 80px 20px; color: var(--tx-mid);
   }
@@ -140,6 +153,7 @@ const tenantId = params.get('id');
 })();
 
 function render(data) {
+  if (data.menuMode === 'pdf' && data.pdfUrl) { renderPdf(data); return; }
   const cur = data.restaurant.currency || '$';
   const fmt = (n) => cur + ' ' + Math.round(parseFloat(n)).toLocaleString('es-AR');
   const cats = data.categories;
@@ -210,6 +224,26 @@ function segmentsHTML(items, catName, fmt){
   return groups.map(g =>
     `${g.seg ? `<h3 class="segment-title">${g.seg}</h3>` : ''}${g.items.map(it => itemHTML(it, catName, fmt)).join('')}`
   ).join('');
+}
+
+function renderPdf(data) {
+  const pdfFull = window.API_URL + data.pdfUrl;
+  document.getElementById('root').innerHTML = `
+    <div class="header">
+      <div class="tag">Carta</div>
+      <h1>${data.restaurant.name}</h1>
+      <p>Mirá nuestra carta</p>
+    </div>
+    <div class="wrap">
+      <div class="pdf-frame">
+        <iframe src="${pdfFull}#view=FitH&toolbar=0" title="Carta en PDF" loading="lazy"></iframe>
+      </div>
+      <a class="pdf-open" href="${pdfFull}" target="_blank" rel="noopener">📄 Abrir carta en pantalla completa</a>
+      <div class="footer">
+        ${data.restaurant.phone ? `Tel: ${data.restaurant.phone} · ` : ''}
+        Gestionado con <a href="/landing.html" target="_blank">Gestiva</a>
+      </div>
+    </div>`;
 }
 </script>
 </body>

@@ -409,3 +409,13 @@ CREATE TABLE IF NOT EXISTS site_events (
 );
 CREATE INDEX IF NOT EXISTS idx_site_events_created ON site_events(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_site_events_type ON site_events(type, created_at DESC);
+
+-- ============================================================
+-- CARTA QR — modo de carta y PDF subido por el dueño
+-- El restaurante elige: cargar productos a mano ('manual') o subir un PDF ('pdf').
+-- El PDF se guarda en la base (bytea) para no depender de un storage externo.
+-- ============================================================
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_mode TEXT DEFAULT 'manual'; -- 'manual' | 'pdf'
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf BYTEA;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf_name TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf_uploaded_at TIMESTAMPTZ;

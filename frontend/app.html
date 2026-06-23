@@ -2356,7 +2356,32 @@ route('ajustes', async () => {
     <div class="grid grid-2" style="align-items:start;">
       <div class="card" style="grid-column:1/-1;">
         <h3 style="margin-bottom:8px;">Carta digital QR</h3>
-        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Imprimí este QR y ponelo en cada mesa. Los clientes lo escanean y ven el menú actualizado al instante (sin descargar nada).</p>
+        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Imprimí este QR y ponelo en cada mesa. Los clientes lo escanean y ven tu carta al instante (sin descargar nada).</p>
+
+        <div style="margin-bottom:16px;">
+          <div style="font-weight:600;margin-bottom:8px;font-size:14px;">¿Cómo querés mostrar tu carta?</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <label class="mm-opt" id="mmOptManual" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
+              <input type="radio" name="menuMode" value="manual" onchange="setMenuMode('manual')" style="margin-top:3px;">
+              <span style="font-size:13px;line-height:1.4;"><b>Cargada a mano</b><br><small style="color:var(--tx-mid);">Cargás los productos y los clientes ven precios siempre actualizados. Es la que ya tenés.</small></span>
+            </label>
+            <label class="mm-opt" id="mmOptPdf" style="flex:1;min-width:220px;display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:2px solid var(--border);border-radius:12px;cursor:pointer;">
+              <input type="radio" name="menuMode" value="pdf" onchange="setMenuMode('pdf')" style="margin-top:3px;">
+              <span style="font-size:13px;line-height:1.4;"><b>Subir un PDF</b><br><small style="color:var(--tx-mid);">Subís tu carta en PDF y los clientes la ven tal cual desde el QR.</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div id="menuPdfBox" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+          <div id="pdfStatus" style="font-size:13px;color:var(--tx-mid);margin-bottom:10px;">Cargando…</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="file" id="pdfInput" accept="application/pdf" style="font-size:13px;">
+            <button class="btn btn-primary btn-sm" id="pdfUpBtn" onclick="uploadMenuPdf()">Subir PDF</button>
+            <button class="btn btn-secondary btn-sm" id="pdfDelBtn" onclick="deleteMenuPdf()" style="display:none;color:var(--red);">Borrar PDF</button>
+          </div>
+          <div style="font-size:11px;color:var(--tx-lt);margin-top:8px;">Máximo 10 MB. Si subís un PDF nuevo, reemplaza al anterior.</div>
+        </div>
+
         <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
           <div style="background:white;padding:14px;border-radius:14px;border:1px solid var(--border);">
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(location.origin + '/menu.html?id=' + USER.id)}" alt="QR menú" style="display:block;width:180px;height:180px;"/>
@@ -2367,7 +2392,8 @@ route('ajustes', async () => {
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <a class="btn btn-secondary btn-sm" href="menu.html?id=${USER.id}" target="_blank">Ver menú</a>
               <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${location.origin}/menu.html?id=${USER.id}').then(()=>toast('Link copiado','success'))">Copiar link</button>
-              <a class="btn btn-primary btn-sm" href="https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(location.origin + '/menu.html?id=' + USER.id)}" download="gestiva-qr-menu.png" target="_blank">Descargar QR</a>
+              <a class="btn btn-secondary btn-sm" href="https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=${encodeURIComponent(location.origin + '/menu.html?id=' + USER.id)}" download="gestiva-qr-menu.png" target="_blank">Descargar QR</a>
+              <button class="btn btn-primary btn-sm" onclick="printQR()">🖨 Imprimir QR</button>
             </div>
           </div>
         </div>
@@ -2410,6 +2436,7 @@ route('ajustes', async () => {
               : `<a href="checkout.html" class="btn btn-secondary btn-block">Gestionar suscripción</a>`)}
       </div>
     </div>`;
+  loadMenuSettings();
 });
 async function cancelSubscription() {
   if (!confirm('¿Cancelar tu suscripción? Mantenés el acceso hasta que termine el período actual y no se te cobra más. Podés reactivar cuando quieras.')) return;
@@ -2431,6 +2458,112 @@ async function saveSettings() {
     USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
     refreshSubPill(); toast('Cambios guardados','success');
   } catch(e) { toast(e.message,'error'); }
+}
+
+// ── Carta QR: modo (manual / PDF), subida de PDF e impresión del QR ──
+function menuUrl(){ return location.origin + '/menu.html?id=' + USER.id; }
+function highlightMode(mode){
+  const m = document.getElementById('mmOptManual'), p = document.getElementById('mmOptPdf');
+  if (m) m.style.borderColor = (mode==='manual') ? 'var(--or)' : 'var(--border)';
+  if (p) p.style.borderColor = (mode==='pdf') ? 'var(--or)' : 'var(--border)';
+  const box = document.getElementById('menuPdfBox');
+  if (box) box.style.display = (mode==='pdf') ? '' : 'none';
+}
+async function loadMenuSettings(){
+  let mode = 'manual', hasPdf = false, pdfName = null;
+  if (!IS_DEMO) {
+    try { const s = await api('/api/menu/settings'); if (s) { mode = s.mode || 'manual'; hasPdf = !!s.hasPdf; pdfName = s.pdfName; } } catch(e) {}
+  }
+  const radio = document.querySelector(`input[name="menuMode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  highlightMode(mode);
+  renderPdfStatus(hasPdf, pdfName);
+}
+function renderPdfStatus(hasPdf, pdfName){
+  const st = document.getElementById('pdfStatus');
+  const del = document.getElementById('pdfDelBtn');
+  if (!st) return;
+  if (hasPdf) {
+    st.innerHTML = `✅ Carta en PDF cargada${pdfName ? ': <b>'+pdfName+'</b>' : ''}. Los clientes la ven al escanear el QR. <a href="${window.API_URL}/public/menu/${USER.id}/pdf" target="_blank" style="color:var(--or-dk);font-weight:600;">Ver PDF</a>`;
+    if (del) del.style.display = '';
+  } else {
+    st.innerHTML = 'Todavía no subiste ningún PDF. Elegí el archivo y tocá "Subir PDF".';
+    if (del) del.style.display = 'none';
+  }
+}
+async function setMenuMode(mode){
+  highlightMode(mode);
+  if (IS_DEMO) return;
+  try { await api('/api/menu/mode', { method:'POST', body: JSON.stringify({ mode }) }); }
+  catch(e) { toast('No se pudo cambiar el modo','error'); }
+}
+async function uploadMenuPdf(){
+  const inp = document.getElementById('pdfInput');
+  const file = inp && inp.files && inp.files[0];
+  if (!file) { toast('Elegí un archivo PDF primero','error'); return; }
+  if (file.type !== 'application/pdf') { toast('El archivo tiene que ser un PDF','error'); return; }
+  if (file.size > 10*1024*1024) { toast('El PDF es muy grande (máx 10 MB)','error'); return; }
+  if (IS_DEMO) { toast('Subir PDF no está disponible en la demo','error'); return; }
+  const btn = document.getElementById('pdfUpBtn');
+  if (btn){ btn.disabled = true; btn.textContent = 'Subiendo…'; }
+  try {
+    const r = await fetch(window.API_URL + '/api/menu/pdf', {
+      method:'POST',
+      headers: { Authorization:'Bearer '+TOKEN, 'Content-Type':'application/pdf', 'X-File-Name': encodeURIComponent(file.name) },
+      body: file
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error==='not_a_pdf'?'El archivo no es un PDF válido':(data.error==='no_file'?'No se recibió el archivo':(data.error||'Error al subir')));
+    const radio = document.querySelector('input[name="menuMode"][value="pdf"]'); if (radio) radio.checked = true;
+    highlightMode('pdf');
+    renderPdfStatus(true, data.name);
+    inp.value = '';
+    toast('PDF subido ✓','success');
+  } catch(e) { toast(e.message,'error'); }
+  finally { if (btn){ btn.disabled = false; btn.textContent = 'Subir PDF'; } }
+}
+async function deleteMenuPdf(){
+  if (!confirm('¿Borrar el PDF de la carta? Volvés a la carta cargada a mano.')) return;
+  if (IS_DEMO) { renderPdfStatus(false); return; }
+  try {
+    await api('/api/menu/pdf', { method:'DELETE' });
+    const radio = document.querySelector('input[name="menuMode"][value="manual"]'); if (radio) radio.checked = true;
+    highlightMode('manual');
+    renderPdfStatus(false);
+    toast('PDF borrado','success');
+  } catch(e) { toast('No se pudo borrar','error'); }
+}
+function printQR(){
+  const url = menuUrl();
+  const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data=' + encodeURIComponent(url);
+  const name = (USER.restaurantName || 'Nuestra carta').replace(/</g,'&lt;');
+  const w = window.open('', '_blank', 'width=720,height=900');
+  if (!w) { toast('Permití las ventanas emergentes para imprimir','error'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>QR - ${name}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:'Inter',Arial,sans-serif;text-align:center;padding:48px 32px;color:#0f172a}
+      .card{max-width:520px;margin:0 auto;border:2px dashed #e2e8f0;border-radius:24px;padding:40px 32px}
+      h1{font-size:30px;margin-bottom:6px;color:#ea580c}
+      .sub{font-size:18px;margin-bottom:24px;color:#475569}
+      img{width:320px;height:320px;display:block;margin:0 auto 18px}
+      .big{font-size:22px;font-weight:800;margin-bottom:6px}
+      .small{font-size:12px;color:#94a3b8;word-break:break-all}
+      @media print{ .noprint{display:none} body{padding:24px} }
+    </style></head><body>
+    <div class="card">
+      <h1>${name}</h1>
+      <div class="sub">Escaneá el código y mirá nuestra carta 📲</div>
+      <img src="${qr}" alt="QR carta">
+      <div class="big">Escaneá con la cámara</div>
+      <div class="small">${url}</div>
+    </div>
+    <button class="noprint" style="margin-top:24px;padding:12px 28px;font-size:15px;border:none;border-radius:10px;background:#f97316;color:#fff;font-weight:700;cursor:pointer" onclick="window.print()">Imprimir</button>
+    </body></html>`);
+  w.document.close();
+  const img = w.document.querySelector('img');
+  if (img) { img.onload = () => setTimeout(()=>{ try{w.focus();w.print();}catch(e){} }, 200); }
+  else setTimeout(()=>{ try{w.focus();w.print();}catch(e){} }, 700);
 }
 
 async function changePlan(plan) {

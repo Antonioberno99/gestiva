@@ -2115,8 +2115,11 @@ app.post('/public/track', trackLimiter, async (req, res) => {
 // ----- MENÚ PÚBLICO (QR carta digital, sin auth) -----
 app.get('/public/menu/:tenantId', async (req, res) => {
   try {
-    const t = (await q('SELECT id, restaurant_name, currency, phone FROM tenants WHERE id=$1', [req.params.tenantId])).rows[0];
+    const t = (await q(`SELECT id, restaurant_name, currency, phone, menu_mode,
+                        (menu_pdf IS NOT NULL) AS has_pdf
+                        FROM tenants WHERE id=$1`, [req.params.tenantId])).rows[0];
     if (!t) return res.status(404).json({ error: 'not_found' });
+    const usePdf = (t.menu_mode === 'pdf' && t.has_pdf);
     const products = (await q(`SELECT id, name, cat, segment, price, photo_url, description, available FROM products
                                WHERE tenant_id=$1 AND available=true ORDER BY cat, segment NULLS FIRST, name`, [t.id])).rows;
     // Agrupar por categoría
@@ -2128,12 +2131,66 @@ app.get('/public/menu/:tenantId', async (req, res) => {
     }
     res.json({
       restaurant: { id: t.id, name: t.restaurant_name, currency: t.currency, phone: t.phone },
+      menuMode: usePdf ? 'pdf' : 'manual',
+      pdfUrl: usePdf ? `/public/menu/${t.id}/pdf` : null,
       categories: Object.entries(grouped).map(([name, items]) => ({ name, items }))
     });
   } catch (e) {
     console.error('[public-menu]', e);
     res.status(500).json({ error: 'server_error' });
   }
+});
+
+// Sirve el PDF de la carta (público, lo ven los clientes desde el QR).
+app.get('/public/menu/:tenantId/pdf', async (req, res) => {
+  try {
+    const t = (await q('SELECT menu_pdf, menu_pdf_name FROM tenants WHERE id=$1', [req.params.tenantId])).rows[0];
+    if (!t || !t.menu_pdf) return res.status(404).json({ error: 'not_found' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${(t.menu_pdf_name || 'carta').replace(/[^\w.\-]/g,'_')}"`);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(t.menu_pdf);
+  } catch (e) {
+    console.error('[public-menu-pdf]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ----- CARTA QR: gestión del modo y del PDF (dueño autenticado) -----
+const pdfUpload = express.raw({ type: 'application/pdf', limit: '10mb' });
+
+// Estado actual de la carta: modo elegido y si hay un PDF cargado.
+app.get('/api/menu/settings', requireAuth, requireSubscription, async (req, res) => {
+  const t = (await q(`SELECT menu_mode, (menu_pdf IS NOT NULL) AS has_pdf, menu_pdf_name, menu_pdf_uploaded_at
+                      FROM tenants WHERE id=$1`, [req.tenant.id])).rows[0];
+  res.json({ mode: t.menu_mode || 'manual', hasPdf: t.has_pdf, pdfName: t.menu_pdf_name, pdfUploadedAt: t.menu_pdf_uploaded_at });
+});
+
+// Cambiar el modo de la carta entre 'manual' (productos) y 'pdf'.
+app.post('/api/menu/mode', requireAuth, requireSubscription, async (req, res) => {
+  const mode = req.body?.mode;
+  if (!['manual', 'pdf'].includes(mode)) return res.status(400).json({ error: 'invalid_mode' });
+  await q('UPDATE tenants SET menu_mode=$1 WHERE id=$2', [mode, req.tenant.id]);
+  res.json({ ok: true, mode });
+});
+
+// Subir el PDF de la carta (binario crudo, máx 10 MB). Activa el modo 'pdf'.
+app.post('/api/menu/pdf', requireAuth, requireSubscription, pdfUpload, async (req, res) => {
+  const buf = req.body;
+  if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: 'no_file' });
+  if (buf.slice(0, 4).toString('latin1') !== '%PDF') return res.status(400).json({ error: 'not_a_pdf' });
+  let name = 'carta.pdf';
+  try { name = decodeURIComponent((req.headers['x-file-name'] || 'carta.pdf').toString()).slice(0, 128); } catch (e) {}
+  await q(`UPDATE tenants SET menu_pdf=$1, menu_pdf_name=$2, menu_pdf_uploaded_at=now(), menu_mode='pdf' WHERE id=$3`,
+    [buf, name, req.tenant.id]);
+  res.json({ ok: true, name, size: buf.length });
+});
+
+// Borrar el PDF y volver a la carta manual.
+app.delete('/api/menu/pdf', requireAuth, requireSubscription, async (req, res) => {
+  await q(`UPDATE tenants SET menu_pdf=NULL, menu_pdf_name=NULL, menu_pdf_uploaded_at=NULL, menu_mode='manual' WHERE id=$1`,
+    [req.tenant.id]);
+  res.json({ ok: true });
 });
 
 // PUT mesa con posición visual ya soportado por endpoint existente — solo agregamos pos_x/pos_y al PUT
