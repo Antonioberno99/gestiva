@@ -92,12 +92,12 @@
   }
   .footer a { color: var(--or-dk); text-decoration: none; font-weight: 600; }
 
-  /* Carta en PDF */
-  .pdf-frame {
-    background: white; border-radius: 16px; overflow: hidden;
-    box-shadow: 0 2px 12px rgba(0,0,0,.06); height: 74vh; min-height: 420px;
+  /* Carta en PDF (renderizada como imágenes, se ve sola) */
+  .pdf-pages { display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .pdf-page {
+    width: 100%; max-width: 100%; display: block;
+    border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); background: #fff;
   }
-  .pdf-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
   .pdf-open {
     display: block; text-align: center; margin: 16px auto 0; max-width: 360px;
     background: var(--or); color: #fff !important; padding: 14px 18px; border-radius: 12px;
@@ -226,24 +226,61 @@ function segmentsHTML(items, catName, fmt){
   ).join('');
 }
 
-function renderPdf(data) {
+async function renderPdf(data) {
   const pdfFull = window.API_URL + data.pdfUrl;
   document.getElementById('root').innerHTML = `
     <div class="header">
       <div class="tag">Carta</div>
       <h1>${data.restaurant.name}</h1>
-      <p>Mirá nuestra carta</p>
+      <p>Deslizá para ver toda la carta</p>
     </div>
     <div class="wrap">
-      <div class="pdf-frame">
-        <iframe src="${pdfFull}#view=FitH&toolbar=0" title="Carta en PDF" loading="lazy"></iframe>
+      <div id="pdfPages" class="pdf-pages">
+        <div class="loading"><div class="spinner"></div><h2>Cargando carta…</h2></div>
       </div>
-      <a class="pdf-open" href="${pdfFull}" target="_blank" rel="noopener">📄 Abrir carta en pantalla completa</a>
       <div class="footer">
         ${data.restaurant.phone ? `Tel: ${data.restaurant.phone} · ` : ''}
         Gestionado con <a href="/landing.html" target="_blank">Gestiva</a>
       </div>
     </div>`;
+  const cont = document.getElementById('pdfPages');
+  try {
+    await loadPdfJs();
+    const pdf = await pdfjsLib.getDocument({ url: pdfFull, disableRange: true, disableStream: true }).promise;
+    cont.innerHTML = '';
+    const maxW = Math.min(cont.clientWidth || 680, 900);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: (maxW / base.width) * dpr });
+      const canvas = document.createElement('canvas');
+      canvas.className = 'pdf-page';
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = '100%';
+      cont.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+  } catch (e) {
+    // Fallback: si el visor no carga, dejar abrir el PDF directo
+    cont.innerHTML = `<a class="pdf-open" href="${pdfFull}" target="_blank" rel="noopener">📄 Tocá acá para ver la carta</a>`;
+  }
+}
+
+// Carga PDF.js una sola vez, solo cuando hay que mostrar un PDF
+function loadPdfJs() {
+  return new Promise((resolve, reject) => {
+    if (window.pdfjsLib) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = () => {
+      try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; } catch(e){}
+      resolve();
+    };
+    s.onerror = () => reject(new Error('visor no disponible'));
+    document.head.appendChild(s);
+  });
 }
 </script>
 </body>
