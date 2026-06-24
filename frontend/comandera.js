@@ -402,6 +402,8 @@
         </div>
 
         <div class="panel hide" id="cmdr-net">
+          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">🔍 Buscar comanderas en la red</button>
+          <div id="cmdr-scan-results"></div>
           <label style="margin-top:0">IP de la impresora</label>
           <div class="row">
             <input type="text" id="cmdr-ip" placeholder="192.168.0.50" value="${escapeHTML(cfg.printerIp)}">
@@ -500,6 +502,36 @@
     });
     $('#cmdr-auto').onclick = () => { state.autoprint = !state.autoprint; $('#cmdr-auto').classList.toggle('on', state.autoprint); };
     $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
+    // Escáner: pide al puente que busque comanderas en la red y las muestra para elegir
+    const scanBtn = $('#cmdr-scan');
+    if (scanBtn) scanBtn.onclick = async () => {
+      const base = (($('#cmdr-bridge').value.trim() || cfg.bridgeUrl)).replace(/\/print\/?$/, '').replace(/\/$/, '');
+      const box = $('#cmdr-scan-results');
+      const orig = scanBtn.textContent;
+      scanBtn.disabled = true; scanBtn.textContent = '🔎 Buscando en la red...';
+      box.innerHTML = '<div class="hint">Buscando comanderas... puede tardar unos segundos.</div>';
+      try {
+        const r = await fetch(base + '/scan');
+        const data = await r.json();
+        const printers = (data && data.printers) || [];
+        if (!printers.length) {
+          box.innerHTML = '<div class="hint">No se encontraron comanderas. Verificá que esté prendida y en la misma red WiFi que esta PC.</div>';
+        } else {
+          box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Encontradas — tocá una para usarla:</div>' +
+            printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">🖨️ ${escapeHTML(ip)}</button>`).join('');
+          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = () => {
+            $('#cmdr-ip').value = b.dataset.ip;
+            box.querySelectorAll('.cmdr-pick').forEach(x => x.style.borderColor = '#e2e8f0');
+            b.style.borderColor = '#f97316';
+            msg('Comandera elegida: ' + b.dataset.ip + '. Tocá "Imprimir una prueba" para confirmar.', true);
+          });
+        }
+      } catch (e) {
+        box.innerHTML = '<div class="hint">No pude escanear. ¿Está corriendo el <b>comandera-bridge</b> en esta PC? Si ya lo tenías, actualizalo a la última versión (la que escanea).</div>';
+      } finally {
+        scanBtn.disabled = false; scanBtn.textContent = orig;
+      }
+    };
 
     function collect() {
       return {

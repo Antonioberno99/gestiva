@@ -15,6 +15,7 @@
    ============================================================ */
 const http = require('http');
 const net = require('net');
+const os = require('os');
 
 const PORT = process.env.COMANDERA_PORT ? parseInt(process.env.COMANDERA_PORT, 10) : 7777;
 const HOST = '127.0.0.1';
@@ -39,6 +40,47 @@ function sendToPrinter(ip, port, buffer) {
   });
 }
 
+// ---- Escaneo de comanderas en la red local (puerto 9100 = impresión cruda ESC/POS) ----
+function isPrivateV4(ip) {
+  return /^192\.168\./.test(ip) || /^10\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+}
+function localSubnets() {
+  const out = [];
+  const ifaces = os.networkInterfaces();
+  for (const name in ifaces) {
+    for (const i of (ifaces[name] || [])) {
+      if (i.family === 'IPv4' && !i.internal && isPrivateV4(i.address)) {
+        const prefix = i.address.split('.').slice(0, 3).join('.');
+        if (!out.includes(prefix)) out.push(prefix);
+      }
+    }
+  }
+  return out;
+}
+function probePrinter(ip, port, timeout) {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; try { s.destroy(); } catch (e) {} resolve(ok ? ip : null); };
+    s.setTimeout(timeout);
+    s.once('connect', () => finish(true));
+    s.once('timeout', () => finish(false));
+    s.once('error', () => finish(false));
+    try { s.connect(port, ip); } catch (e) { finish(false); }
+  });
+}
+async function scanComanderas(port) {
+  const subnets = localSubnets();
+  const printers = [];
+  for (const prefix of subnets) {
+    const tasks = [];
+    for (let h = 1; h <= 254; h++) tasks.push(probePrinter(prefix + '.' + h, port, 800));
+    const res = await Promise.all(tasks);
+    for (const ip of res) if (ip) printers.push(ip);
+  }
+  return { subnets, printers };
+}
+
 const server = http.createServer((req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
@@ -46,6 +88,20 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('Puente de Comandera de Gestiva: ACTIVO ✓\nDejá esta ventana abierta mientras usás el sistema.');
+  }
+
+  // Buscar comanderas en la red (lo llama el panel para no tener que tipear la IP)
+  if (req.method === 'GET' && req.url.replace(/\/$/, '') === '/scan') {
+    console.log(new Date().toLocaleTimeString(), '⟳ buscando comanderas en la red...');
+    scanComanderas(9100).then((out) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, port: 9100, subnets: out.subnets, printers: out.printers }));
+      console.log(new Date().toLocaleTimeString(), '✓ comanderas:', out.printers.length ? out.printers.join(', ') : 'ninguna');
+    }).catch((e) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: String(e.message || e) }));
+    });
+    return;
   }
 
   if (req.method === 'POST' && req.url.replace(/\/$/, '') === '/print') {
