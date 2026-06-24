@@ -170,7 +170,6 @@
         <div class="cart-list" id="cartList"></div>
         <div class="cart-actions">
           <button class="btn btn-danger" onclick="clearCart()">Vaciar</button>
-          <button class="btn btn-secondary" id="reprintBtn" onclick="reprintLast()" title="Reimprimir comanda" style="display:none;">🧾 Imprimir</button>
           <button class="btn btn-primary" onclick="saveOrder()">Enviar a cocina</button>
         </div>
       </div>
@@ -605,17 +604,10 @@ async function saveOrder() {
     state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
     // 3) Persistir en open_tables
     await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
-    // 4) Comandera: armar datos del ticket y guardar para reimprimir
-    lastTicket = buildTicketData(ticket, itemsForKitchen);
-    const reBtn = document.getElementById('reprintBtn'); if (reBtn) reBtn.style.display = '';
     renderCart();
-    // 5) Imprimir comanda según configuración del dispositivo
-    const cfg = Comandera.getCfg();
-    if (cfg.method !== 'screen' && cfg.autoprint) {
-      try { await Comandera.print(lastTicket); }
-      catch (e) { alert('Pedido enviado a cocina ✓\n\nPero no se pudo imprimir la comanda:\n' + (e.message || e) + '\n\nRevisá la configuración (botón Comandera).'); return; }
-    }
-    alert('Pedido enviado a cocina (' + newItems.length + ' items)' + (cfg.method !== 'screen' && cfg.autoprint ? ' e impreso ✓' : ''));
+    // El pedido queda en cocina y la PC principal (estación) lo imprime solo en la comandera.
+    // El celular NO imprime (por eso ya no aparece ningún PDF).
+    alert('Pedido enviado a cocina ✓ (' + newItems.length + ' items)');
   } catch (e) {
     alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);
   }

@@ -266,6 +266,10 @@
       Cocina
       <span class="kds-badge" id="kdsBadge" style="margin-left:auto;display:none;background:var(--or);color:white;font-size:11px;padding:2px 7px;border-radius:999px;font-weight:700;"></span>
     </a>
+    <a href="#" class="nav-item" onclick="event.preventDefault(); Comandera.openConfig();" title="Configurar la comandera (impresora de cocina)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      Comandera
+    </a>
     <a href="#/reportes" class="nav-item" data-route="reportes">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 4 4 5-5"/></svg>
       Reportes
@@ -2651,6 +2655,56 @@ async function refreshPedidosBadge() {
 }
 setInterval(refreshPedidosBadge, 20000);
 refreshPedidosBadge();
+
+// ---------- ESTACIÓN DE COMANDERA (modelo Fudo) ----------
+// Esta PC imprime SOLA cada comanda nueva en la comandera de red. El celular del mozo
+// solo manda el pedido; quien imprime es la PC que tenga activada la estación.
+// Se activa en el botón "Comandera" → "Esta PC imprime las comandas de cocina" + método Red/WiFi.
+let _printedTickets = new Set();
+let _kitchenStationSeeded = false;
+try { _printedTickets = new Set(JSON.parse(localStorage.getItem('gestiva_printed_tickets') || '[]')); } catch(e) {}
+function _persistPrinted() {
+  const arr = [..._printedTickets].slice(-400);
+  _printedTickets = new Set(arr);
+  try { localStorage.setItem('gestiva_printed_tickets', JSON.stringify(arr)); } catch(e) {}
+}
+function kitchenTicketData(t) {
+  return {
+    restaurant: (USER && USER.restaurantName) || 'Gestiva',
+    table: t.table_num || null,
+    waiter: t.waiter_name || '',
+    ticketId: t.id,
+    datetime: t.created_at ? new Date(t.created_at) : new Date(),
+    items: (t.items || []).map(it => ({ name: it.name, qty: it.qty, modifiers: it.modifiers || [], notes: it.notes || '' }))
+  };
+}
+async function kitchenStationTick() {
+  if (!window.Comandera) return;
+  const cfg = Comandera.getCfg();
+  // Solo imprime la estación configurada con impresora real (red/bluetooth/usb). Evita PDFs en cualquier equipo.
+  if (!cfg.kitchenAuto || cfg.method === 'screen' || cfg.method === 'browser') return;
+  let tickets;
+  try { tickets = await API.kitchen(); } catch (e) { return; }
+  if (!_kitchenStationSeeded) {
+    // Primera vuelta al abrir el panel: marcamos lo que ya hay como "visto" para no reimprimir el historial.
+    tickets.forEach(t => _printedTickets.add(t.id));
+    _persistPrinted();
+    _kitchenStationSeeded = true;
+    return;
+  }
+  // Comandas nuevas (vienen ordenadas de la más vieja a la más nueva → se imprimen en orden)
+  const nuevos = tickets.filter(t => !_printedTickets.has(t.id));
+  for (const t of nuevos) {
+    try {
+      await Comandera.print(kitchenTicketData(t));
+      _printedTickets.add(t.id); _persistPrinted();
+    } catch (e) {
+      // Puente caído o impresora apagada: no marcamos como impresa → se reintenta en la próxima vuelta.
+      break;
+    }
+  }
+}
+setInterval(kitchenStationTick, 8000);
 
 (async () => {
   try {

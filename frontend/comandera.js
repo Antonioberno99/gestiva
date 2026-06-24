@@ -17,7 +17,8 @@
     method: 'browser',     // 'screen' | 'browser' | 'bluetooth' | 'usb' | 'network'
     paper: 58,             // 58 | 80 (mm)
     copies: 1,             // 1..3 (ej: cocina + barra)
-    autoprint: true,       // imprimir solo al enviar a cocina
+    autoprint: true,       // (celular) imprimir al enviar a cocina. En el modelo "Fudo" el celular NO imprime.
+    kitchenAuto: false,    // (PC estación) imprimir SOLA cada comanda nueva de cocina en la comandera de red
     header: '',            // nombre que sale arriba (si vacío usa el del restaurante)
     footer: '',            // pie opcional
     bridgeUrl: 'http://127.0.0.1:7777/print', // puente local para impresoras de red
@@ -436,9 +437,14 @@
         <input type="text" id="cmdr-footer" placeholder="Ej: Apurar mesa" value="${escapeHTML(cfg.footer)}">
 
         <div class="toggle">
-          <span>Imprimir automático al enviar a cocina</span>
+          <span>Imprimir automático al enviar a cocina (este equipo)</span>
           <div class="sw ${cfg.autoprint ? 'on' : ''}" id="cmdr-auto"></div>
         </div>
+        <div class="toggle">
+          <span>Esta PC imprime las comandas de cocina (estación)</span>
+          <div class="sw ${cfg.kitchenAuto ? 'on' : ''}" id="cmdr-kauto"></div>
+        </div>
+        <div class="hint">Activá esto SOLO en la PC/notebook que tiene la comandera de red. Cada pedido que mande un mozo se imprime solo en esa comandera.</div>
 
         <button type="button" class="btn-test" id="cmdr-test">🧾 Imprimir una prueba</button>
         <div class="msg" id="cmdr-msg"></div>
@@ -452,7 +458,7 @@
 
     const $ = (id) => wrap.querySelector(id);
     const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
-    const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint };
+    const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto };
 
     function isConnected() {
       if (state.method === 'bluetooth') return !!(_btChar && _btChar.service.device.gatt.connected);
@@ -493,10 +499,11 @@
       state.copies = +b.dataset.v; wrap.querySelectorAll('#cmdr-copies button').forEach(x => x.classList.toggle('on', x === b));
     });
     $('#cmdr-auto').onclick = () => { state.autoprint = !state.autoprint; $('#cmdr-auto').classList.toggle('on', state.autoprint); };
+    $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
 
     function collect() {
       return {
-        method: state.method, paper: state.paper, copies: state.copies, autoprint: state.autoprint,
+        method: state.method, paper: state.paper, copies: state.copies, autoprint: state.autoprint, kitchenAuto: state.kitchenAuto,
         header: $('#cmdr-header').value.trim(), footer: $('#cmdr-footer').value.trim(),
         printerIp: ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp),
         printerPort: ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : cfg.printerPort),
