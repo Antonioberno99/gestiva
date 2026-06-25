@@ -234,13 +234,12 @@
   <nav class="bottom-nav" aria-label="Navegacion de la app">
     <button id="navTables" class="is-active" type="button" onclick="showTables()"><span>M</span><span>Mesas</span></button>
     <button id="navProfile" type="button" onclick="showProfile()"><span>P</span><span>Panel</span></button>
-    <button type="button" onclick="Comandera.openConfig()"><span>C</span><span>Config</span></button>
+    <button type="button" onclick="loadData()"><span>A</span><span>Actualizar</span></button>
     <button type="button" onclick="logout()"><span>S</span><span>Salir</span></button>
   </nav>
 </section>
 
 <script src="gestiva-config.js"></script>
-<script src="comandera.js"></script>
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
 let WAITER_DEMO = false; // demo desactivado para producción

@@ -2656,10 +2656,10 @@ async function refreshPedidosBadge() {
 setInterval(refreshPedidosBadge, 20000);
 refreshPedidosBadge();
 
-// ---------- ESTACIÓN DE COMANDERA (modelo Fudo) ----------
-// Esta PC imprime SOLA cada comanda nueva en la comandera de red. El celular del mozo
-// solo manda el pedido; quien imprime es la PC que tenga activada la estación.
-// Se activa en el botón "Comandera" → "Esta PC imprime las comandas de cocina" + método Red/WiFi.
+// ---------- ESTACION CENTRAL DE COMANDERA ----------
+// Circuito: app del equipo -> panel central -> comandera.
+// El celular solo envia el pedido. La computadora central imprime si queda abierta
+// con "Usar esta PC como estacion central" activado en Comandera.
 let _printedTickets = new Set();
 let _kitchenStationSeeded = false;
 try { _printedTickets = new Set(JSON.parse(localStorage.getItem('gestiva_printed_tickets') || '[]')); } catch(e) {}
@@ -2678,33 +2678,50 @@ function kitchenTicketData(t) {
     items: (t.items || []).map(it => ({ name: it.name, qty: it.qty, modifiers: it.modifiers || [], notes: it.notes || '' }))
   };
 }
+function kitchenStationEnabled(cfg) {
+  return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser');
+}
+async function seedKitchenStation() {
+  let tickets;
+  try { tickets = await API.kitchen(); } catch (e) { return; }
+  tickets.forEach(t => _printedTickets.add(t.id));
+  _persistPrinted();
+  _kitchenStationSeeded = true;
+}
 async function kitchenStationTick() {
   if (!window.Comandera) return;
   const cfg = Comandera.getCfg();
-  // Solo imprime la estación configurada con impresora real (red/bluetooth/usb). Evita PDFs en cualquier equipo.
-  if (!cfg.kitchenAuto || cfg.method === 'screen' || cfg.method === 'browser') return;
+  if (!kitchenStationEnabled(cfg)) return;
   let tickets;
   try { tickets = await API.kitchen(); } catch (e) { return; }
   if (!_kitchenStationSeeded) {
-    // Primera vuelta al abrir el panel: marcamos lo que ya hay como "visto" para no reimprimir el historial.
     tickets.forEach(t => _printedTickets.add(t.id));
     _persistPrinted();
     _kitchenStationSeeded = true;
     return;
   }
-  // Comandas nuevas (vienen ordenadas de la más vieja a la más nueva → se imprimen en orden)
   const nuevos = tickets.filter(t => !_printedTickets.has(t.id));
   for (const t of nuevos) {
     try {
       await Comandera.print(kitchenTicketData(t));
       _printedTickets.add(t.id); _persistPrinted();
     } catch (e) {
-      // Puente caído o impresora apagada: no marcamos como impresa → se reintenta en la próxima vuelta.
+      // Si la impresora o el puente fallan, no marcamos como impreso. Se reintenta en la proxima vuelta.
       break;
     }
   }
 }
-setInterval(kitchenStationTick, 8000);
+window.onComanderaSaved = async (cfg) => {
+  _kitchenStationSeeded = false;
+  if (kitchenStationEnabled(cfg)) {
+    await seedKitchenStation();
+    toast('Estacion central activada. Los nuevos pedidos del equipo se imprimen desde esta PC.', 'success');
+  } else {
+    toast('Configuracion de comandera guardada.', 'success');
+  }
+};
+setInterval(kitchenStationTick, 5000);
+window.addEventListener('focus', kitchenStationTick);
 
 (async () => {
   try {
@@ -2716,6 +2733,7 @@ setInterval(kitchenStationTick, 8000);
       location.href = 'checkout.html'; return;
     }
     if (!location.hash) location.hash = '#/dashboard';
+    await seedKitchenStation();
     navigate();
   } catch (e) {
     console.error(e);
