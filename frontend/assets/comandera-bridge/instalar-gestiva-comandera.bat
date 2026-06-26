@@ -3,8 +3,8 @@ setlocal
 title Gestiva - Instalador de Comandera
 
 set "APPDIR=%LOCALAPPDATA%\GestivaComandera"
-set "BRIDGE=%APPDIR%\comandera-bridge.js"
-set "STARTER=%APPDIR%\iniciar-comandera.bat"
+set "AGENT=%APPDIR%\gestiva-print-agent.ps1"
+set "STARTER=%APPDIR%\iniciar-gestiva-comandera.bat"
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Gestiva Comandera.bat"
 set "BASE=https://gestiva.site/assets/comandera-bridge"
 
@@ -12,40 +12,20 @@ echo ============================================
 echo   Gestiva - Instalador de Comandera
 echo ============================================
 echo.
-
-where node >nul 2>nul
-if errorlevel 1 (
-  echo Node.js no esta instalado.
-  echo Intentando instalar Node.js LTS con winget...
-  echo.
-  where winget >nul 2>nul
-  if errorlevel 1 (
-    echo No se encontro winget en esta PC.
-    echo Instala Node.js LTS manualmente desde:
-    echo https://nodejs.org
-    echo.
-    pause
-    exit /b 1
-  )
-  winget install --id OpenJS.NodeJS.LTS -e --accept-package-agreements --accept-source-agreements
-  if exist "C:\Program Files\nodejs\node.exe" set "PATH=C:\Program Files\nodejs;%PATH%"
-  where node >nul 2>nul
-  if errorlevel 1 (
-    echo.
-    echo Node.js se instalo, pero Windows todavia no actualizo el PATH.
-    echo Cerra esta ventana y volve a abrir el instalador una vez mas.
-    pause
-    exit /b 1
-  )
-  echo.
-)
+echo Este instalador configura la impresion de red en esta PC.
+echo No requiere Node.js ni programas externos.
+echo.
 
 if not exist "%APPDIR%" mkdir "%APPDIR%"
 
-echo Descargando puente de comandera...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '%BASE%/comandera-bridge.js' -OutFile '%BRIDGE%'"
+echo Cerrando puente anterior si estaba activo...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r=Invoke-RestMethod -Uri 'http://127.0.0.1:7777/health' -TimeoutSec 1; if($r.bridge -like 'gestiva-*'){ $p=(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 7777 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess; if($p){ Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 800 } } } catch {}"
+
+echo Descargando Gestiva Print Agent...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%BASE%/gestiva-print-agent.ps1' -OutFile '%AGENT%'"
 if errorlevel 1 (
-  echo No se pudo descargar el puente.
+  echo.
+  echo No se pudo descargar el agente de impresion.
   echo Revisa la conexion a internet y volve a intentar.
   pause
   exit /b 1
@@ -53,20 +33,28 @@ if errorlevel 1 (
 
 (
   echo @echo off
-  echo title Gestiva - Puente de Comandera
-  echo node "%%LOCALAPPDATA%%\GestivaComandera\comandera-bridge.js"
+  echo start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%%LOCALAPPDATA%%\GestivaComandera\gestiva-print-agent.ps1"
 ) > "%STARTER%"
 
 copy /Y "%STARTER%" "%STARTUP%" >nul
 
-echo.
-echo Instalacion lista.
-echo El puente se va a iniciar automaticamente con Windows.
-echo Ahora lo abrimos para que Gestiva pueda detectar la comandera.
-echo.
+echo Iniciando Gestiva Print Agent...
 start "" "%STARTER%"
-timeout /t 2 >nul
 
-echo Volve a Gestiva y toca "Buscar comandera" o "Detectar conexion".
+echo Verificando conexion local...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; for($i=0;$i -lt 12;$i++){ try { $r=Invoke-RestMethod -Uri 'http://127.0.0.1:7777/health' -TimeoutSec 1; if($r.ok -and $r.bridge -eq 'gestiva-print-agent'){$ok=$true; break} } catch {}; Start-Sleep -Milliseconds 700 }; if($ok){ exit 0 } else { exit 1 }"
+if errorlevel 1 (
+  echo.
+  echo El agente se instalo, pero Gestiva todavia no pudo detectarlo.
+  echo Reinicia la PC o ejecuta:
+  echo %STARTER%
+  echo.
+  pause
+  exit /b 1
+)
+
+echo.
+echo Listo: Gestiva Print Agent esta activo.
+echo Ahora volve a Gestiva y toca "Buscar comanderas en la red".
 echo.
 pause

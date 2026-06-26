@@ -5,7 +5,7 @@
      2) Por navegador             -> window.print() (cualquier impresora del sistema)
      3) Bluetooth (térmica ESC/POS) -> Web Bluetooth
      4) USB (térmica ESC/POS)       -> WebUSB
-     5) Red / WiFi (IP)            -> puente local (comandera-bridge.js) -> impresora IP:9100
+     5) Red / WiFi (IP)            -> Gestiva Print Agent local -> impresora IP:9100
    Config por dispositivo (localStorage), porque la impresora es física del equipo.
    API pública:  window.Comandera = { getCfg, setCfg, print, testPrint, openConfig, ticketHTML }
    ============================================================ */
@@ -21,7 +21,7 @@
     kitchenAuto: false,    // (PC estación) imprimir SOLA cada comanda nueva de cocina en la comandera de red
     header: '',            // nombre que sale arriba (si vacío usa el del restaurante)
     footer: '',            // pie opcional
-    bridgeUrl: 'http://127.0.0.1:7777/print', // puente local para impresoras de red
+    bridgeUrl: 'http://127.0.0.1:7777/print', // agente local para impresoras de red
     printerIp: '',         // IP de la impresora de red
     printerPort: 9100      // puerto ESC/POS estándar
   };
@@ -274,7 +274,7 @@
     try {
       return await fetchJson(bridgeBaseUrl(cfg) + '/health', null, 2500);
     } catch (e) {
-      throw new Error('No detecto el puente local. En la PC de la comandera abri comandera-bridge/iniciar-comandera.bat y deja esa ventana abierta.');
+      throw new Error('No detecto el agente de impresion en esta PC. Toca "Instalar / actualizar puente de comandera", abri el archivo descargado y despues volve a buscar comanderas.');
     }
   }
   async function probeNetworkPrinter(cfg) {
@@ -286,7 +286,7 @@
     return data;
   }
 
-  // 5) Red / WiFi (IP) vía puente local
+  // 5) Red / WiFi (IP) via Gestiva Print Agent local
   async function printNetwork(bytes, cfg) {
     if (!cfg.printerIp) throw new Error('Falta la IP de la impresora de red (configurala en Comandera).');
     let b64 = ''; const chunk = 0x8000;
@@ -299,7 +299,7 @@
         body: JSON.stringify({ ip: cfg.printerIp, port: cfg.printerPort || 9100, data: b64 })
       });
     } catch (e) {
-      throw new Error('No pude contactar el puente de impresión. ¿Está corriendo comandera-bridge en esta PC?');
+      throw new Error('No pude contactar el agente de impresion. Instala o actualiza el puente desde la configuracion de Comandera y volve a probar.');
     }
     if (!r.ok) throw new Error('El puente respondió con error ' + r.status + '.');
   }
@@ -437,7 +437,7 @@
         <div class="panel hide" id="cmdr-net">
           <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Conexion de red sin verificar</span></div>
           <button type="button" class="btn-test" id="cmdr-check" style="margin:0 0 10px;">Detectar conexion</button>
-          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">🔍 Buscar comanderas en la red</button>
+          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">Buscar comanderas en la red</button>
           <div id="cmdr-scan-results"></div>
           <label style="margin-top:0">IP de la impresora</label>
           <div class="row">
@@ -446,8 +446,8 @@
           </div>
           <label>URL del puente</label>
           <input type="text" id="cmdr-bridge" value="${escapeHTML(cfg.bridgeUrl)}">
-          <div class="hint">Para impresoras de red, deja abierto el puente de comandera en esta PC. La impresora y esta computadora tienen que estar en la misma red.</div>
-          <div class="hint">Necesitás el programa <b>comandera-bridge</b> corriendo en una PC de la red. Tocá "Imprimir prueba" para verificar.</div>
+          <div class="hint">Para impresoras de red, instala el agente en la PC que esta junto a la comandera. La impresora y esta computadora tienen que estar en la misma red.</div>
+          <div class="hint">Despues de instalar, Gestiva puede buscar la comandera y verificar la conexion antes de imprimir.</div>
           <div class="panel" id="cmdr-install-box" style="display:block;background:#fff7ed;border-color:#fed7aa;">
             <div style="font-weight:800;color:#9a3412;margin-bottom:6px;">Primera vez en esta PC</div>
             <div class="hint" style="margin:0 0 10px;color:#9a3412;">Instala el puente una sola vez. Despues queda automatico y se inicia con Windows.</div>

@@ -1,51 +1,45 @@
-# Puente de Comandera — Gestiva (impresoras de red / IP)
+# Gestiva Print Agent - Comandera de red
 
-¿Tenés una **impresora de comandas conectada por red (WiFi o cable, con su propia IP)**?
-Los navegadores no pueden mandarle datos directo. Este puente lo resuelve: corre en la
-PC del local y reenvía el pedido a la impresora.
+Las impresoras de comandas por red/WiFi usan normalmente ESC/POS por IP, casi siempre en el puerto `9100`.
+Por seguridad, el navegador no puede hablar directo con una impresora de la red local. Por eso Gestiva usa un
+agente local en la PC del negocio:
 
-> Si usás comandera **Bluetooth, USB, o "Por navegador"**, NO necesitás esto. Se imprime directo desde Gestiva.
+`Gestiva web -> Gestiva Print Agent en esta PC -> comandera IP:9100`
 
-## Requisitos
-- Una PC con **Windows** (o Mac/Linux) en la **misma red** que la impresora.
-- **Node.js** instalado → https://nodejs.org (botón verde "LTS").
+## Instalacion recomendada para clientes
 
-## Cómo usarlo (Windows)
-### Desde Gestiva (recomendado)
-1. En Gestiva → **Comandera** → **Red / WiFi**.
-2. Si es la primera vez en esa PC, tocá **Instalar puente de comandera**.
-3. Abrí el archivo descargado y esperá a que termine.
-4. Volvé a Gestiva y tocá **Buscar comanderas en la red**.
+1. En Gestiva abrir **Comandera**.
+2. Elegir **Red / WiFi**.
+3. Tocar **Instalar / actualizar puente de comandera**.
+4. Abrir el archivo descargado.
+5. Cuando diga que esta listo, volver a Gestiva.
+6. Tocar **Buscar comanderas en la red**.
+7. Elegir la IP encontrada.
+8. Tocar **Imprimir prueba**.
 
-El instalador deja el puente configurado para abrirse solo con Windows.
+El instalador:
 
-### Instalación manual
-1. Copiá esta carpeta `comandera-bridge` a la PC del local (ej: al Escritorio).
-2. Doble clic en **`iniciar-comandera.bat`**.
-   - Se abre una ventana negra que dice **"Puente de Comandera ACTIVO"**. **Dejala abierta.**
-3. En Gestiva (app de mozo o panel principal) → botón **Comandera** → elegí **"Red / WiFi"**:
-   - **IP de la impresora**: la que tiene tu impresora (ej. `192.168.0.50`).
-   - **Puerto**: `9100` (el estándar; dejalo así salvo que tu impresora use otro).
-4. Tocá **"Detectar conexión"**.
-   - Si dice que el puente no está activo: abrí `iniciar-comandera.bat` y dejá la ventana abierta.
-   - Si dice que la comandera no responde: revisá IP, WiFi/red y puerto.
-5. También podés tocar **"Buscar comanderas en la red"** para que Gestiva encuentre IPs con puerto 9100 abierto.
-6. Tocá **"Imprimir prueba"**. Si sale el ticket, listo.
+- no requiere Node.js;
+- guarda el agente en `%LOCALAPPDATA%\GestivaComandera`;
+- lo inicia automaticamente;
+- lo deja configurado para abrir con Windows.
 
-## Cómo saber la IP de tu impresora
-- En muchas impresoras térmicas: apagá, mantené apretado el botón de avance (feed) y prendé →
-  imprime una hoja de prueba con la IP.
-- O miralo en la lista de dispositivos de tu router.
+## Instalacion manual
+
+En esta carpeta, doble clic en:
+
+`iniciar-comandera.bat`
+
+Si existe `gestiva-print-agent.ps1`, se usa ese agente sin dependencias. `comandera-bridge.js` queda como fallback tecnico para desarrollo.
+
+## Como saber la IP de una comandera
+
+- Muchas impresoras imprimen una hoja de configuracion si se prende manteniendo apretado el boton de avance.
+- Tambien se puede ver la IP desde el router.
+- Gestiva puede buscar automaticamente IPs que tengan el puerto `9100` abierto.
 
 ## Importante
-- La PC que corre el puente y la que usa Gestiva tienen que ser **la misma** (el puente escucha
-  sólo en esta computadora por seguridad).
-- Si cerrás la ventana negra, deja de imprimir por red. Volvé a abrir el `.bat`.
-- Para que arranque solo con Windows: poné un acceso directo del `.bat` en la carpeta
-  *Inicio* (`Win+R` → `shell:startup`).
 
-## Mac / Linux
-Abrí una terminal en esta carpeta y corré:
-```
-node comandera-bridge.js
-```
+- La PC donde corre el agente debe estar en la misma red que la impresora.
+- Para que imprima automaticamente las comandas de los mozos, usar una PC fija como estacion de impresion.
+- Los celulares de los mozos mandan el pedido a Gestiva; la PC fija lo imprime.
