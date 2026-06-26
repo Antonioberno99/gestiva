@@ -6,7 +6,7 @@ set "APPDIR=%LOCALAPPDATA%\GestivaComandera"
 set "AGENT=%APPDIR%\gestiva-print-agent.ps1"
 set "STARTER=%APPDIR%\iniciar-gestiva-comandera.bat"
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Gestiva Comandera.bat"
-set "BASE=https://gestiva.site/assets/comandera-bridge"
+set "BASE=https://www.gestiva.site/assets/comandera-bridge"
 
 echo ============================================
 echo   Gestiva - Instalador de Comandera
@@ -55,6 +55,9 @@ if errorlevel 1 (
 
 echo.
 echo Listo: Gestiva Print Agent esta activo.
-echo Ahora volve a Gestiva y toca "Buscar comanderas en la red".
+echo Se va a abrir el asistente local de conexion.
+start "" "http://127.0.0.1:7777/setup"
+echo.
+echo Si Gestiva esta abierta, volve a Gestiva y toca "Vincular esta PC".
 echo.
 pause

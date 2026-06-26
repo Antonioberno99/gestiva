@@ -992,6 +992,31 @@ app.put('/waiter/open-tables/:tid', requireWaiterAuth, async (req, res) => {
 
 app.use('/api', apiLimiter, requireAuth, requireSubscription);
 
+// ----- PRINT STATION -----
+// Token largo para la PC fija que imprime comandas. El agente local lo guarda
+// y consulta /api/kitchen sin depender de llamadas del navegador a localhost.
+app.post('/api/print-station/token', async (req, res) => {
+  const publicApiUrl = (BACKEND_URL && !/localhost|127\.0\.0\.1/i.test(BACKEND_URL))
+    ? BACKEND_URL
+    : `${req.protocol}://${req.get('host')}`;
+  const token = jwt.sign(
+    {
+      id: req.tenant.id,
+      email: req.tenant.email,
+      name: req.tenant.restaurant_name,
+      scope: 'print_station'
+    },
+    JWT_SECRET,
+    { expiresIn: '365d' }
+  );
+  res.json({
+    token,
+    apiUrl: publicApiUrl,
+    restaurant: req.tenant.restaurant_name,
+    expiresInDays: 365
+  });
+});
+
 // ----- PRODUCTS -----
 app.get('/api/products', async (req, res) => {
   await seedDefaultProducts(req.tenant.id);

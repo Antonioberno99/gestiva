@@ -1,28 +1,39 @@
-# Gestiva Print Agent - Comandera de red
+# Gestiva Print Station
 
-Las impresoras de comandas por red/WiFi usan normalmente ESC/POS por IP, casi siempre en el puerto `9100`.
-Por seguridad, el navegador no puede hablar directo con una impresora de la red local. Por eso Gestiva usa un
-agente local en la PC del negocio:
+Gestiva usa una estacion local para imprimir comandas de red/WiFi.
 
-`Gestiva web -> Gestiva Print Agent en esta PC -> comandera IP:9100`
+Flujo profesional:
 
-## Instalacion recomendada para clientes
+`Mozo -> Gestiva backend -> Gestiva Print Station en la PC fija -> comandera IP:9100`
+
+La web publica no debe depender de imprimir directo desde el celular ni de hablar todo el tiempo con `localhost`.
+El agente local queda instalado en la PC del negocio, busca la comandera, guarda la IP y consulta los tickets nuevos de cocina.
+
+## Instalacion para clientes
 
 1. En Gestiva abrir **Comandera**.
 2. Elegir **Red / WiFi**.
-3. Tocar **Instalar / actualizar puente de comandera**.
+3. Tocar **Instalar / actualizar estacion de impresion**.
 4. Abrir el archivo descargado.
-5. Cuando diga que esta listo, volver a Gestiva.
-6. Tocar **Buscar comanderas en la red**.
+5. Volver a Gestiva y tocar **Vincular esta PC y buscar comandera**.
+6. En el asistente local tocar **Buscar comandera en la red**.
 7. Elegir la IP encontrada.
 8. Tocar **Imprimir prueba**.
 
-El instalador:
+Despues de eso, los mozos solo envian pedidos a cocina. La PC fija imprime automaticamente.
 
-- no requiere Node.js;
-- guarda el agente en `%LOCALAPPDATA%\GestivaComandera`;
-- lo inicia automaticamente;
-- lo deja configurado para abrir con Windows.
+## Que instala
+
+- `gestiva-print-agent.ps1` en `%LOCALAPPDATA%\GestivaComandera`
+- una tarea de inicio simple en la carpeta Startup de Windows
+- configuracion local en `%LOCALAPPDATA%\GestivaComandera\config.json`
+
+No requiere Node.js.
+
+## Puertos
+
+- Agente local: `127.0.0.1:7777`
+- Comandera de red: normalmente `9100`
 
 ## Instalacion manual
 
@@ -30,16 +41,6 @@ En esta carpeta, doble clic en:
 
 `iniciar-comandera.bat`
 
-Si existe `gestiva-print-agent.ps1`, se usa ese agente sin dependencias. `comandera-bridge.js` queda como fallback tecnico para desarrollo.
+Luego abrir:
 
-## Como saber la IP de una comandera
-
-- Muchas impresoras imprimen una hoja de configuracion si se prende manteniendo apretado el boton de avance.
-- Tambien se puede ver la IP desde el router.
-- Gestiva puede buscar automaticamente IPs que tengan el puerto `9100` abierto.
-
-## Importante
-
-- La PC donde corre el agente debe estar en la misma red que la impresora.
-- Para que imprima automaticamente las comandas de los mozos, usar una PC fija como estacion de impresion.
-- Los celulares de los mozos mandan el pedido a Gestiva; la PC fija lo imprime.
+`http://127.0.0.1:7777/setup`

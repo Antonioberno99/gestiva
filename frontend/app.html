@@ -2679,7 +2679,8 @@ function kitchenTicketData(t) {
   };
 }
 function kitchenStationEnabled(cfg) {
-  return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser');
+  // Red/WiFi ahora imprime desde Gestiva Print Station, no desde fetch del navegador.
+  return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser' && cfg.method !== 'network');
 }
 async function seedKitchenStation() {
   let tickets;
@@ -2713,6 +2714,10 @@ async function kitchenStationTick() {
 }
 window.onComanderaSaved = async (cfg) => {
   _kitchenStationSeeded = false;
+  if (cfg && cfg.method === 'network') {
+    toast('Estacion de impresion guardada. El agente local imprime las comandas nuevas.', 'success');
+    return;
+  }
   if (kitchenStationEnabled(cfg)) {
     await seedKitchenStation();
     toast('Estacion central activada. Los nuevos pedidos del equipo se imprimen desde esta PC.', 'success');

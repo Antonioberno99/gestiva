@@ -286,6 +286,35 @@
     return data;
   }
 
+  async function createPrintStationToken() {
+    const token = localStorage.getItem('gestiva_token');
+    if (!token) throw new Error('Tenes que iniciar sesion en Gestiva para vincular esta PC.');
+    const apiUrl = (window.API_URL || '').replace(/\/$/, '');
+    if (!apiUrl) throw new Error('No encontre la URL del backend de Gestiva.');
+    const r = await fetch(apiUrl + '/api/print-station/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'No pude crear la vinculacion de la estacion.');
+    return Object.assign({ apiUrl }, data);
+  }
+
+  async function openPrintStationSetup() {
+    const win = window.open('about:blank', 'gestiva_print_station');
+    const data = await createPrintStationToken();
+    const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
+    const qs = new URLSearchParams({
+      token: data.token,
+      apiUrl: publicApiUrl,
+      restaurant: data.restaurant || ''
+    });
+    const url = 'http://127.0.0.1:7777/setup#' + qs.toString();
+    if (win) win.location.href = url;
+    else window.location.href = url;
+    return data;
+  }
+
   // 5) Red / WiFi (IP) via Gestiva Print Agent local
   async function printNetwork(bytes, cfg) {
     if (!cfg.printerIp) throw new Error('Falta la IP de la impresora de red (configurala en Comandera).');
@@ -435,25 +464,12 @@
         </div>
 
         <div class="panel hide" id="cmdr-net">
-          <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Conexion de red sin verificar</span></div>
-          <button type="button" class="btn-test" id="cmdr-check" style="margin:0 0 10px;">Detectar conexion</button>
-          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">Buscar comanderas en la red</button>
-          <div id="cmdr-scan-results"></div>
-          <label style="margin-top:0">IP de la impresora</label>
-          <div class="row">
-            <input type="text" id="cmdr-ip" placeholder="192.168.0.50" value="${escapeHTML(cfg.printerIp)}">
-            <input type="number" id="cmdr-port" placeholder="9100" value="${cfg.printerPort}" style="max-width:90px;">
-          </div>
-          <label>URL del puente</label>
-          <input type="text" id="cmdr-bridge" value="${escapeHTML(cfg.bridgeUrl)}">
-          <div class="hint">Para impresoras de red, instala el agente en la PC que esta junto a la comandera. La impresora y esta computadora tienen que estar en la misma red.</div>
-          <div class="hint">Despues de instalar, Gestiva puede buscar la comandera y verificar la conexion antes de imprimir.</div>
-          <div class="panel" id="cmdr-install-box" style="display:block;background:#fff7ed;border-color:#fed7aa;">
-            <div style="font-weight:800;color:#9a3412;margin-bottom:6px;">Primera vez en esta PC</div>
-            <div class="hint" style="margin:0 0 10px;color:#9a3412;">Instala el puente una sola vez. Despues queda automatico y se inicia con Windows.</div>
-            <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0;">Instalar / actualizar puente de comandera</a>
-            <div class="hint" style="margin-top:8px;">Cuando termine la instalacion, volve aca y toca "Buscar comanderas en la red".</div>
-          </div>
+          <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Estacion de impresion sin vincular</span></div>
+          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Forma simple: instala el agente en la PC fija del local, vincula esta PC con Gestiva y el asistente local busca la comandera. Despues imprime sola cada pedido nuevo de cocina.</div>
+          <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion de impresion</a>
+          <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Vincular esta PC y buscar comandera</button>
+          <button type="button" class="btn-test" id="cmdr-local-setup" style="margin:0;background:#fff;color:#475569;border-color:#cbd5e1;">Abrir asistente local</button>
+          <div class="hint">Si Windows pregunta, permiti ejecutar el instalador. La comandera y esta PC tienen que estar en el mismo WiFi o cable de red.</div>
         </div>
 
         <div class="panel hide" id="cmdr-browser-note">
@@ -547,13 +563,7 @@
       const needsConnect = (state.method === 'bluetooth' || state.method === 'usb');
       $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
       $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
-      if (state.method === 'network') {
-        const saved = getCfg();
-        showBridgeInstaller(true);
-        if (saved.printerIp && saved.lastNetworkOkAt) setNetworkStatus('ok', 'Ultima conexion OK: ' + saved.printerIp + ':' + (saved.printerPort || 9100));
-        else if (saved.printerIp) setNetworkStatus('off', 'IP guardada, falta verificar conexion');
-        else setNetworkStatus('off', 'Conexion de red sin verificar');
-      }
+      if (state.method === 'network') setNetworkStatus('off', 'Usa el asistente local para vincular esta PC');
       else showBridgeInstaller(false);
       if (needsConnect) {
         $('#cmdr-connect-hint').textContent = state.method === 'bluetooth'
@@ -579,6 +589,26 @@
     const autoSwitch = $('#cmdr-auto');
     if (autoSwitch) autoSwitch.onclick = () => { state.autoprint = !state.autoprint; autoSwitch.classList.toggle('on', state.autoprint); };
     $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
+    const pairBtn = $('#cmdr-pair');
+    if (pairBtn) pairBtn.onclick = async () => {
+      const orig = pairBtn.textContent;
+      pairBtn.disabled = true; pairBtn.textContent = 'Vinculando...';
+      try {
+        state.method = 'network';
+        state.kitchenAuto = true;
+        setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true }));
+        await openPrintStationSetup();
+        setNetworkStatus('ok', 'Asistente local abierto');
+        msg('Se abrio el asistente local. Ahi toca Buscar comandera y despues Imprimir prueba.', true);
+      } catch (e) {
+        setNetworkStatus('off', 'No pude abrir el asistente local');
+        msg(e.message || 'No se pudo vincular esta PC.', false);
+      } finally {
+        pairBtn.disabled = false; pairBtn.textContent = orig;
+      }
+    };
+    const localSetupBtn = $('#cmdr-local-setup');
+    if (localSetupBtn) localSetupBtn.onclick = () => window.open('http://127.0.0.1:7777/setup', 'gestiva_print_station');
     // Escáner: pide al puente que busque comanderas en la red y las muestra para elegir
     const checkBtn = $('#cmdr-check');
     if (checkBtn) checkBtn.onclick = async () => {
@@ -657,8 +687,13 @@
     $('#cmdr-test').onclick = async () => {
       setCfg(collect());
       if (state.method === 'network') {
-        const ok = await detectNetworkConnection(false);
-        if (!ok) return;
+        try {
+          await openPrintStationSetup();
+          msg('Se abrio el asistente local. Usa "Imprimir prueba" desde esa pantalla.', true);
+        } catch (e) {
+          msg(e.message || 'No pude abrir el asistente local.', false);
+        }
+        return;
       }
       try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); refreshStatus(); }
       catch (e) { msg(e.message || 'No se pudo imprimir.', false); }
