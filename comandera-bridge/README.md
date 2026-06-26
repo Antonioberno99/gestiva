@@ -11,13 +11,26 @@ PC del local y reenvía el pedido a la impresora.
 - **Node.js** instalado → https://nodejs.org (botón verde "LTS").
 
 ## Cómo usarlo (Windows)
+### Desde Gestiva (recomendado)
+1. En Gestiva → **Comandera** → **Red / WiFi**.
+2. Si es la primera vez en esa PC, tocá **Instalar puente de comandera**.
+3. Abrí el archivo descargado y esperá a que termine.
+4. Volvé a Gestiva y tocá **Buscar comanderas en la red**.
+
+El instalador deja el puente configurado para abrirse solo con Windows.
+
+### Instalación manual
 1. Copiá esta carpeta `comandera-bridge` a la PC del local (ej: al Escritorio).
 2. Doble clic en **`iniciar-comandera.bat`**.
    - Se abre una ventana negra que dice **"Puente de Comandera ACTIVO"**. **Dejala abierta.**
-3. En Gestiva (app de mozo) → botón **🖨️ Comandera** → elegí **"Red / WiFi"**:
+3. En Gestiva (app de mozo o panel principal) → botón **Comandera** → elegí **"Red / WiFi"**:
    - **IP de la impresora**: la que tiene tu impresora (ej. `192.168.0.50`).
    - **Puerto**: `9100` (el estándar; dejalo así salvo que tu impresora use otro).
-4. Tocá **"Imprimir prueba"**. Si sale el ticket, ¡listo!
+4. Tocá **"Detectar conexión"**.
+   - Si dice que el puente no está activo: abrí `iniciar-comandera.bat` y dejá la ventana abierta.
+   - Si dice que la comandera no responde: revisá IP, WiFi/red y puerto.
+5. También podés tocar **"Buscar comanderas en la red"** para que Gestiva encuentre IPs con puerto 9100 abierto.
+6. Tocá **"Imprimir prueba"**. Si sale el ticket, listo.
 
 ## Cómo saber la IP de tu impresora
 - En muchas impresoras térmicas: apagá, mantené apretado el botón de avance (feed) y prendé →

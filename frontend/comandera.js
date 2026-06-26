@@ -254,6 +254,38 @@
     await writeChunks((d) => dev.transferOut(dev._epOut, d), bytes, 4096);
   }
 
+  function bridgeBaseUrl(cfg) {
+    return ((cfg && cfg.bridgeUrl) || DEFAULTS.bridgeUrl).replace(/\/print\/?$/, '').replace(/\/$/, '');
+  }
+  async function fetchJson(url, opts, timeoutMs) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs || 3500);
+    try {
+      const r = await fetch(url, Object.assign({}, opts || {}, { signal: ctrl.signal }));
+      const text = await r.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      return data;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+  async function checkBridge(cfg) {
+    try {
+      return await fetchJson(bridgeBaseUrl(cfg) + '/health', null, 2500);
+    } catch (e) {
+      throw new Error('No detecto el puente local. En la PC de la comandera abri comandera-bridge/iniciar-comandera.bat y deja esa ventana abierta.');
+    }
+  }
+  async function probeNetworkPrinter(cfg) {
+    if (!cfg.printerIp) throw new Error('Falta la IP de la comandera.');
+    await checkBridge(cfg);
+    const url = bridgeBaseUrl(cfg) + '/probe?ip=' + encodeURIComponent(cfg.printerIp) + '&port=' + encodeURIComponent(cfg.printerPort || 9100);
+    const data = await fetchJson(url, null, 3500);
+    if (!data.reachable) throw new Error('El puente esta activo, pero la comandera no responde en ' + cfg.printerIp + ':' + (cfg.printerPort || 9100) + '. Revisar IP, WiFi/red y puerto 9100.');
+    return data;
+  }
+
   // 5) Red / WiFi (IP) vía puente local
   async function printNetwork(bytes, cfg) {
     if (!cfg.printerIp) throw new Error('Falta la IP de la impresora de red (configurala en Comandera).');
@@ -403,7 +435,9 @@
         </div>
 
         <div class="panel hide" id="cmdr-net">
-          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">Buscar comanderas en la red</button>
+          <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Conexion de red sin verificar</span></div>
+          <button type="button" class="btn-test" id="cmdr-check" style="margin:0 0 10px;">Detectar conexion</button>
+          <button type="button" class="btn-test" id="cmdr-scan" style="margin:0 0 10px;">🔍 Buscar comanderas en la red</button>
           <div id="cmdr-scan-results"></div>
           <label style="margin-top:0">IP de la impresora</label>
           <div class="row">
@@ -413,6 +447,13 @@
           <label>URL del puente</label>
           <input type="text" id="cmdr-bridge" value="${escapeHTML(cfg.bridgeUrl)}">
           <div class="hint">Para impresoras de red, deja abierto el puente de comandera en esta PC. La impresora y esta computadora tienen que estar en la misma red.</div>
+          <div class="hint">Necesitás el programa <b>comandera-bridge</b> corriendo en una PC de la red. Tocá "Imprimir prueba" para verificar.</div>
+          <div class="panel" id="cmdr-install-box" style="display:block;background:#fff7ed;border-color:#fed7aa;">
+            <div style="font-weight:800;color:#9a3412;margin-bottom:6px;">Primera vez en esta PC</div>
+            <div class="hint" style="margin:0 0 10px;color:#9a3412;">Instala el puente una sola vez. Despues queda automatico y se inicia con Windows.</div>
+            <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0;">Instalar / actualizar puente de comandera</a>
+            <div class="hint" style="margin-top:8px;">Cuando termine la instalacion, volve aca y toca "Buscar comanderas en la red".</div>
+          </div>
         </div>
 
         <div class="panel hide" id="cmdr-browser-note">
@@ -459,6 +500,36 @@
     const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
     const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto };
 
+    function setNetworkStatus(kind, text) {
+      const box = $('#cmdr-net-status');
+      const txt = $('#cmdr-net-status-txt');
+      if (!box || !txt) return;
+      box.className = 'status ' + (kind === 'ok' ? 'ok' : 'off');
+      txt.textContent = text;
+    }
+    function showBridgeInstaller(show) {
+      const box = $('#cmdr-install-box');
+      if (box) box.style.display = show ? 'block' : 'none';
+    }
+    async function detectNetworkConnection(silent) {
+      const next = collect();
+      setNetworkStatus('off', 'Verificando puente...');
+      try {
+        await checkBridge(next);
+        setNetworkStatus('off', 'Puente activo. Verificando comandera...');
+        await probeNetworkPrinter(next);
+        setCfg(Object.assign(next, { lastNetworkOkAt: new Date().toISOString() }));
+        setNetworkStatus('ok', 'Conectada a ' + next.printerIp + ':' + (next.printerPort || 9100));
+        if (!silent) msg('Comandera conectada. Ya podes imprimir una prueba.', true);
+        return true;
+      } catch (e) {
+        showBridgeInstaller(true);
+        setNetworkStatus('off', 'Sin conexion confirmada');
+        if (!silent) msg(e.message || 'No se pudo detectar la comandera.', false);
+        return false;
+      }
+    }
+
     function isConnected() {
       if (state.method === 'bluetooth') return !!(_btChar && _btChar.service.device.gatt.connected);
       if (state.method === 'usb') return !!(_usbDev && _usbDev.opened);
@@ -476,6 +547,14 @@
       const needsConnect = (state.method === 'bluetooth' || state.method === 'usb');
       $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
       $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
+      if (state.method === 'network') {
+        const saved = getCfg();
+        showBridgeInstaller(true);
+        if (saved.printerIp && saved.lastNetworkOkAt) setNetworkStatus('ok', 'Ultima conexion OK: ' + saved.printerIp + ':' + (saved.printerPort || 9100));
+        else if (saved.printerIp) setNetworkStatus('off', 'IP guardada, falta verificar conexion');
+        else setNetworkStatus('off', 'Conexion de red sin verificar');
+      }
+      else showBridgeInstaller(false);
       if (needsConnect) {
         $('#cmdr-connect-hint').textContent = state.method === 'bluetooth'
           ? 'Encende la impresora y toca Conectar para emparejarla. Funciona con Chrome en Android.'
@@ -501,6 +580,13 @@
     if (autoSwitch) autoSwitch.onclick = () => { state.autoprint = !state.autoprint; autoSwitch.classList.toggle('on', state.autoprint); };
     $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
     // Escáner: pide al puente que busque comanderas en la red y las muestra para elegir
+    const checkBtn = $('#cmdr-check');
+    if (checkBtn) checkBtn.onclick = async () => {
+      const orig = checkBtn.textContent;
+      checkBtn.disabled = true; checkBtn.textContent = 'Verificando...';
+      await detectNetworkConnection(false);
+      checkBtn.disabled = false; checkBtn.textContent = orig;
+    };
     const scanBtn = $('#cmdr-scan');
     if (scanBtn) scanBtn.onclick = async () => {
       const base = (($('#cmdr-bridge').value.trim() || cfg.bridgeUrl)).replace(/\/print\/?$/, '').replace(/\/$/, '');
@@ -509,7 +595,9 @@
       scanBtn.disabled = true; scanBtn.textContent = 'Buscando en la red...';
       box.innerHTML = '<div class="hint">Buscando comanderas... puede tardar unos segundos.</div>';
       try {
-        const r = await fetch(base + '/scan');
+        const next = collect();
+        await checkBridge(next);
+        const r = await fetch(base + '/scan?port=' + encodeURIComponent(next.printerPort || 9100));
         const data = await r.json();
         const printers = (data && data.printers) || [];
         if (!printers.length) {
@@ -517,11 +605,26 @@
         } else {
           box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Comanderas encontradas. Toca una para usarla:</div>' +
             printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">${escapeHTML(ip)}</button>`).join('');
-          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = () => {
+          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
             $('#cmdr-ip').value = b.dataset.ip;
             box.querySelectorAll('.cmdr-pick').forEach(x => x.style.borderColor = '#e2e8f0');
             b.style.borderColor = '#f97316';
+            setNetworkStatus('off', 'Verificando ' + b.dataset.ip + '...');
+            const ok = await detectNetworkConnection(false);
+            if (!ok) return;
             msg('Comandera elegida: ' + b.dataset.ip + '. Toca Imprimir prueba para confirmar.', true);
+            /*
+          box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Encontradas — tocá una para usarla:</div>' +
+            printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">🖨️ ${escapeHTML(ip)}</button>`).join('');
+          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
+            $('#cmdr-ip').value = b.dataset.ip;
+            box.querySelectorAll('.cmdr-pick').forEach(x => x.style.borderColor = '#e2e8f0');
+            b.style.borderColor = '#f97316';
+            setNetworkStatus('off', 'Verificando ' + b.dataset.ip + '...');
+            const ok = await detectNetworkConnection(false);
+            if (!ok) return;
+            msg('Comandera elegida: ' + b.dataset.ip + '. Tocá "Imprimir una prueba" para confirmar.', true);
+            */
           });
         }
       } catch (e) {
@@ -553,12 +656,17 @@
     };
     $('#cmdr-test').onclick = async () => {
       setCfg(collect());
-      try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada. Revisa la impresora.', true); refreshStatus(); }
+      if (state.method === 'network') {
+        const ok = await detectNetworkConnection(false);
+        if (!ok) return;
+      }
+      try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); refreshStatus(); }
       catch (e) { msg(e.message || 'No se pudo imprimir.', false); }
     };
     $('#cmdr-save').onclick = () => { setCfg(collect()); wrap.remove(); if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg()); };
     $('#cmdr-close').onclick = () => wrap.remove();
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
+    if (state.method === 'network' && cfg.printerIp) setTimeout(() => detectNetworkConnection(true), 250);
   }
 
   // ============================================================
@@ -703,6 +811,7 @@
 
   window.Comandera = {
     getCfg, setCfg, print, testPrint, ticketHTML, escpos, openConfig,
+    checkBridge, probeNetworkPrinter,
     receiptHTML, escposReceipt, printReceipt, payLabel,
     METHOD_LABELS, PAY_LABELS,
     _methods: ['screen', 'browser', 'bluetooth', 'usb', 'network']
