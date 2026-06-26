@@ -300,19 +300,56 @@
     return Object.assign({ apiUrl }, data);
   }
 
+  function stationWindowHtml(title, text, actions) {
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)}</title>
+      <style>body{margin:0;background:#fff7ed;color:#0f172a;font-family:Inter,system-ui,Segoe UI,Arial,sans-serif}.wrap{max-width:560px;margin:0 auto;padding:36px 18px}.card{background:#fff;border:1px solid #fed7aa;border-radius:22px;box-shadow:0 18px 45px #9a34121f;padding:24px}h1{margin:0 0 8px;font-size:24px}.txt{color:#475569;line-height:1.5;margin:0 0 18px}.btn{display:block;text-align:center;text-decoration:none;border:0;border-radius:13px;background:#f97316;color:#fff;font-weight:800;padding:13px 16px;margin:10px 0;font-size:15px}.btn.dark{background:#0f172a}.btn.light{background:#fff;color:#0f172a;border:1px solid #e2e8f0}.small{font-size:12px;color:#94a3b8;line-height:1.45;margin-top:14px}</style>
+      </head><body><div class="wrap"><div class="card"><h1>${escapeHTML(title)}</h1><p class="txt">${escapeHTML(text)}</p>${actions || ''}<p class="small">Gestiva Print Station conecta esta PC con la comandera de red.</p></div></div></body></html>`;
+  }
+
+  function writeStationWindow(win, title, text, actions) {
+    if (!win) return;
+    try {
+      win.document.open();
+      win.document.write(stationWindowHtml(title, text, actions));
+      win.document.close();
+    } catch (e) {}
+  }
+
+  async function checkLocalPrintStation() {
+    return await fetchJson('http://127.0.0.1:7777/health', null, 2200);
+  }
+
   async function openPrintStationSetup() {
-    const win = window.open('about:blank', 'gestiva_print_station');
-    const data = await createPrintStationToken();
-    const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
-    const qs = new URLSearchParams({
-      token: data.token,
-      apiUrl: publicApiUrl,
-      restaurant: data.restaurant || ''
-    });
-    const url = 'http://127.0.0.1:7777/setup#' + qs.toString();
-    if (win) win.location.href = url;
-    else window.location.href = url;
-    return data;
+    const win = window.open('', 'gestiva_print_station');
+    writeStationWindow(win, 'Vinculando esta PC...', 'Gestiva esta preparando la estacion de impresion. Espera unos segundos.', '');
+    try {
+      const data = await createPrintStationToken();
+      const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
+      const qs = new URLSearchParams({
+        token: data.token,
+        apiUrl: publicApiUrl,
+        restaurant: data.restaurant || ''
+      });
+      const url = 'http://127.0.0.1:7777/setup#' + qs.toString();
+      try {
+        const health = await checkLocalPrintStation();
+        if (!health || !health.ok) throw new Error('agent_not_ready');
+        if (win) win.location.href = url;
+        else window.location.href = url;
+      } catch (e) {
+        const safeSetupUrl = escapeHTML(url);
+        const actions = `
+          <a class="btn" href="https://www.gestiva.site/assets/comandera-bridge/instalar-gestiva-comandera.bat" download>Instalar / actualizar estacion</a>
+          <a class="btn dark" href="${safeSetupUrl}">Ya instale, abrir asistente</a>
+          <a class="btn light" href="https://www.gestiva.site/app">Volver a Gestiva</a>`;
+        writeStationWindow(win, 'Falta abrir la estacion', 'No detecto Gestiva Print Station en esta PC. Instala o actualiza la estacion, espera que diga listo y despues toca "Ya instale, abrir asistente".', actions);
+      }
+      return data;
+    } catch (e) {
+      const actions = '<a class="btn light" href="https://www.gestiva.site/app">Volver a Gestiva</a>';
+      writeStationWindow(win, 'No pude vincular esta PC', e.message || 'No se pudo crear la vinculacion con Gestiva. Volve a iniciar sesion y proba otra vez.', actions);
+      throw e;
+    }
   }
 
   // 5) Red / WiFi (IP) via Gestiva Print Agent local
