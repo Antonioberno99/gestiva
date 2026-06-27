@@ -467,11 +467,11 @@
 
   // Tarjetas visuales: cada tipo de comandera con su explicación simple.
   const METHOD_CARDS = [
-    { k: 'usb',       code: 'USB', name: 'USB',            desc: 'Recomendado: Epson conectada por cable a esta PC.' },
-    { k: 'network',   code: 'RED', name: 'Red / WiFi',     desc: 'Comandera con IP en la misma red.' },
+    { k: 'network',   code: 'RED', name: 'Red / WiFi',     desc: 'Impresora con IP propia en la red del local.' },
+    { k: 'usb',       code: 'USB', name: 'USB',            desc: 'Cable directo a esta PC. Usa la impresora instalada en Windows.' },
     { k: 'bluetooth', code: 'BT',  name: 'Bluetooth',      desc: 'Termica portatil emparejada con este equipo.' },
-    { k: 'browser',   code: 'PC',  name: 'Navegador',      desc: 'Usa la impresora instalada en el sistema.' },
-    { k: 'screen',    code: 'KDS', name: 'Solo pantalla',  desc: 'Los pedidos quedan en cocina sin imprimir.' }
+    { k: 'browser',   code: 'PC',  name: 'Navegador',      desc: 'Abre el dialogo normal de impresion.' },
+    { k: 'screen',    code: 'KDS', name: 'Solo pantalla',  desc: 'Los pedidos quedan en la pantalla de cocina.' }
   ];
 
   function openConfig() {
@@ -528,8 +528,9 @@
       </style>
       <div class="sheet">
         <h2>Conectar comandera</h2>
-        <p class="sub">Configuracion de la PC central que recibe los pedidos del equipo y los envia a la comandera.</p>
+        <p class="sub">Elegí cómo está conectada la comandera en este local. Gestiva conserva todos los métodos: USB, red/IP, Bluetooth, navegador o pantalla.</p>
         <div class="flow"><span>App equipo</span><span class="arr">&rarr;</span><span>Panel central</span><span class="arr">&rarr;</span><span>Comandera</span></div>
+        <div class="status off" id="cmdr-main-status"><span class="dot"></span><span id="cmdr-main-status-txt">Sin comandera conectada</span></div>
 
         <label><span class="step">1</span>Tipo de conexion</label>
         <div class="cards" id="cmdr-cards">
@@ -549,7 +550,7 @@
 
         <div class="panel hide" id="cmdr-usb">
           <div class="status off" id="cmdr-usb-status"><span class="dot"></span><span id="cmdr-usb-status-txt">Estacion USB sin vincular</span></div>
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Para Epson por cable USB: la impresora debe estar prendida, conectada a esta PC e instalada en Windows.</div>
+          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Usá esta opción cuando la comandera está conectada con cable USB a esta PC.</div>
           <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion</a>
           <button type="button" class="btn-test" id="cmdr-usb-pair" style="margin:0 0 10px;">2. Detectar Epson USB y probar</button>
           <input type="hidden" id="cmdr-printer-name" value="${escapeHTML(cfg.printerName || '')}">
@@ -559,7 +560,7 @@
 
         <div class="panel hide" id="cmdr-net">
           <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Estacion de impresion sin vincular</span></div>
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Forma simple: esta PC fija imprime las comandas. La comandera tiene que estar prendida y conectada al mismo router/WiFi.</div>
+          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Usá esta opción cuando la comandera imprime por red, WiFi o Ethernet y tiene una IP propia.</div>
           <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion</a>
           <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Conectar automaticamente</button>
           <div id="cmdr-scan-results"></div>
@@ -617,6 +618,29 @@
     const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
     const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto, printerName: cfg.printerName || '' };
 
+    function setMainStatus(kind, text) {
+      const box = $('#cmdr-main-status');
+      const txt = $('#cmdr-main-status-txt');
+      if (!box || !txt) return;
+      box.className = 'status ' + (kind === 'ok' ? 'ok' : 'off');
+      txt.textContent = text;
+    }
+    function connectedTextForCurrentMethod() {
+      const ip = ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp) || '';
+      const port = ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : (cfg.printerPort || 9100));
+      const printerName = ($('#cmdr-printer-name') ? $('#cmdr-printer-name').value.trim() : state.printerName) || '';
+      if (state.method === 'usb' && printerName) return 'Conectado: USB - ' + printerName;
+      if (state.method === 'network' && ip) return 'Conectado: Red/IP - ' + ip + ':' + port;
+      if (state.method === 'bluetooth' && isConnected()) return 'Conectado: Bluetooth';
+      if (state.method === 'browser') return 'Listo: imprime con el dialogo del sistema';
+      if (state.method === 'screen') return 'Listo: pantalla de cocina';
+      return '';
+    }
+    function syncMainStatus() {
+      const text = connectedTextForCurrentMethod();
+      if (text) setMainStatus('ok', text);
+      else setMainStatus('off', 'Sin comandera conectada');
+    }
     function setNetworkStatus(kind, text) {
       const box = $('#cmdr-net-status');
       const txt = $('#cmdr-net-status-txt');
@@ -662,7 +686,8 @@
         printerIp: '',
         lastUsbOkAt: new Date().toISOString()
       }));
-      setUsbStatus('ok', 'Conectada a ' + printerName);
+      setUsbStatus('ok', 'Conectado: USB - ' + printerName);
+      setMainStatus('ok', 'Conectado: USB - ' + printerName);
     }
     function showBridgeInstaller(show) {
       const box = $('#cmdr-install-box');
@@ -676,7 +701,8 @@
         setNetworkStatus('off', 'Puente activo. Verificando comandera...');
         await probeNetworkPrinter(next);
         setCfg(Object.assign(next, { lastNetworkOkAt: new Date().toISOString() }));
-        setNetworkStatus('ok', 'Conectada a ' + next.printerIp + ':' + (next.printerPort || 9100));
+        setNetworkStatus('ok', 'Conectado: Red/IP - ' + next.printerIp + ':' + (next.printerPort || 9100));
+        setMainStatus('ok', 'Conectado: Red/IP - ' + next.printerIp + ':' + (next.printerPort || 9100));
         if (!silent) msg('Comandera conectada. Ya podes imprimir una prueba.', true);
         return true;
       } catch (e) {
@@ -696,8 +722,9 @@
       const s = $('#cmdr-status'); if (!s) return;
       const ok = isConnected();
       s.className = 'status ' + (ok ? 'ok' : 'off');
-      $('#cmdr-status-txt').textContent = ok ? 'Impresora conectada' : 'Sin conectar';
+      $('#cmdr-status-txt').textContent = ok ? 'Conectado: Bluetooth' : 'Sin conectar';
       $('#cmdr-connect').textContent = ok ? 'Volver a conectar' : 'Conectar impresora';
+      syncMainStatus();
     }
     function refreshMethodUI() {
       $('#cmdr-usb').classList.toggle('hide', state.method !== 'usb');
@@ -705,9 +732,14 @@
       const needsConnect = (state.method === 'bluetooth');
       $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
       $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
-      if (state.method === 'network') setNetworkStatus('off', 'Instala la estacion y toca Conectar automaticamente');
+      if (state.method === 'network') {
+        const ip = ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp) || '';
+        const port = ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : (cfg.printerPort || 9100));
+        if (ip) setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
+        else setNetworkStatus('off', 'Instala la estacion y toca Conectar automaticamente');
+      }
       else if (state.method === 'usb') {
-        if (state.printerName) setUsbStatus('ok', 'Conectada a ' + state.printerName);
+        if (state.printerName) setUsbStatus('ok', 'Conectado: USB - ' + state.printerName);
         else setUsbStatus('off', 'Instala la estacion y detecta la Epson USB');
       }
       else showBridgeInstaller(false);
@@ -715,6 +747,7 @@
         $('#cmdr-connect-hint').textContent = 'Encende la impresora y toca Conectar para emparejarla. Funciona con Chrome en Android.';
         refreshStatus();
       }
+      syncMainStatus();
     }
     function selectMethod(k) {
       state.method = k;
@@ -759,7 +792,8 @@
           $('#cmdr-ip').value = printers[0];
           await savePrintStationPrinter(printers[0], port);
           await testPrintStation();
-          setNetworkStatus('ok', 'Conectada a ' + printers[0] + ':' + port);
+          setNetworkStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
+          setMainStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
           if (box) box.innerHTML = '<div class="hint">Comandera encontrada y guardada: ' + escapeHTML(printers[0]) + '</div>';
           msg('Comandera conectada. Se envio una prueba de impresion.', true);
         } else if (printers.length > 1) {
@@ -772,7 +806,8 @@
                 $('#cmdr-ip').value = b.dataset.ip;
                 await savePrintStationPrinter(b.dataset.ip, port);
                 await testPrintStation();
-                setNetworkStatus('ok', 'Conectada a ' + b.dataset.ip + ':' + port);
+                setNetworkStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
+                setMainStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
                 msg('Comandera conectada. Se envio una prueba de impresion.', true);
               } catch (e) {
                 msg(e.message || 'No se pudo imprimir la prueba.', false);
@@ -782,6 +817,7 @@
           msg('Encontre varias comanderas. Elegi una para guardar e imprimir prueba.', true);
         } else {
           setNetworkStatus('off', 'No se encontro automaticamente');
+          setMainStatus('off', 'Sin comandera conectada');
           if (box) {
             const visible = candidates
               .slice(0, 8)
@@ -795,6 +831,7 @@
         }
       } catch (e) {
         setNetworkStatus('off', 'Falta instalar o actualizar estacion');
+        setMainStatus('off', 'Sin comandera conectada');
         if (box) box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a conectar.</div>';
         msg(e.message || 'No se pudo conectar la estacion.', false);
       } finally {
@@ -838,11 +875,13 @@
           msg('Encontre varias impresoras. Elegi la Epson USB para guardar.', true);
         } else {
           setUsbStatus('off', 'No encontre impresoras instaladas');
+          setMainStatus('off', 'Sin comandera conectada');
           if (box) box.innerHTML = '<div class="hint">Windows no tiene ninguna impresora USB disponible. Conecta la Epson, instalala en Windows y volve a tocar detectar.</div>';
           msg('No encontre una impresora instalada en Windows. Falta instalar la Epson USB en esta PC.', false);
         }
       } catch (e) {
         setUsbStatus('off', 'Falta instalar o actualizar estacion');
+        setMainStatus('off', 'Sin comandera conectada');
         if (box) box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a detectar la Epson USB.</div>';
         msg(e.message || 'No se pudo conectar la estacion USB.', false);
       } finally {
@@ -863,10 +902,12 @@
         state.method = 'network';
         state.kitchenAuto = true;
         setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true, printerIp: ip, printerPort: port, lastNetworkOkAt: new Date().toISOString() }));
-        setNetworkStatus('ok', 'Conectada a ' + ip + ':' + port);
+        setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
+        setMainStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
         msg('Comandera guardada. Se envio una prueba de impresion.', true);
       } catch (e) {
         setNetworkStatus('off', 'No se pudo imprimir prueba');
+        setMainStatus('off', 'Sin comandera conectada');
         msg(e.message || 'No se pudo guardar o imprimir la prueba.', false);
       } finally {
         saveIpBtn.disabled = false; saveIpBtn.textContent = orig;
@@ -932,9 +973,11 @@
           await pairPrintStation();
           await savePrintStationPrinter(ip, port);
           await testPrintStation();
-          setNetworkStatus('ok', 'Conectada a ' + ip + ':' + port);
+          setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
+          setMainStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
           msg('Prueba enviada. Si salio el ticket, la comandera ya queda conectada.', true);
         } catch (e) {
+          setMainStatus('off', 'Sin comandera conectada');
           msg(e.message || 'No pude imprimir la prueba.', false);
         }
         return;
@@ -948,9 +991,11 @@
           await testPrintStation();
           state.printerName = printerName;
           setCfg(Object.assign(collect(), { method: 'usb', kitchenAuto: true, printerMode: 'windows', printerName, printerIp: '', lastUsbOkAt: new Date().toISOString() }));
-          setUsbStatus('ok', 'Conectada a ' + printerName);
+          setUsbStatus('ok', 'Conectado: USB - ' + printerName);
+          setMainStatus('ok', 'Conectado: USB - ' + printerName);
           msg('Prueba enviada. Si salio el ticket, la comandera USB ya queda conectada.', true);
         } catch (e) {
+          setMainStatus('off', 'Sin comandera conectada');
           msg(e.message || 'No pude imprimir la prueba USB.', false);
         }
         return;
@@ -961,8 +1006,9 @@
     $('#cmdr-save').onclick = () => { setCfg(collect()); wrap.remove(); if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg()); };
     $('#cmdr-close').onclick = () => wrap.remove();
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
-    if (state.method === 'network' && cfg.printerIp) setNetworkStatus('ok', 'IP guardada: ' + cfg.printerIp + ':' + (cfg.printerPort || 9100));
-    if (state.method === 'usb' && cfg.printerName) setUsbStatus('ok', 'Conectada a ' + cfg.printerName);
+    if (state.method === 'network' && cfg.printerIp) setNetworkStatus('ok', 'Conectado: Red/IP - ' + cfg.printerIp + ':' + (cfg.printerPort || 9100));
+    if (state.method === 'usb' && cfg.printerName) setUsbStatus('ok', 'Conectado: USB - ' + cfg.printerName);
+    syncMainStatus();
   }
 
   // ============================================================
