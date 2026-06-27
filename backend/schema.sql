@@ -419,3 +419,56 @@ ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_mode TEXT DEFAULT 'm
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf BYTEA;
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf_name TEXT;
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS menu_pdf_uploaded_at TIMESTAMPTZ;
+
+-- ============================================================
+-- FACTURACIÓN ELECTRÓNICA (ARCA / ex-AFIP)
+-- Cada restaurante factura con SU CUIT (integración directa, certificado por restaurante).
+-- Soporta Factura A, B y C. El comprobante lleva CAE + QR oficial (RG 4892/2020).
+-- ============================================================
+-- Config fiscal por restaurante (multi-tenant)
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_enabled BOOLEAN DEFAULT false;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_cuit TEXT;             -- CUIT del emisor (11 dígitos)
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_condition TEXT;        -- 'monotributo' | 'responsable_inscripto' | 'exento'
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_razon_social TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_domicilio TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_pto_vta INT;           -- punto de venta habilitado para Web Services
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_ingresos_brutos TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_inicio_actividades DATE;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_env TEXT DEFAULT 'homologacion'; -- 'homologacion' (prueba) | 'produccion'
+-- Certificado digital de ARCA (PEM). SENSIBLE: son credenciales fiscales → cifrar antes de producción.
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_cert TEXT;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_key TEXT;
+
+-- Comprobantes (facturas) emitidos
+CREATE TABLE IF NOT EXISTS invoices (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  order_id         UUID,                  -- venta de la que sale (orders.id)
+  cbte_tipo        INT NOT NULL,          -- código ARCA: 1=Fact.A, 6=Fact.B, 11=Fact.C (y notas de crédito/débito)
+  letra            TEXT,                  -- 'A' | 'B' | 'C'
+  pto_vta          INT NOT NULL,
+  nro              BIGINT,                -- número de comprobante que asigna ARCA
+  concepto         INT DEFAULT 1,         -- 1=productos
+  doc_tipo         INT,                   -- 80=CUIT, 96=DNI, 99=consumidor final
+  doc_nro          TEXT,
+  cliente_nombre   TEXT,
+  cliente_cond_iva TEXT,                  -- condición frente al IVA del receptor
+  importe_neto     NUMERIC(14,2) DEFAULT 0,
+  importe_iva      NUMERIC(14,2) DEFAULT 0,
+  importe_total    NUMERIC(14,2) NOT NULL,
+  cae              TEXT,                  -- Código de Autorización Electrónico
+  cae_vto          DATE,                  -- vencimiento del CAE
+  qr_url           TEXT,                  -- URL del QR de ARCA (RG 4892)
+  status           TEXT DEFAULT 'pending',-- 'pending' | 'approved' | 'error'
+  error_msg        TEXT,
+  raw              JSONB,                 -- respuesta cruda de ARCA (auditoría)
+  created_at       TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invoices_order ON invoices(order_id);
+
+-- Datos fiscales del cliente, guardados en la venta para el comprobante
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_doc_tipo INT;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_doc_nro TEXT;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_fiscal_name TEXT;
+ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_cond_iva TEXT;
