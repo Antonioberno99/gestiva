@@ -1340,10 +1340,40 @@ async function chargeTable() {
       <div style="margin-top:6px;"><a onclick="quickAddCustomer()" style="font-size:12px;color:var(--or-dk);cursor:pointer;">+ Crear cliente nuevo</a></div>
     </div>
 
+    <div class="field" style="margin-top:14px;">
+      <label>Comprobante</label>
+      <div style="display:flex;gap:6px;">
+        <button type="button" class="chip active" id="docTicket" onclick="setDocMode('ticket')">Solo ticket</button>
+        <button type="button" class="chip" id="docFactura" onclick="setDocMode('factura')">Factura</button>
+      </div>
+    </div>
+    <div id="facturaBlock" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+      <label style="color:#1e40af;">¿Cómo factura el cliente?</label>
+      <select id="facDocTipo" onchange="updateFacDoc()">
+        <option value="99">Consumidor Final (sin datos)</option>
+        <option value="80">Con CUIT</option>
+        <option value="96">Con DNI</option>
+      </select>
+      <div id="facDocNroBlock" style="display:none;margin-top:8px;">
+        <input id="facDocNro" placeholder="Número de CUIT o DNI" inputmode="numeric"/>
+        <input id="facNombre" placeholder="Nombre / Razón social (opcional)" style="margin-top:6px;"/>
+      </div>
+      <p style="font-size:11px;color:var(--tx-mid);margin-top:8px;">Emite factura electrónica con ARCA (CAE + QR). Cargá tu certificado en Ajustes → Datos fiscales.</p>
+    </div>
     <div class="field" style="margin-top:14px;"><label>Notas (opcional)</label><textarea id="orderNote" rows="2"></textarea></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="confirmCharge(${total})">Confirmar cobro</button>`);
   window.__total = total;
+}
+function setDocMode(mode) {
+  document.getElementById('docTicket').classList.toggle('active', mode==='ticket');
+  document.getElementById('docFactura').classList.toggle('active', mode==='factura');
+  const b = document.getElementById('facturaBlock'); if (b) b.style.display = mode==='factura' ? '' : 'none';
+}
+function updateFacDoc() {
+  const t = document.getElementById('facDocTipo'); if (!t) return;
+  const needsNro = (t.value==='80' || t.value==='96');
+  const blk = document.getElementById('facDocNroBlock'); if (blk) blk.style.display = needsNro ? '' : 'none';
 }
 function setPayMode(mode) {
   document.getElementById('modeSimple').classList.toggle('active', mode==='simple');
@@ -1410,6 +1440,19 @@ async function quickAddCustomer() {
 async function confirmCharge(total) {
   const note = $('#orderNote').value;
   const isSplit = document.getElementById('modeSplit').classList.contains('active');
+  // Datos de factura (si se eligió "Factura"). Se valida ACÁ, antes de registrar el cobro.
+  const wantFactura = document.getElementById('docFactura')?.classList.contains('active');
+  let facData = null;
+  if (wantFactura) {
+    const docTipo = parseInt(document.getElementById('facDocTipo').value, 10);
+    let docNro = '0';
+    if (docTipo === 80 || docTipo === 96) {
+      docNro = (document.getElementById('facDocNro').value||'').replace(/\D/g,'');
+      const minLen = docTipo === 80 ? 11 : 7;
+      if (docNro.length < minLen) return toast(docTipo===80 ? 'CUIT inválido (11 dígitos)' : 'DNI inválido','error');
+    }
+    facData = { docTipo, docNro, nombre: (document.getElementById('facNombre')?.value||'').trim() };
+  }
   const payload = {
     tableId: CURRENT_TID,
     note,
@@ -1442,6 +1485,16 @@ async function confirmCharge(total) {
   try {
     const order = await API.createOrder(payload);
     const sale = buildSaleFromCharge(order, payload);
+    // Si se pidió factura, emitirla. El cobro YA quedó registrado: si ARCA falla, no se pierde la venta.
+    if (facData) {
+      try {
+        const inv = await api('/api/invoices', { method:'POST', body: JSON.stringify({
+          orderId: order.id, docTipo: facData.docTipo, docNro: facData.docNro,
+          nombre: facData.nombre, importeTotal: sale.total
+        })});
+        if (inv && inv.invoice) { sale.invoice = inv.invoice; toast('Factura emitida ✓ CAE '+inv.invoice.cae,'success'); }
+      } catch(e) { toast('Cobro OK, pero la factura falló: '+(e.message||e),'error'); }
+    }
     CASH_CACHE = null; CURRENT_DISCOUNT = 0; CURRENT_DISCOUNT_TYPE='amount';
     await refreshCashPill();
     toast('Cobro registrado','success');
@@ -1491,6 +1544,13 @@ function showReceiptModal(sale, backHash) {
       <div style="font-size:34px;font-weight:800;font-family:var(--ff-display);color:#10b981;">${fmt(sale.total)}</div>
       <div style="margin-top:8px;font-size:14px;color:var(--tx-dark);">Forma de pago: <strong>${payTxt}</strong></div>
       <div style="margin-top:4px;font-size:12px;color:var(--tx-lt);">Entregale el comprobante al cliente</div>
+      ${sale.invoice ? `
+      <div style="margin-top:14px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;text-align:left;">
+        <div style="font-weight:700;color:#065f46;">Factura ${sale.invoice.letra||''} emitida</div>
+        <div style="font-size:13px;color:var(--tx-dark);margin-top:4px;">N° ${String(sale.invoice.pto_vta||0).padStart(4,'0')}-${String(sale.invoice.nro||0).padStart(8,'0')}</div>
+        <div style="font-size:13px;color:var(--tx-dark);">CAE: <strong>${sale.invoice.cae||'—'}</strong>${sale.invoice.cae_vto?' · Vto '+sale.invoice.cae_vto:''}</div>
+        ${sale.invoice.qr_url ? `<a href="${sale.invoice.qr_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#047857;">Ver / verificar en AFIP →</a>` : ''}
+      </div>` : ''}
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal();location.hash='${backHash}';">Listo</button>
      <button class="btn btn-primary" onclick="printSaleReceipt()">Imprimir comprobante</button>`);
