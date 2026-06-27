@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.0.1'
+$AgentVersion = '3.0.2'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -133,30 +133,49 @@ function Test-Printer($Ip, $Port, $TimeoutMs) {
 function Scan-Printers($Port) {
   $subnets = @(Get-LocalSubnets)
   $printers = New-Object System.Collections.Generic.List[string]
+  $candidates = New-Object System.Collections.Generic.List[object]
+  $scanPorts = @($Port, 9100, 9101, 9102, 515, 631, 8008, 8043, 8080, 9080, 80, 443) | Select-Object -Unique
   foreach ($prefix in $subnets) {
     $items = New-Object System.Collections.Generic.List[object]
     for ($h = 1; $h -le 254; $h++) {
       $ip = "$prefix.$h"
-      $client = New-Object System.Net.Sockets.TcpClient
-      try {
-        $async = $client.BeginConnect($ip, $Port, $null, $null)
-        $items.Add([pscustomobject]@{ Ip = $ip; Client = $client; Async = $async })
-      } catch {
-        try { $client.Close() } catch {}
+      foreach ($sp in $scanPorts) {
+        $client = New-Object System.Net.Sockets.TcpClient
+        try {
+          $async = $client.BeginConnect($ip, $sp, $null, $null)
+          $items.Add([pscustomobject]@{ Ip = $ip; Port = $sp; Client = $client; Async = $async })
+        } catch {
+          try { $client.Close() } catch {}
+        }
       }
     }
-    Start-Sleep -Milliseconds 2200
+    Start-Sleep -Milliseconds 2600
+    $openByIp = @{}
     foreach ($item in $items) {
       try {
         if ($item.Async.AsyncWaitHandle.WaitOne(0, $false) -and $item.Client.Connected) {
           try { $item.Client.EndConnect($item.Async) } catch {}
-          $printers.Add($item.Ip)
+          if (-not $openByIp.ContainsKey($item.Ip)) {
+            $openByIp[$item.Ip] = @()
+          }
+          $openByIp[$item.Ip] = @($openByIp[$item.Ip]) + [int]$item.Port
         }
       } catch {}
       try { $item.Client.Close() } catch {}
     }
+    foreach ($ip in $openByIp.Keys) {
+      $ports = @(@($openByIp[$ip]) | Sort-Object -Unique)
+      $hasRaw = @($ports | Where-Object { $_ -eq $Port -or $_ -eq 9100 -or $_ -eq 9101 -or $_ -eq 9102 }).Count -gt 0
+      $hasPrinterLike = $hasRaw -or @($ports | Where-Object { $_ -eq 515 -or $_ -eq 631 -or $_ -eq 8008 -or $_ -eq 8043 }).Count -gt 0
+      if ($hasRaw -and -not $printers.Contains($ip)) { $printers.Add($ip) }
+      $candidates.Add([pscustomobject]@{
+        ip = $ip
+        ports = $ports
+        likelyPrinter = [bool]$hasPrinterLike
+      })
+    }
   }
-  return @{ subnets = $subnets; printers = @($printers) }
+  return @{ subnets = $subnets; printers = @($printers.ToArray()); candidates = @($candidates.ToArray()); scannedPorts = @($scanPorts) }
 }
 
 function Add-Bytes($List, [byte[]]$Bytes) {
@@ -529,7 +548,7 @@ function Handle-Request($Stream, $Req) {
   if ($Req.Method -eq 'GET' -and $path -eq '/scan') {
     $p = if ($query.ContainsKey('port')) { [int]$query['port'] } else { 9100 }
     $scan = Scan-Printers $p
-    Send-Json $Stream 200 @{ ok = $true; port = $p; subnets = $scan.subnets; printers = $scan.printers }
+    Send-Json $Stream 200 @{ ok = $true; port = $p; subnets = $scan.subnets; printers = $scan.printers; candidates = $scan.candidates; scannedPorts = $scan.scannedPorts }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/test') {

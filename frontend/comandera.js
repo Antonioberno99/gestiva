@@ -666,6 +666,7 @@
         if (box) box.innerHTML = '<div class="hint">Buscando comanderas en la red. Puede tardar unos segundos...</div>';
         const data = await scanPrintStation(port);
         const printers = (data && data.printers) || [];
+        const candidates = (data && data.candidates) || [];
         if (printers.length === 1) {
           $('#cmdr-ip').value = printers[0];
           await savePrintStationPrinter(printers[0], port);
@@ -693,7 +694,15 @@
           msg('Encontre varias comanderas. Elegi una para guardar e imprimir prueba.', true);
         } else {
           setNetworkStatus('off', 'No se encontro automaticamente');
-          if (box) box.innerHTML = '<div class="hint">No encontre comanderas automaticamente. Escribi la IP del selftest abajo y toca "Guardar IP e imprimir prueba".</div>';
+          if (box) {
+            const visible = candidates
+              .slice(0, 8)
+              .map(c => '<div class="hint" style="margin:6px 0;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">Equipo visible: <strong>' + escapeHTML(c.ip) + '</strong> - puertos ' + escapeHTML((c.ports || []).join(', ')) + (c.likelyPrinter ? ' - posible impresora' : '') + '</div>')
+              .join('');
+            box.innerHTML = '<div class="hint">No encontre una comandera con puerto ESC/POS 9100 abierto. Si la Epson esta prendida, probablemente esta en otra red/WiFi o no tiene Ethernet configurado.</div>' +
+              (visible ? '<div class="hint" style="margin-top:8px;">Diagnostico de red:</div>' + visible : '') +
+              '<div class="hint">Escribi la IP del selftest abajo y toca "Guardar IP e imprimir prueba".</div>';
+          }
           msg('No la encontre automaticamente. Carga la IP que imprime el selftest de la comandera.', false);
         }
       } catch (e) {
