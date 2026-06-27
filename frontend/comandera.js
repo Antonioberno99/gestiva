@@ -300,8 +300,21 @@
     return Object.assign({ apiUrl }, data);
   }
 
+  let _stationBase = 'http://127.0.0.1:7777';
+  const STATION_BASES = ['http://127.0.0.1:7777', 'http://localhost:7777'];
+
   async function checkLocalPrintStation() {
-    return await fetchJson('http://127.0.0.1:7777/health', null, 2200);
+    let lastError;
+    for (const base of STATION_BASES) {
+      try {
+        const health = await fetchJson(base + '/health', null, 2200);
+        _stationBase = base;
+        return health;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError || new Error('No detecto la estacion de impresion.');
   }
 
   function stationMajorVersion(v) {
@@ -324,7 +337,7 @@
   async function pairPrintStation() {
     const data = await createPrintStationToken();
     const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
-    await fetchJson('http://127.0.0.1:7777/pair', {
+    await fetchJson(_stationBase + '/pair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -337,12 +350,12 @@
   }
 
   async function scanPrintStation(port) {
-    return await fetchJson('http://127.0.0.1:7777/scan?port=' + encodeURIComponent(port || 9100), null, 12000);
+    return await fetchJson(_stationBase + '/scan?port=' + encodeURIComponent(port || 9100), null, 12000);
   }
 
   async function savePrintStationPrinter(ip, port) {
     if (!ip) throw new Error('Falta la IP de la comandera.');
-    return await fetchJson('http://127.0.0.1:7777/config', {
+    return await fetchJson(_stationBase + '/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ printerIp: ip, printerPort: port || 9100 })
@@ -350,7 +363,7 @@
   }
 
   async function testPrintStation() {
-    return await fetchJson('http://127.0.0.1:7777/test', { method: 'POST' }, 9000);
+    return await fetchJson(_stationBase + '/test', { method: 'POST' }, 9000);
   }
 
   // 5) Red / WiFi (IP) via Gestiva Print Agent local

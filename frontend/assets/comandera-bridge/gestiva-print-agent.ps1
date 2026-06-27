@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.0.0'
+$AgentVersion = '3.0.1'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -569,7 +569,11 @@ while ($true) {
   try {
     if ($listener.Pending()) {
       $client = $listener.AcceptTcpClient()
+      $client.ReceiveTimeout = 2500
+      $client.SendTimeout = 5000
       $stream = $client.GetStream()
+      $stream.ReadTimeout = 2500
+      $stream.WriteTimeout = 5000
       $req = Read-HttpRequest $stream
       if ($req -eq $null) { Send-Json $stream 400 @{ ok = $false; error = 'bad_request' } }
       else { Handle-Request $stream $req }
