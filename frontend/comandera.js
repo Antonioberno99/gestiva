@@ -526,6 +526,7 @@
             <input type="number" id="cmdr-port" placeholder="9100" value="${cfg.printerPort || 9100}" style="max-width:90px;">
           </div>
           <button type="button" class="btn-test" id="cmdr-save-ip" style="margin:10px 0 0;background:#fff;color:#475569;border-color:#cbd5e1;">Guardar IP e imprimir prueba</button>
+          <button type="button" class="btn-test" id="cmdr-download-pair" style="margin:10px 0 0;background:#fff;color:#64748b;border-color:#e2e8f0;">Modo soporte: descargar vinculacion</button>
           <div class="hint">Para ver la IP, muchas comanderas imprimen un selftest al prenderlas manteniendo apretado FEED. Puerto normal: 9100.</div>
         </div>
 
@@ -723,6 +724,34 @@
         msg(e.message || 'No se pudo guardar o imprimir la prueba.', false);
       } finally {
         saveIpBtn.disabled = false; saveIpBtn.textContent = orig;
+      }
+    };
+    const downloadPairBtn = $('#cmdr-download-pair');
+    if (downloadPairBtn) downloadPairBtn.onclick = async () => {
+      const orig = downloadPairBtn.textContent;
+      downloadPairBtn.disabled = true; downloadPairBtn.textContent = 'Preparando...';
+      try {
+        const data = await createPrintStationToken();
+        const payload = {
+          type: 'gestiva-print-station-pairing',
+          token: data.token,
+          apiUrl: ((window.API_URL || data.apiUrl || '')).replace(/\/$/, ''),
+          restaurant: data.restaurant || '',
+          createdAt: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        const name = (payload.restaurant || 'gestiva').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'gestiva';
+        a.href = URL.createObjectURL(blob);
+        a.download = 'gestiva-print-station-' + name + '.json';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+        msg('Archivo de vinculacion descargado. Usalo solo para soporte tecnico de esta PC.', true);
+      } catch (e) {
+        msg(e.message || 'No pude preparar la vinculacion.', false);
+      } finally {
+        downloadPairBtn.disabled = false; downloadPairBtn.textContent = orig;
       }
     };
     function collect() {
