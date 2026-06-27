@@ -2467,21 +2467,30 @@ route('ajustes', async () => {
       </div>
       <div class="card" style="grid-column:1/-1;">
         <h3 style="margin-bottom:6px;">Datos fiscales (facturación)</h3>
-        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Datos fiscales del restaurante. Aparecen en los comprobantes de venta. Para emitir <b>factura electrónica con ARCA</b>, el certificado se agrega en el próximo paso.</p>
+        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Copiá estos datos de tu <b>Constancia de Inscripción de AFIP/ARCA</b>. Sirven para que la factura salga con los datos del restaurante. Los marcados con <b>*</b> son los necesarios para facturar.</p>
         <div class="grid grid-2" style="gap:12px;">
-          <div class="field"><label>Condición frente al IVA</label>
+          <div class="field"><label>Condición frente al IVA *</label>
             <select id="fCond">
               <option value="">— Elegí —</option>
               <option value="monotributo" ${fiscal.fiscalCondition==='monotributo'?'selected':''}>Monotributo</option>
               <option value="responsable_inscripto" ${fiscal.fiscalCondition==='responsable_inscripto'?'selected':''}>Responsable Inscripto</option>
               <option value="exento" ${fiscal.fiscalCondition==='exento'?'selected':''}>Exento</option>
             </select></div>
-          <div class="field"><label>CUIT</label><input id="fCuit" value="${fiscal.fiscalCuit||''}" placeholder="20123456789"/></div>
-          <div class="field"><label>Razón social</label><input id="fRazon" value="${fiscal.fiscalRazonSocial||''}" placeholder="Nombre legal del negocio"/></div>
-          <div class="field"><label>Domicilio fiscal</label><input id="fDom" value="${fiscal.fiscalDomicilio||''}" placeholder="Calle 123, Ciudad"/></div>
-          <div class="field"><label>Ingresos Brutos</label><input id="fIIBB" value="${fiscal.fiscalIngresosBrutos||''}" placeholder="Nº de IIBB o 'Exento'"/></div>
-          <div class="field"><label>Inicio de actividades</label><input id="fInicio" type="date" value="${(fiscal.fiscalInicioActividades||'').slice(0,10)}"/></div>
-          <div class="field"><label>Punto de venta (factura electrónica)</label><input id="fPtoVta" type="number" min="1" value="${fiscal.fiscalPtoVta||''}" placeholder="Ej: 1"/></div>
+          <div class="field"><label>CUIT *</label><input id="fCuit" value="${fiscal.fiscalCuit||''}" placeholder="20123456789"/></div>
+          <div class="field"><label>Razón social / Nombre *</label><input id="fRazon" value="${fiscal.fiscalRazonSocial||''}" placeholder="Como figura en la constancia"/></div>
+          <div class="field"><label>Domicilio fiscal *</label><input id="fDom" value="${fiscal.fiscalDomicilio||''}" placeholder="Como figura en la constancia"/></div>
+          <div class="field"><label>Punto de venta *</label><input id="fPtoVta" type="number" min="1" value="${fiscal.fiscalPtoVta||''}" placeholder="Ej: 1"/>
+            <span style="font-size:11px;color:var(--tx-lt);display:block;margin-top:4px;">De tu constancia de "Alta de Punto de Venta".</span></div>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bd,#eee);">
+          <div style="font-size:13px;font-weight:600;color:var(--tx-dark);">Opcional — solo si los tenés a mano</div>
+          <p style="font-size:12px;color:var(--tx-mid);margin:2px 0 10px;">No hacen falta para emitir la factura. Si no los tenés, dejalos vacíos.</p>
+          <div class="grid grid-2" style="gap:12px;">
+            <div class="field"><label>Ingresos Brutos</label><input id="fIIBB" value="${fiscal.fiscalIngresosBrutos||''}" placeholder="Nº de IIBB o 'Exento'"/>
+              <span style="font-size:11px;color:var(--tx-lt);display:block;margin-top:4px;">Impuesto provincial (Rentas/ARBA/AGIP). No está en la constancia de AFIP.</span></div>
+            <div class="field"><label>Inicio de actividades</label><input id="fInicio" type="date" value="${(fiscal.fiscalInicioActividades||'').slice(0,10)}"/>
+              <span style="font-size:11px;color:var(--tx-lt);display:block;margin-top:4px;">En tu constancia de AFIP, la fecha que figura en "Actividades".</span></div>
+          </div>
         </div>
         <button class="btn btn-primary btn-block" onclick="saveFiscal()" style="margin-top:8px;">Guardar datos fiscales</button>
       </div>
