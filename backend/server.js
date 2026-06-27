@@ -1667,12 +1667,35 @@ app.put('/api/fiscal-config', async (req, res) => {
 // ⚠️ Seguridad: antes de uso amplio, cifrar fiscal_cert/fiscal_key en la base (son credenciales sensibles).
 app.put('/api/fiscal-cert', async (req, res) => {
   const { cert, key, env } = req.body || {};
-  if (!cert || !key || !String(cert).includes('BEGIN CERTIFICATE') || !String(key).includes('PRIVATE KEY'))
-    return res.status(400).json({ error: 'cert_o_key_invalidos' });
+  if (!cert || !String(cert).includes('BEGIN CERTIFICATE')) return res.status(400).json({ error: 'cert_invalido' });
   const fenv = env === 'homologacion' ? 'homologacion' : 'produccion';
-  await q('UPDATE tenants SET fiscal_cert=$1, fiscal_key=$2, fiscal_env=$3, fiscal_enabled=true WHERE id=$4',
-    [cert, key, fenv, req.tenant.id]);
+  if (key && String(key).includes('PRIVATE KEY')) {
+    await q('UPDATE tenants SET fiscal_cert=$1, fiscal_key=$2, fiscal_env=$3, fiscal_enabled=true WHERE id=$4',
+      [cert, key, fenv, req.tenant.id]);
+    return res.json({ ok: true, env: fenv });
+  }
+  // Sin key en el request: usa la que generó /api/fiscal-csr (debe existir).
+  const r = await q(`UPDATE tenants SET fiscal_cert=$1, fiscal_env=$2, fiscal_enabled=true
+                     WHERE id=$3 AND fiscal_key IS NOT NULL RETURNING id`, [cert, fenv, req.tenant.id]);
+  if (!r.rows[0]) return res.status(400).json({ error: 'falta_la_clave_privada' });
   res.json({ ok: true, env: fenv });
+});
+
+// Generar el pedido de certificado (CSR). Guarda la clave privada en el servidor (el dueño nunca
+// la manipula) y devuelve el CSR para que lo suba a ARCA. Requiere tener cargado el CUIT.
+app.post('/api/fiscal-csr', async (req, res) => {
+  try {
+    const t = req.tenant;
+    const cuit = String(t.fiscal_cuit || '').replace(/\D/g, '');
+    if (cuit.length !== 11) return res.status(400).json({ error: 'carga_primero_el_cuit' });
+    const afip = require('./afip');
+    const { keyPem, csrPem } = afip.generarKeyYCSR(cuit, t.fiscal_razon_social || 'Restaurante');
+    await q('UPDATE tenants SET fiscal_key=$1 WHERE id=$2', [keyPem, t.id]);
+    res.json({ ok: true, csr: csrPem });
+  } catch (e) {
+    console.error('[fiscal-csr]', e?.message || e);
+    res.status(500).json({ error: 'csr_error', detail: e?.message });
+  }
 });
 
 // Emitir una factura electrónica para una venta: pide el CAE a ARCA y arma el QR.

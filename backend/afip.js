@@ -204,6 +204,26 @@ function buildQR({ cuit, ptoVta, tipoCmp, nroCmp, importe, tipoDocRec, nroDocRec
   return 'https://www.afip.gob.ar/fe/qr/?p=' + b64;
 }
 
+// ---------- Generar clave + CSR (para que el dueño no use openssl) ----------
+// Devuelve la clave privada (se guarda en el servidor) y el CSR (lo sube el dueño a ARCA).
+function generarKeyYCSR(cuit, razonSocial) {
+  const c = String(cuit || '').replace(/\D/g, '');
+  const keys = forge.pki.rsa.generateKeyPair(2048);
+  const csr = forge.pki.createCertificationRequest();
+  csr.publicKey = keys.publicKey;
+  csr.setSubject([
+    { shortName: 'C', value: 'AR' },
+    { shortName: 'O', value: (razonSocial || 'Restaurante').slice(0, 60) },
+    { shortName: 'CN', value: 'gestiva' },
+    { name: 'serialNumber', value: 'CUIT ' + c }
+  ]);
+  csr.sign(keys.privateKey, forge.md.sha256.create());
+  return {
+    keyPem: forge.pki.privateKeyToPem(keys.privateKey),
+    csrPem: forge.pki.certificationRequestToPem(csr)
+  };
+}
+
 // ---------- Orquestador: emitir una factura ----------
 // tenant: fila de la tabla tenants (fiscal_*). venta: { docTipo, docNro, condicionReceptor, importeTotal }
 async function emitirFactura(tenant, venta) {
@@ -240,4 +260,4 @@ async function emitirFactura(tenant, venta) {
   };
 }
 
-module.exports = { emitirFactura, wsaaLogin, solicitarCAE, ultimoComprobante, buildQR, letraFactura, cbteTipoFor };
+module.exports = { emitirFactura, generarKeyYCSR, wsaaLogin, solicitarCAE, ultimoComprobante, buildQR, letraFactura, cbteTipoFor };
