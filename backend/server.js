@@ -1663,6 +1663,40 @@ app.put('/api/fiscal-config', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Subir el certificado + clave fiscal (PEM). El restaurante factura con SU certificado.
+// ⚠️ Seguridad: antes de uso amplio, cifrar fiscal_cert/fiscal_key en la base (son credenciales sensibles).
+app.put('/api/fiscal-cert', async (req, res) => {
+  const { cert, key, env } = req.body || {};
+  if (!cert || !key || !String(cert).includes('BEGIN CERTIFICATE') || !String(key).includes('PRIVATE KEY'))
+    return res.status(400).json({ error: 'cert_o_key_invalidos' });
+  const fenv = env === 'homologacion' ? 'homologacion' : 'produccion';
+  await q('UPDATE tenants SET fiscal_cert=$1, fiscal_key=$2, fiscal_env=$3, fiscal_enabled=true WHERE id=$4',
+    [cert, key, fenv, req.tenant.id]);
+  res.json({ ok: true, env: fenv });
+});
+
+// Emitir una factura electrónica para una venta: pide el CAE a ARCA y arma el QR.
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { orderId, docTipo, docNro, condicionReceptor, importeTotal } = req.body || {};
+    if (importeTotal == null || !(Number(importeTotal) > 0)) return res.status(400).json({ error: 'importe_invalido' });
+    const afip = require('./afip'); // carga node-forge solo al facturar
+    const f = await afip.emitirFactura(req.tenant, {
+      docTipo: docTipo || 99, docNro: docNro || 0, condicionReceptor, importeTotal: Number(importeTotal)
+    });
+    const caeVtoDate = f.caeVto ? String(f.caeVto).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : null;
+    const ins = await q(`INSERT INTO invoices (tenant_id, order_id, cbte_tipo, letra, pto_vta, nro, doc_tipo, doc_nro,
+                         importe_neto, importe_iva, importe_total, cae, cae_vto, qr_url, status, raw)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'approved',$15) RETURNING *`,
+      [req.tenant.id, orderId || null, f.cbteTipo, f.letra, f.ptoVta, f.nro, f.docTipo, String(f.docNro),
+       f.impNeto, f.impIVA, f.impTotal, f.cae, caeVtoDate, f.qrUrl, JSON.stringify(f)]);
+    res.json({ ok: true, invoice: ins.rows[0] });
+  } catch (e) {
+    console.error('[invoices]', e?.message || e);
+    res.status(500).json({ error: 'facturacion_error', detail: e?.message || String(e) });
+  }
+});
+
 // ============================================================
 //             PROGRAMA DE VENDEDORES (Partners)
 // ============================================================
