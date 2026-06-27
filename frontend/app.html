@@ -306,7 +306,7 @@
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="gestiva-config.js"></script>
-<script src="comandera.js?v=20260626-print-station-5"></script>
+<script src="comandera.js?v=20260626-usb-station-1"></script>
 <script>
 // ============================================================
 //                   GASTROPANEL APP (API-backed)
@@ -2715,8 +2715,9 @@ function kitchenTicketData(t) {
   };
 }
 function kitchenStationEnabled(cfg) {
-  // Red/WiFi ahora imprime desde Gestiva Print Station, no desde fetch del navegador.
-  return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser' && cfg.method !== 'network');
+  // USB por Windows y Red/WiFi imprimen desde Gestiva Print Station, no desde fetch del navegador.
+  const localAgentHandlesPrint = cfg && (cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName));
+  return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser' && !localAgentHandlesPrint);
 }
 async function seedKitchenStation() {
   let tickets;
@@ -2750,7 +2751,7 @@ async function kitchenStationTick() {
 }
 window.onComanderaSaved = async (cfg) => {
   _kitchenStationSeeded = false;
-  if (cfg && cfg.method === 'network') {
+  if (cfg && (cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName))) {
     toast('Estacion de impresion guardada. El agente local imprime las comandas nuevas.', 'success');
     return;
   }

@@ -12,7 +12,7 @@ echo ============================================
 echo   Gestiva - Instalador de Comandera
 echo ============================================
 echo.
-echo Este instalador configura la impresion de red en esta PC.
+echo Este instalador configura la impresion USB o de red en esta PC.
 echo No requiere Node.js ni programas externos.
 echo.
 
@@ -56,6 +56,6 @@ if errorlevel 1 (
 echo.
 echo Listo: Gestiva Print Agent esta activo.
 echo.
-echo Volve a Gestiva y toca "Conectar automaticamente".
+echo Volve a Gestiva y toca "Detectar Epson USB y probar" o "Conectar automaticamente".
 echo.
 pause
