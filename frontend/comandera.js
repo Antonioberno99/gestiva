@@ -300,56 +300,57 @@
     return Object.assign({ apiUrl }, data);
   }
 
-  function stationWindowHtml(title, text, actions) {
-    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)}</title>
-      <style>body{margin:0;background:#fff7ed;color:#0f172a;font-family:Inter,system-ui,Segoe UI,Arial,sans-serif}.wrap{max-width:560px;margin:0 auto;padding:36px 18px}.card{background:#fff;border:1px solid #fed7aa;border-radius:22px;box-shadow:0 18px 45px #9a34121f;padding:24px}h1{margin:0 0 8px;font-size:24px}.txt{color:#475569;line-height:1.5;margin:0 0 18px}.btn{display:block;text-align:center;text-decoration:none;border:0;border-radius:13px;background:#f97316;color:#fff;font-weight:800;padding:13px 16px;margin:10px 0;font-size:15px}.btn.dark{background:#0f172a}.btn.light{background:#fff;color:#0f172a;border:1px solid #e2e8f0}.small{font-size:12px;color:#94a3b8;line-height:1.45;margin-top:14px}</style>
-      </head><body><div class="wrap"><div class="card"><h1>${escapeHTML(title)}</h1><p class="txt">${escapeHTML(text)}</p>${actions || ''}<p class="small">Gestiva Print Station conecta esta PC con la comandera de red.</p></div></div></body></html>`;
-  }
-
-  function writeStationWindow(win, title, text, actions) {
-    if (!win) return;
-    try {
-      win.document.open();
-      win.document.write(stationWindowHtml(title, text, actions));
-      win.document.close();
-    } catch (e) {}
-  }
-
   async function checkLocalPrintStation() {
     return await fetchJson('http://127.0.0.1:7777/health', null, 2200);
   }
 
-  async function openPrintStationSetup() {
-    const win = window.open('', 'gestiva_print_station');
-    writeStationWindow(win, 'Vinculando esta PC...', 'Gestiva esta preparando la estacion de impresion. Espera unos segundos.', '');
+  function stationMajorVersion(v) {
+    return parseInt(String(v || '0').split('.')[0], 10) || 0;
+  }
+
+  async function ensurePrintStation() {
+    let health;
     try {
-      const data = await createPrintStationToken();
-      const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
-      const qs = new URLSearchParams({
+      health = await checkLocalPrintStation();
+    } catch (e) {
+      throw new Error('No detecto la estacion de impresion en esta PC. Toca "Instalar / actualizar estacion", ejecuta el archivo y despues volve a conectar.');
+    }
+    if (!health || !health.ok || health.mode !== 'station' || stationMajorVersion(health.version) < 3) {
+      throw new Error('Esta PC tiene una version vieja del puente de comandera. Toca "Instalar / actualizar estacion", ejecuta el archivo y despues volve a conectar.');
+    }
+    return health;
+  }
+
+  async function pairPrintStation() {
+    const data = await createPrintStationToken();
+    const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
+    await fetchJson('http://127.0.0.1:7777/pair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         token: data.token,
         apiUrl: publicApiUrl,
         restaurant: data.restaurant || ''
-      });
-      const url = 'http://127.0.0.1:7777/setup#' + qs.toString();
-      try {
-        const health = await checkLocalPrintStation();
-        if (!health || !health.ok) throw new Error('agent_not_ready');
-        if (win) win.location.href = url;
-        else window.location.href = url;
-      } catch (e) {
-        const safeSetupUrl = escapeHTML(url);
-        const actions = `
-          <a class="btn" href="https://www.gestiva.site/assets/comandera-bridge/instalar-gestiva-comandera.bat" download>Instalar / actualizar estacion</a>
-          <a class="btn dark" href="${safeSetupUrl}">Ya instale, abrir asistente</a>
-          <a class="btn light" href="https://www.gestiva.site/app">Volver a Gestiva</a>`;
-        writeStationWindow(win, 'Falta abrir la estacion', 'No detecto Gestiva Print Station en esta PC. Instala o actualiza la estacion, espera que diga listo y despues toca "Ya instale, abrir asistente".', actions);
-      }
-      return data;
-    } catch (e) {
-      const actions = '<a class="btn light" href="https://www.gestiva.site/app">Volver a Gestiva</a>';
-      writeStationWindow(win, 'No pude vincular esta PC', e.message || 'No se pudo crear la vinculacion con Gestiva. Volve a iniciar sesion y proba otra vez.', actions);
-      throw e;
-    }
+      })
+    }, 6000);
+    return data;
+  }
+
+  async function scanPrintStation(port) {
+    return await fetchJson('http://127.0.0.1:7777/scan?port=' + encodeURIComponent(port || 9100), null, 12000);
+  }
+
+  async function savePrintStationPrinter(ip, port) {
+    if (!ip) throw new Error('Falta la IP de la comandera.');
+    return await fetchJson('http://127.0.0.1:7777/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printerIp: ip, printerPort: port || 9100 })
+    }, 5000);
+  }
+
+  async function testPrintStation() {
+    return await fetchJson('http://127.0.0.1:7777/test', { method: 'POST' }, 9000);
   }
 
   // 5) Red / WiFi (IP) via Gestiva Print Agent local
@@ -502,11 +503,17 @@
 
         <div class="panel hide" id="cmdr-net">
           <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Estacion de impresion sin vincular</span></div>
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Forma simple: instala el agente en la PC fija del local, vincula esta PC con Gestiva y el asistente local busca la comandera. Despues imprime sola cada pedido nuevo de cocina.</div>
-          <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion de impresion</a>
-          <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Vincular esta PC y buscar comandera</button>
-          <button type="button" class="btn-test" id="cmdr-local-setup" style="margin:0;background:#fff;color:#475569;border-color:#cbd5e1;">Abrir asistente local</button>
-          <div class="hint">Si Windows pregunta, permiti ejecutar el instalador. La comandera y esta PC tienen que estar en el mismo WiFi o cable de red.</div>
+          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Forma simple: esta PC fija imprime las comandas. La comandera tiene que estar prendida y conectada al mismo router/WiFi.</div>
+          <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion</a>
+          <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Conectar automaticamente</button>
+          <div id="cmdr-scan-results"></div>
+          <label style="margin-top:12px">Si no la encuentra, escribir IP del selftest</label>
+          <div class="row">
+            <input type="text" id="cmdr-ip" placeholder="Ej: 192.168.1.200" value="${escapeHTML(cfg.printerIp)}">
+            <input type="number" id="cmdr-port" placeholder="9100" value="${cfg.printerPort || 9100}" style="max-width:90px;">
+          </div>
+          <button type="button" class="btn-test" id="cmdr-save-ip" style="margin:10px 0 0;background:#fff;color:#475569;border-color:#cbd5e1;">Guardar IP e imprimir prueba</button>
+          <div class="hint">Para ver la IP, muchas comanderas imprimen un selftest al prenderlas manteniendo apretado FEED. Puerto normal: 9100.</div>
         </div>
 
         <div class="panel hide" id="cmdr-browser-note">
@@ -600,7 +607,7 @@
       const needsConnect = (state.method === 'bluetooth' || state.method === 'usb');
       $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
       $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
-      if (state.method === 'network') setNetworkStatus('off', 'Usa el asistente local para vincular esta PC');
+      if (state.method === 'network') setNetworkStatus('off', 'Instala la estacion y toca Conectar automaticamente');
       else showBridgeInstaller(false);
       if (needsConnect) {
         $('#cmdr-connect-hint').textContent = state.method === 'bluetooth'
@@ -629,78 +636,82 @@
     const pairBtn = $('#cmdr-pair');
     if (pairBtn) pairBtn.onclick = async () => {
       const orig = pairBtn.textContent;
-      pairBtn.disabled = true; pairBtn.textContent = 'Vinculando...';
+      const box = $('#cmdr-scan-results');
+      const port = +($('#cmdr-port')?.value || 9100) || 9100;
+      pairBtn.disabled = true; pairBtn.textContent = 'Conectando...';
+      if (box) box.innerHTML = '<div class="hint">Revisando estacion de impresion...</div>';
       try {
         state.method = 'network';
         state.kitchenAuto = true;
         setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true }));
-        await openPrintStationSetup();
-        setNetworkStatus('ok', 'Asistente local abierto');
-        msg('Se abrio el asistente local. Ahi toca Buscar comandera y despues Imprimir prueba.', true);
+        await ensurePrintStation();
+        setNetworkStatus('off', 'Estacion detectada. Vinculando...');
+        await pairPrintStation();
+        setNetworkStatus('off', 'Vinculada. Buscando comandera...');
+        if (box) box.innerHTML = '<div class="hint">Buscando comanderas en la red. Puede tardar unos segundos...</div>';
+        const data = await scanPrintStation(port);
+        const printers = (data && data.printers) || [];
+        if (printers.length === 1) {
+          $('#cmdr-ip').value = printers[0];
+          await savePrintStationPrinter(printers[0], port);
+          await testPrintStation();
+          setNetworkStatus('ok', 'Conectada a ' + printers[0] + ':' + port);
+          if (box) box.innerHTML = '<div class="hint">Comandera encontrada y guardada: ' + escapeHTML(printers[0]) + '</div>';
+          msg('Comandera conectada. Se envio una prueba de impresion.', true);
+        } else if (printers.length > 1) {
+          setNetworkStatus('off', 'Elegir comandera encontrada');
+          if (box) {
+            box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Toca la comandera a usar:</div>' +
+              printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">${escapeHTML(ip)}</button>`).join('');
+            box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
+              try {
+                $('#cmdr-ip').value = b.dataset.ip;
+                await savePrintStationPrinter(b.dataset.ip, port);
+                await testPrintStation();
+                setNetworkStatus('ok', 'Conectada a ' + b.dataset.ip + ':' + port);
+                msg('Comandera conectada. Se envio una prueba de impresion.', true);
+              } catch (e) {
+                msg(e.message || 'No se pudo imprimir la prueba.', false);
+              }
+            });
+          }
+          msg('Encontre varias comanderas. Elegi una para guardar e imprimir prueba.', true);
+        } else {
+          setNetworkStatus('off', 'No se encontro automaticamente');
+          if (box) box.innerHTML = '<div class="hint">No encontre comanderas automaticamente. Escribi la IP del selftest abajo y toca "Guardar IP e imprimir prueba".</div>';
+          msg('No la encontre automaticamente. Carga la IP que imprime el selftest de la comandera.', false);
+        }
       } catch (e) {
-        setNetworkStatus('off', 'No pude abrir el asistente local');
-        msg(e.message || 'No se pudo vincular esta PC.', false);
+        setNetworkStatus('off', 'Falta instalar o actualizar estacion');
+        if (box) box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a conectar.</div>';
+        msg(e.message || 'No se pudo conectar la estacion.', false);
       } finally {
         pairBtn.disabled = false; pairBtn.textContent = orig;
       }
     };
-    const localSetupBtn = $('#cmdr-local-setup');
-    if (localSetupBtn) localSetupBtn.onclick = () => window.open('http://127.0.0.1:7777/setup', 'gestiva_print_station');
-    // Escáner: pide al puente que busque comanderas en la red y las muestra para elegir
-    const checkBtn = $('#cmdr-check');
-    if (checkBtn) checkBtn.onclick = async () => {
-      const orig = checkBtn.textContent;
-      checkBtn.disabled = true; checkBtn.textContent = 'Verificando...';
-      await detectNetworkConnection(false);
-      checkBtn.disabled = false; checkBtn.textContent = orig;
-    };
-    const scanBtn = $('#cmdr-scan');
-    if (scanBtn) scanBtn.onclick = async () => {
-      const base = (($('#cmdr-bridge').value.trim() || cfg.bridgeUrl)).replace(/\/print\/?$/, '').replace(/\/$/, '');
-      const box = $('#cmdr-scan-results');
-      const orig = scanBtn.textContent;
-      scanBtn.disabled = true; scanBtn.textContent = 'Buscando en la red...';
-      box.innerHTML = '<div class="hint">Buscando comanderas... puede tardar unos segundos.</div>';
+    const saveIpBtn = $('#cmdr-save-ip');
+    if (saveIpBtn) saveIpBtn.onclick = async () => {
+      const orig = saveIpBtn.textContent;
+      const ip = ($('#cmdr-ip')?.value || '').trim();
+      const port = +($('#cmdr-port')?.value || 9100) || 9100;
+      saveIpBtn.disabled = true; saveIpBtn.textContent = 'Probando...';
       try {
-        const next = collect();
-        await checkBridge(next);
-        const r = await fetch(base + '/scan?port=' + encodeURIComponent(next.printerPort || 9100));
-        const data = await r.json();
-        const printers = (data && data.printers) || [];
-        if (!printers.length) {
-          box.innerHTML = '<div class="hint">No se encontraron comanderas. Verifica que este prendida y en la misma red que esta PC.</div>';
-        } else {
-          box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Comanderas encontradas. Toca una para usarla:</div>' +
-            printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">${escapeHTML(ip)}</button>`).join('');
-          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
-            $('#cmdr-ip').value = b.dataset.ip;
-            box.querySelectorAll('.cmdr-pick').forEach(x => x.style.borderColor = '#e2e8f0');
-            b.style.borderColor = '#f97316';
-            setNetworkStatus('off', 'Verificando ' + b.dataset.ip + '...');
-            const ok = await detectNetworkConnection(false);
-            if (!ok) return;
-            msg('Comandera elegida: ' + b.dataset.ip + '. Toca Imprimir prueba para confirmar.', true);
-            /*
-          box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Encontradas — tocá una para usarla:</div>' +
-            printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">🖨️ ${escapeHTML(ip)}</button>`).join('');
-          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
-            $('#cmdr-ip').value = b.dataset.ip;
-            box.querySelectorAll('.cmdr-pick').forEach(x => x.style.borderColor = '#e2e8f0');
-            b.style.borderColor = '#f97316';
-            setNetworkStatus('off', 'Verificando ' + b.dataset.ip + '...');
-            const ok = await detectNetworkConnection(false);
-            if (!ok) return;
-            msg('Comandera elegida: ' + b.dataset.ip + '. Tocá "Imprimir una prueba" para confirmar.', true);
-            */
-          });
-        }
+        await ensurePrintStation();
+        await pairPrintStation();
+        await savePrintStationPrinter(ip, port);
+        await testPrintStation();
+        state.method = 'network';
+        state.kitchenAuto = true;
+        setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true, printerIp: ip, printerPort: port, lastNetworkOkAt: new Date().toISOString() }));
+        setNetworkStatus('ok', 'Conectada a ' + ip + ':' + port);
+        msg('Comandera guardada. Se envio una prueba de impresion.', true);
       } catch (e) {
-        box.innerHTML = '<div class="hint">No pude escanear. Verifica que el puente de comandera este abierto en esta PC.</div>';
+        setNetworkStatus('off', 'No se pudo imprimir prueba');
+        msg(e.message || 'No se pudo guardar o imprimir la prueba.', false);
       } finally {
-        scanBtn.disabled = false; scanBtn.textContent = orig;
+        saveIpBtn.disabled = false; saveIpBtn.textContent = orig;
       }
     };
-
     function collect() {
       return {
         method: state.method, paper: state.paper, copies: state.copies, autoprint: state.autoprint, kitchenAuto: state.kitchenAuto,
@@ -725,10 +736,16 @@
       setCfg(collect());
       if (state.method === 'network') {
         try {
-          await openPrintStationSetup();
-          msg('Se abrio el asistente local. Usa "Imprimir prueba" desde esa pantalla.', true);
+          const ip = ($('#cmdr-ip')?.value || '').trim();
+          const port = +($('#cmdr-port')?.value || 9100) || 9100;
+          await ensurePrintStation();
+          await pairPrintStation();
+          await savePrintStationPrinter(ip, port);
+          await testPrintStation();
+          setNetworkStatus('ok', 'Conectada a ' + ip + ':' + port);
+          msg('Prueba enviada. Si salio el ticket, la comandera ya queda conectada.', true);
         } catch (e) {
-          msg(e.message || 'No pude abrir el asistente local.', false);
+          msg(e.message || 'No pude imprimir la prueba.', false);
         }
         return;
       }
@@ -738,7 +755,7 @@
     $('#cmdr-save').onclick = () => { setCfg(collect()); wrap.remove(); if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg()); };
     $('#cmdr-close').onclick = () => wrap.remove();
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
-    if (state.method === 'network' && cfg.printerIp) setTimeout(() => detectNetworkConnection(true), 250);
+    if (state.method === 'network' && cfg.printerIp) setNetworkStatus('ok', 'IP guardada: ' + cfg.printerIp + ':' + (cfg.printerPort || 9100));
   }
 
   // ============================================================

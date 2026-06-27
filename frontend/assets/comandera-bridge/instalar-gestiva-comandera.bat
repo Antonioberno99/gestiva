@@ -55,9 +55,7 @@ if errorlevel 1 (
 
 echo.
 echo Listo: Gestiva Print Agent esta activo.
-echo Se va a abrir el asistente local de conexion.
-start "" "http://127.0.0.1:7777/setup"
 echo.
-echo Si Gestiva esta abierta, volve a Gestiva y toca "Vincular esta PC".
+echo Volve a Gestiva y toca "Conectar automaticamente".
 echo.
 pause
