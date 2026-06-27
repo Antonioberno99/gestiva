@@ -1632,6 +1632,37 @@ app.put('/api/settings', async (req, res) => {
   res.json(publicTenant(r.rows[0]));
 });
 
+// ----- DATOS FISCALES DEL RESTAURANTE (facturación) -----
+// Cada restaurante carga sus datos fiscales. Aparecen en los comprobantes/tickets.
+app.get('/api/fiscal-config', async (req, res) => {
+  const t = req.tenant;
+  res.json({
+    fiscalEnabled: !!t.fiscal_enabled,
+    fiscalCuit: t.fiscal_cuit || '',
+    fiscalCondition: t.fiscal_condition || '',
+    fiscalRazonSocial: t.fiscal_razon_social || '',
+    fiscalDomicilio: t.fiscal_domicilio || '',
+    fiscalPtoVta: t.fiscal_pto_vta || null,
+    fiscalIngresosBrutos: t.fiscal_ingresos_brutos || '',
+    fiscalInicioActividades: t.fiscal_inicio_actividades || null,
+    fiscalEnv: t.fiscal_env || 'homologacion',
+    hasCert: !!(t.fiscal_cert && t.fiscal_key)
+  });
+});
+app.put('/api/fiscal-config', async (req, res) => {
+  const { fiscalCondition, fiscalCuit, fiscalRazonSocial, fiscalDomicilio,
+          fiscalPtoVta, fiscalIngresosBrutos, fiscalInicioActividades } = req.body || {};
+  await q(`UPDATE tenants SET
+      fiscal_condition = $1, fiscal_cuit = $2, fiscal_razon_social = $3,
+      fiscal_domicilio = $4, fiscal_pto_vta = $5, fiscal_ingresos_brutos = $6,
+      fiscal_inicio_actividades = $7
+      WHERE id=$8`,
+    [fiscalCondition || null, fiscalCuit || null, fiscalRazonSocial || null,
+     fiscalDomicilio || null, (fiscalPtoVta ? parseInt(fiscalPtoVta, 10) : null),
+     fiscalIngresosBrutos || null, fiscalInicioActividades || null, req.tenant.id]);
+  res.json({ ok: true });
+});
+
 // ============================================================
 //             PROGRAMA DE VENDEDORES (Partners)
 // ============================================================

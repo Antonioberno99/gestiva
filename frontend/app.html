@@ -2354,6 +2354,8 @@ route('ajustes', async () => {
 
   // Si vino por Google y aún tiene "Mi restaurante" → banner pidiendo que personalice
   const needsSetup = USER.hasGoogle && USER.restaurantName === 'Mi restaurante';
+  let fiscal = {};
+  try { fiscal = await api('/api/fiscal-config'); } catch(e) {}
 
   $('#view').innerHTML = `
     <div class="page-header"><h1 class="page-title">Ajustes</h1></div>
@@ -2403,6 +2405,26 @@ route('ajustes', async () => {
               ? `<a href="checkout.html" class="btn btn-primary btn-block">Reactivar suscripción</a>`
               : `<a href="checkout.html" class="btn btn-secondary btn-block">Gestionar suscripción</a>`)}
       </div>
+      <div class="card" style="grid-column:1/-1;">
+        <h3 style="margin-bottom:6px;">Datos fiscales (facturación)</h3>
+        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Datos fiscales del restaurante. Aparecen en los comprobantes de venta. Para emitir <b>factura electrónica con ARCA</b>, el certificado se agrega en el próximo paso.</p>
+        <div class="grid grid-2" style="gap:12px;">
+          <div class="field"><label>Condición frente al IVA</label>
+            <select id="fCond">
+              <option value="">— Elegí —</option>
+              <option value="monotributo" ${fiscal.fiscalCondition==='monotributo'?'selected':''}>Monotributo</option>
+              <option value="responsable_inscripto" ${fiscal.fiscalCondition==='responsable_inscripto'?'selected':''}>Responsable Inscripto</option>
+              <option value="exento" ${fiscal.fiscalCondition==='exento'?'selected':''}>Exento</option>
+            </select></div>
+          <div class="field"><label>CUIT</label><input id="fCuit" value="${fiscal.fiscalCuit||''}" placeholder="20123456789"/></div>
+          <div class="field"><label>Razón social</label><input id="fRazon" value="${fiscal.fiscalRazonSocial||''}" placeholder="Nombre legal del negocio"/></div>
+          <div class="field"><label>Domicilio fiscal</label><input id="fDom" value="${fiscal.fiscalDomicilio||''}" placeholder="Calle 123, Ciudad"/></div>
+          <div class="field"><label>Ingresos Brutos</label><input id="fIIBB" value="${fiscal.fiscalIngresosBrutos||''}" placeholder="Nº de IIBB o 'Exento'"/></div>
+          <div class="field"><label>Inicio de actividades</label><input id="fInicio" type="date" value="${(fiscal.fiscalInicioActividades||'').slice(0,10)}"/></div>
+          <div class="field"><label>Punto de venta (factura electrónica)</label><input id="fPtoVta" type="number" min="1" value="${fiscal.fiscalPtoVta||''}" placeholder="Ej: 1"/></div>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="saveFiscal()" style="margin-top:8px;">Guardar datos fiscales</button>
+      </div>
     </div>`;
 });
 async function cancelSubscription() {
@@ -2424,6 +2446,20 @@ async function saveSettings() {
     });
     USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
     refreshSubPill(); toast('Cambios guardados','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+async function saveFiscal() {
+  try {
+    await api('/api/fiscal-config', { method:'PUT', body: JSON.stringify({
+      fiscalCondition: $('#fCond').value,
+      fiscalCuit: $('#fCuit').value.trim().replace(/[^0-9]/g,''),
+      fiscalRazonSocial: $('#fRazon').value.trim(),
+      fiscalDomicilio: $('#fDom').value.trim(),
+      fiscalIngresosBrutos: $('#fIIBB').value.trim(),
+      fiscalInicioActividades: $('#fInicio').value || null,
+      fiscalPtoVta: $('#fPtoVta').value || null
+    })});
+    toast('Datos fiscales guardados','success');
   } catch(e) { toast(e.message,'error'); }
 }
 
