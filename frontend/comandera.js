@@ -25,6 +25,7 @@
     printerIp: '',         // IP de la impresora de red
     printerPort: 9100      // puerto ESC/POS estándar
   };
+  const DEFAULT_API_URL = 'https://gestiva-backend.onrender.com';
 
   function getCfg() {
     try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); }
@@ -289,7 +290,7 @@
   async function createPrintStationToken() {
     const token = localStorage.getItem('gestiva_token');
     if (!token) throw new Error('Tenes que iniciar sesion en Gestiva para vincular esta PC.');
-    const apiUrl = (window.API_URL || '').replace(/\/$/, '');
+    const apiUrl = (window.API_URL || DEFAULT_API_URL).replace(/\/$/, '');
     if (!apiUrl) throw new Error('No encontre la URL del backend de Gestiva.');
     const r = await fetch(apiUrl + '/api/print-station/token', {
       method: 'POST',
@@ -336,7 +337,7 @@
 
   async function pairPrintStation() {
     const data = await createPrintStationToken();
-    const publicApiUrl = ((window.API_URL || data.apiUrl || '')).replace(/\/$/, '');
+    const publicApiUrl = ((window.API_URL || data.apiUrl || DEFAULT_API_URL)).replace(/\/$/, '');
     await fetchJson(_stationBase + '/pair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -735,7 +736,7 @@
         const payload = {
           type: 'gestiva-print-station-pairing',
           token: data.token,
-          apiUrl: ((window.API_URL || data.apiUrl || '')).replace(/\/$/, ''),
+          apiUrl: ((window.API_URL || data.apiUrl || DEFAULT_API_URL)).replace(/\/$/, ''),
           restaurant: data.restaurant || '',
           createdAt: new Date().toISOString()
         };
