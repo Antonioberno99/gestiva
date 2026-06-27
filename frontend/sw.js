@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-equipo-v1';
+const CACHE_NAME = 'gestiva-equipo-v2-print-station';
 const APP_SHELL = [
   './mozo.html',
   './gestiva-config.js',
