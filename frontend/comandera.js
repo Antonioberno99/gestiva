@@ -503,9 +503,9 @@
         #cmdr-modal .panel{margin-top:12px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}
         #cmdr-modal .panel.hide{display:none;}
         #cmdr-modal .status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:10px;}
-        #cmdr-modal .dot{width:9px;height:9px;border-radius:50%;background:#cbd5e1;flex:none;}
+        #cmdr-modal .dot{width:9px;height:9px;border-radius:50%;background:#ef4444;flex:none;}
         #cmdr-modal .status.ok .dot{background:#10b981;} #cmdr-modal .status.ok{color:#047857;}
-        #cmdr-modal .status.off{color:#64748b;}
+        #cmdr-modal .status.off{color:#b91c1c;}
         #cmdr-modal .btn-connect{width:100%;padding:13px;border:none;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;}
         #cmdr-modal .seg{display:flex;gap:6px;flex-wrap:wrap;}
         #cmdr-modal .seg button{flex:1;min-width:64px;padding:10px;border:1px solid #e2e8f0;background:#fff;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;color:#475569;font-family:inherit;}
