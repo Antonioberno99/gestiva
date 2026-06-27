@@ -2494,6 +2494,28 @@ route('ajustes', async () => {
         </div>
         <button class="btn btn-primary btn-block" onclick="saveFiscal()" style="margin-top:8px;">Guardar datos fiscales</button>
       </div>
+      <div class="card" style="grid-column:1/-1;">
+        <h3 style="margin-bottom:6px;">Certificado ARCA</h3>
+        <p style="font-size:13px;color:var(--tx-mid);margin-bottom:12px;">El certificado digital es lo que le permite a tu restaurante emitir facturas con ARCA. ${fiscal.hasCert ? `<b style="color:var(--green);">✓ Cargado</b> · entorno: ${fiscal.fiscalEnv==='homologacion'?'Homologación (pruebas)':'Producción (facturas reales)'}.` : '<b style="color:var(--red);">Todavía no cargaste el certificado.</b>'}</p>
+        <div class="field"><label>Certificado (.crt / .pem)</label>
+          <textarea id="fCert" rows="4" placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style="font-family:monospace;font-size:11px;"></textarea></div>
+        <div class="field"><label>Clave privada <span style="color:var(--tx-lt);font-weight:400;">(solo si la generaste por fuera)</span></label>
+          <textarea id="fKey" rows="3" placeholder="-----BEGIN PRIVATE KEY-----  (dejala vacía si generás el pedido acá abajo)" style="font-family:monospace;font-size:11px;"></textarea>
+          <span style="font-size:11px;color:var(--tx-lt);display:block;margin-top:4px;">Tu clave privada no se comparte con nadie. Si generás el pedido (CSR) con el botón de abajo, la clave la guardamos nosotros y dejás este campo vacío.</span></div>
+        <div class="field" style="max-width:300px;"><label>Entorno</label>
+          <select id="fEnv">
+            <option value="produccion" ${(fiscal.hasCert && fiscal.fiscalEnv==='homologacion') ? '' : 'selected'}>Producción (facturas reales)</option>
+            <option value="homologacion" ${(fiscal.hasCert && fiscal.fiscalEnv==='homologacion') ? 'selected' : ''}>Homologación (pruebas)</option>
+          </select></div>
+        <button class="btn btn-primary btn-block" onclick="saveCert()" style="margin-top:4px;">Guardar certificado</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--bd,#eee);">
+          <div style="font-size:13px;font-weight:600;">¿No tenés certificado todavía?</div>
+          <p style="font-size:12px;color:var(--tx-mid);margin:4px 0 8px;">1) Guardá tus datos fiscales (con el CUIT) arriba. 2) Generá el pedido. 3) Subílo en ARCA (Administración de Certificados Digitales). 4) Pegá arriba el certificado que te da ARCA y dejá la clave vacía.</p>
+          <button class="btn btn-secondary btn-sm" onclick="genCSR()">Generar pedido de certificado (CSR)</button>
+          <textarea id="csrOut" rows="4" readonly placeholder="Acá va a aparecer el pedido (CSR) para subir a ARCA." style="margin-top:8px;font-family:monospace;font-size:11px;display:none;"></textarea>
+          <button class="btn btn-secondary btn-sm" id="csrCopyBtn" onclick="copyCSR()" style="margin-top:6px;display:none;">Copiar CSR</button>
+        </div>
+      </div>
     </div>`;
 });
 async function cancelSubscription() {
@@ -2530,6 +2552,37 @@ async function saveFiscal() {
     })});
     toast('Datos fiscales guardados','success');
   } catch(e) { toast(e.message,'error'); }
+}
+async function genCSR() {
+  try {
+    const r = await api('/api/fiscal-csr', { method:'POST' });
+    if (r && r.csr) {
+      const out = $('#csrOut'); out.style.display=''; out.value = r.csr;
+      $('#csrCopyBtn').style.display='';
+      toast('Pedido (CSR) generado. Copialo y subílo a ARCA.','success');
+    }
+  } catch(e) {
+    toast(e.message==='carga_primero_el_cuit' ? 'Primero guardá tu CUIT en los datos fiscales' : (e.message||'No se pudo generar el CSR'),'error');
+  }
+}
+function copyCSR() {
+  const out = $('#csrOut'); if (!out) return;
+  out.select();
+  if (navigator.clipboard) navigator.clipboard.writeText(out.value).then(()=>toast('CSR copiado','success')).catch(()=>{});
+}
+async function saveCert() {
+  const cert = $('#fCert').value.trim();
+  const key = $('#fKey').value.trim();
+  const env = $('#fEnv').value;
+  if (!cert.includes('BEGIN CERTIFICATE')) return toast('Pegá el certificado (.crt) que te dio ARCA','error');
+  try {
+    await api('/api/fiscal-cert', { method:'PUT', body: JSON.stringify({ cert, key: key||undefined, env })});
+    $('#fKey').value=''; // no dejar la clave privada en pantalla
+    toast('Certificado guardado ✓ Ya podés facturar','success');
+    navigate(); // refresca el estado (✓ Cargado)
+  } catch(e) {
+    toast(e.message==='falta_la_clave_privada' ? 'Falta la clave privada: pegala arriba, o generá el pedido (CSR) acá mismo' : (e.message||'No se pudo guardar el certificado'),'error');
+  }
 }
 
 // ── Carta QR: modo (manual / PDF), subida de PDF e impresión del QR ──
