@@ -277,6 +277,46 @@ const DEMO_EMAIL = 'demo@gestiva.app';
 const DEMO_PIN = '1234';
 const DEMO_WAITER_ID = 'demo-waiter-1';
 
+
+function isEditableTarget(el) {
+  return !!(el && el.closest && el.closest('input, textarea, select, [contenteditable="true"], [contenteditable]'));
+}
+function hasActiveTextSelection() {
+  const active = document.activeElement;
+  if (isEditableTarget(active) && typeof active.selectionStart === 'number') {
+    return active.selectionStart !== active.selectionEnd;
+  }
+  const sel = window.getSelection ? window.getSelection() : null;
+  return !!(sel && String(sel).trim().length > 0);
+}
+(function installSelectionGuard() {
+  let down = null;
+  let selectingText = false;
+  let suppressClickUntil = 0;
+  document.addEventListener('pointerdown', (e) => {
+    down = { x: e.clientX, y: e.clientY, target: e.target };
+    selectingText = false;
+  }, true);
+  document.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    const moved = Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 7;
+    if (moved && (isEditableTarget(down.target) || isEditableTarget(e.target))) selectingText = true;
+  }, true);
+  document.addEventListener('pointerup', () => {
+    if (selectingText || hasActiveTextSelection()) suppressClickUntil = Date.now() + 220;
+    down = null;
+    selectingText = false;
+  }, true);
+  document.addEventListener('click', (e) => {
+    if (Date.now() > suppressClickUntil) return;
+    if (isEditableTarget(e.target)) return;
+    const actionable = e.target.closest && e.target.closest('a, button, [onclick]');
+    if (!actionable) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+})();
+
 function demoRead(key, fallback) {
   try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
   catch(e) { return fallback; }
@@ -796,7 +836,7 @@ if ('serviceWorker' in navigator) {
     reloadingForUpdate = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js?v=20260701-item-notes').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20260701-selection-guard').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {
