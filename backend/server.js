@@ -256,6 +256,12 @@ function publicTenant(t) {
   };
 }
 
+
+function itemQty(items) {
+  if (!Array.isArray(items)) return 0;
+  return items.reduce((sum, it) => sum + (Number(it && it.qty) || 0), 0);
+}
+
 function publicWaiter(w) {
   return {
     id: w.id,
@@ -952,7 +958,14 @@ app.post('/waiter/open-tables', requireWaiterAuth, async (req, res) => {
   if (!table) return res.status(404).json({ error: 'table_not_found' });
 
   const current = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
-  if (current && current.waiter_id !== req.waiter.id) return res.status(409).json({ error: 'table_taken' });
+  if (current && current.waiter_id !== req.waiter.id && itemQty(current.items) > 0) {
+    return res.status(409).json({ error: 'table_taken' });
+  }
+  if (current && current.waiter_id !== req.waiter.id && itemQty(current.items) === 0) {
+    const reassigned = await q('UPDATE open_tables SET waiter_id=$1 WHERE table_id=$2 AND tenant_id=$3 RETURNING *',
+      [req.waiter.id, tableId, req.tenant.id]);
+    return res.json(reassigned.rows[0]);
+  }
   if (current) return res.json(current);
 
   const r = await q(`INSERT INTO open_tables (table_id, tenant_id, waiter_id, items, opened_at)
@@ -980,9 +993,9 @@ app.put('/waiter/open-tables/:tid', requireWaiterAuth, async (req, res) => {
   if (!Array.isArray(items)) return res.status(400).json({ error: 'invalid_items' });
   const ot = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.tid, req.tenant.id])).rows[0];
   if (!ot) return res.status(404).json({ error: 'table_not_open' });
-  if (ot.waiter_id !== req.waiter.id) return res.status(403).json({ error: 'table_assigned_to_other_waiter' });
-  const r = await q(`UPDATE open_tables SET items=$1 WHERE table_id=$2 AND tenant_id=$3 RETURNING *`,
-    [JSON.stringify(items), req.params.tid, req.tenant.id]);
+  if (ot.waiter_id !== req.waiter.id && itemQty(ot.items) > 0) return res.status(403).json({ error: 'table_assigned_to_other_waiter' });
+  const r = await q(`UPDATE open_tables SET items=$1, waiter_id=$2 WHERE table_id=$3 AND tenant_id=$4 RETURNING *`,
+    [JSON.stringify(items), req.waiter.id, req.params.tid, req.tenant.id]);
   res.json(r.rows[0]);
 });
 
