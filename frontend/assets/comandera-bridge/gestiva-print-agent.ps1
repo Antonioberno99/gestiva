@@ -103,6 +103,17 @@ function Get-LocalSubnets {
   return @($out)
 }
 
+# Nombre de la WiFi a la que esta conectada esta PC (para avisar si esta en la red equivocada)
+function Get-CurrentWifi {
+  try {
+    $out = netsh wlan show interfaces 2>$null
+    foreach ($line in $out) {
+      if ($line -match '^\s*SSID\s*:\s*(.+?)\s*$') { return $Matches[1].Trim() }
+    }
+  } catch {}
+  return ''
+}
+
 function Connect-Tcp($Ip, $Port, $TimeoutMs) {
   $client = New-Object System.Net.Sockets.TcpClient
   try {
@@ -788,7 +799,7 @@ function Handle-Request($Stream, $Req) {
   if ($Req.Method -eq 'GET' -and $path -eq '/scan') {
     $p = if ($query.ContainsKey('port')) { [int]$query['port'] } else { 9100 }
     $scan = Scan-Printers $p
-    Send-Json $Stream 200 @{ ok = $true; port = $p; subnets = $scan.subnets; printers = $scan.printers; candidates = $scan.candidates; scannedPorts = $scan.scannedPorts }
+    Send-Json $Stream 200 @{ ok = $true; port = $p; wifi = (Get-CurrentWifi); subnets = $scan.subnets; printers = $scan.printers; candidates = $scan.candidates; scannedPorts = $scan.scannedPorts }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/test') {

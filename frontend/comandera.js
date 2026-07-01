@@ -832,15 +832,25 @@
           setNetworkStatus('off', 'No se encontro automaticamente');
           setMainStatus('off', 'Sin comandera conectada');
           if (box) {
+            const wifi = (data && data.wifi) ? String(data.wifi).trim() : '';
+            const subnet = (data && data.subnets && data.subnets[0]) ? (data.subnets[0] + '.x') : '';
+            const dondeEstoy = wifi
+              ? ('la WiFi <strong>' + escapeHTML(wifi) + '</strong>' + (subnet ? ' (red ' + escapeHTML(subnet) + ')' : ''))
+              : (subnet ? ('la red <strong>' + escapeHTML(subnet) + '</strong>') : 'esta red');
             const visible = candidates
               .slice(0, 8)
               .map(c => '<div class="hint" style="margin:6px 0;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">Equipo visible: <strong>' + escapeHTML(c.ip) + '</strong> - puertos ' + escapeHTML((c.ports || []).join(', ')) + (c.likelyPrinter ? ' - posible impresora' : '') + '</div>')
               .join('');
-            box.innerHTML = '<div class="hint">No encontre una comandera con puerto ESC/POS 9100 abierto. Si la Epson esta prendida, probablemente esta en otra red/WiFi o no tiene Ethernet configurado.</div>' +
-              (visible ? '<div class="hint" style="margin-top:8px;">Diagnostico de red:</div>' + visible : '') +
-              '<div class="hint">Escribi la IP del selftest abajo y toca "Guardar IP e imprimir prueba".</div>';
+            box.innerHTML =
+              '<div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:12px 13px;border-radius:12px;line-height:1.5;font-size:13px;">' +
+                '<strong>No hay comanderas en ' + dondeEstoy + '.</strong><br>' +
+                'Si tus comanderas ya imprimen con otro sistema, casi seguro <strong>esta PC esta conectada a otra WiFi que las comanderas</strong>.<br><br>' +
+                '<strong>&rarr; Conecta esta PC a la misma WiFi/red que las comanderas</strong> y volve a tocar &laquo;Conectar automaticamente&raquo;.' +
+              '</div>' +
+              (visible ? '<div class="hint" style="margin-top:10px;">Otros equipos que vi en la red (por las dudas):</div>' + visible : '') +
+              '<div class="hint" style="margin-top:8px;">Si sabes la IP de la comandera (la que imprime el selftest), cargala abajo y toca &laquo;Guardar IP e imprimir prueba&raquo;.</div>';
           }
-          msg('No la encontre automaticamente. Carga la IP que imprime el selftest de la comandera.', false);
+          msg('No hay comanderas en tu red actual. Puede que esta PC este en otra WiFi que las comanderas.', false);
         }
       } catch (e) {
         setNetworkStatus('off', 'Falta instalar o actualizar estacion');
