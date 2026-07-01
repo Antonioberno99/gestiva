@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-equipo-v6-selection-guard';
+const CACHE_NAME = 'gestiva-equipo-v7-product-segments';
 const APP_SHELL = [
   './mozo.html',
   './gestiva-config.js',

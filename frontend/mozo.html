@@ -90,6 +90,8 @@
   .tab { white-space:nowrap; min-height:40px; padding:9px 13px; border-radius:999px; border:1px solid var(--line); background:#fff; font-weight:800; color:var(--muted); }
   .tab.on { background:var(--or); color:#fff; border-color:var(--or); }
   .product-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+  .prod-section-title { grid-column:1/-1; display:flex; align-items:center; gap:8px; margin:8px 0 0; color:var(--ink); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+  .prod-section-title::after { content:''; height:1px; background:var(--line); flex:1; }
   .product { min-height:118px; background:#fff; border:1px solid var(--line); border-radius:16px; padding:8px; text-align:left; display:flex; flex-direction:column; gap:5px; box-shadow:0 6px 14px rgba(15,23,42,.04); }
   .product .pmedia { width:100%; aspect-ratio:1.6/1; border-radius:12px; overflow:hidden; background:var(--soft); display:grid; place-items:center; margin-bottom:1px; }
   .product .pmedia img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -267,6 +269,22 @@ function pVisual(p) {
   const tone = _hash(p?.cat || p?.name || '') % 7;
   return `<div class="pmedia"><div class="pmedia-fb cat-tone-${tone}">${init}</div></div>`;
 }
+function productSegmentLabel(p, currentCat = 'todos') {
+  const cat = (p?.cat || 'Sin categoria').trim();
+  const segment = (p?.segment || '').trim();
+  if (currentCat === 'todos') return segment ? cat + ' / ' + segment : cat + ' / General';
+  return segment || 'General';
+}
+function groupProductsBySegment(products, currentCat = 'todos') {
+  const groups = [];
+  const index = new Map();
+  (products || []).forEach((p) => {
+    const label = productSegmentLabel(p, currentCat);
+    if (!index.has(label)) { index.set(label, groups.length); groups.push({ label, items: [] }); }
+    groups[index.get(label)].items.push(p);
+  });
+  return groups;
+}
 const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
 const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
@@ -333,10 +351,10 @@ function demoId(prefix) {
 function waiterDemoSeed() {
   if (!localStorage.getItem('gestiva_demo_products')) {
     demoWrite('gestiva_demo_products', [
-      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, available:true },
-      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, available:true },
-      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, available:true },
-      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, available:true }
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', segment:'Platos principales', price:5000, available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', segment:'Platos principales', price:7000, available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', segment:'Cocteleria', price:3500, available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', segment:'Sin alcohol', price:1800, available:true }
     ]);
   }
   if (!localStorage.getItem('gestiva_demo_tables')) {
@@ -640,11 +658,15 @@ function renderOrder() {
   const cats = ['todos', ...new Set(state.products.map(p => p.cat).filter(Boolean))];
   $('#catTabs').innerHTML = cats.map(c => `<button class="tab ${state.cat===c?'on':''}" onclick="setCat('${c}')">${c}</button>`).join('');
   const filtered = state.products.filter(p => state.cat === 'todos' || p.cat === state.cat);
-  $('#productGrid').innerHTML = filtered.map(p => `<button class="product" onclick="addItem('${p.id}')">
-    ${pVisual(p)}
-    <span class="name">${p.name}</span>
-    <span class="price">${money(p.price)}</span>
-  </button>`).join('');
+  $('#productGrid').innerHTML = groupProductsBySegment(filtered, state.cat).map(group => `
+    <div class="prod-section-title">${h(group.label)}</div>
+    ${group.items.map(p => `<button class="product" onclick="addItem('${p.id}')">
+      ${pVisual(p)}
+      <span class="name">${h(p.name)}</span>
+      <span class="meta">${h(p.cat || '')}${p.segment ? ' / ' + h(p.segment) : ''}</span>
+      <span class="price">${money(p.price)}</span>
+    </button>`).join('')}
+  `).join('');
   renderCart();
 }
 
@@ -836,7 +858,7 @@ if ('serviceWorker' in navigator) {
     reloadingForUpdate = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js?v=20260701-selection-guard').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20260701-product-segments').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

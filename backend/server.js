@@ -283,14 +283,14 @@ function computeDaysLeft(t) {
 }
 
 const DEFAULT_PRODUCTS = [
-  { cat: 'Comida', name: 'Plato 1', price: 5000 },
-  { cat: 'Comida', name: 'Plato 2', price: 7000 },
-  { cat: 'Comida', name: 'Plato 3', price: 9000 },
-  { cat: 'Tragos', name: 'Trago 1', price: 3500 },
-  { cat: 'Tragos', name: 'Trago 2', price: 4500 },
-  { cat: 'Bebidas', name: 'Bebida 1', price: 1800 },
-  { cat: 'Bebidas', name: 'Bebida 2', price: 2500 },
-  { cat: 'Postres', name: 'Postre 1', price: 3000 }
+  { cat: 'Comida', segment: 'Platos principales', name: 'Plato 1', price: 5000 },
+  { cat: 'Comida', segment: 'Platos principales', name: 'Plato 2', price: 7000 },
+  { cat: 'Comida', segment: 'Entradas', name: 'Plato 3', price: 9000 },
+  { cat: 'Tragos', segment: 'Cocteleria', name: 'Trago 1', price: 3500 },
+  { cat: 'Tragos', segment: 'Cocteleria', name: 'Trago 2', price: 4500 },
+  { cat: 'Bebidas', segment: 'Sin alcohol', name: 'Bebida 1', price: 1800 },
+  { cat: 'Bebidas', segment: 'Sin alcohol', name: 'Bebida 2', price: 2500 },
+  { cat: 'Postres', segment: 'Dulces', name: 'Postre 1', price: 3000 }
 ];
 
 async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
@@ -300,9 +300,9 @@ async function seedDefaultProducts(tenantId, { onlyIfEmpty = true } = {}) {
   }
 
   for (const p of DEFAULT_PRODUCTS) {
-    await q(`INSERT INTO products (tenant_id, name, cat, price, available)
-             VALUES ($1,$2,$3,$4,true)`,
-      [tenantId, p.name, p.cat, p.price]);
+    await q(`INSERT INTO products (tenant_id, name, cat, segment, price, available)
+             VALUES ($1,$2,$3,$4,$5,true)`,
+      [tenantId, p.name, p.cat, p.segment || null, p.price]);
   }
   return DEFAULT_PRODUCTS.length;
 }
@@ -904,7 +904,7 @@ app.get('/waiter/bootstrap', requireWaiterAuth, async (req, res) => {
   const [tables, openTables, products, activeShift, recentShifts] = await Promise.all([
     q('SELECT * FROM tables WHERE tenant_id=$1 ORDER BY num', [req.tenant.id]),
     q('SELECT * FROM open_tables WHERE tenant_id=$1', [req.tenant.id]),
-    q('SELECT * FROM products WHERE tenant_id=$1 AND available=true ORDER BY cat, name', [req.tenant.id]),
+    q('SELECT * FROM products WHERE tenant_id=$1 AND available=true ORDER BY cat, segment NULLS FIRST, name', [req.tenant.id]),
     q(`SELECT * FROM staff_shifts
        WHERE tenant_id=$1 AND waiter_id=$2 AND ended_at IS NULL
        ORDER BY started_at DESC LIMIT 1`, [req.tenant.id, req.waiter.id]),
@@ -1033,7 +1033,7 @@ app.post('/api/print-station/token', async (req, res) => {
 // ----- PRODUCTS -----
 app.get('/api/products', async (req, res) => {
   await seedDefaultProducts(req.tenant.id);
-  const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, name', [req.tenant.id]);
+  const r = await q('SELECT * FROM products WHERE tenant_id=$1 ORDER BY cat, segment NULLS FIRST, name', [req.tenant.id]);
   res.json(r.rows);
 });
 app.post('/api/products', async (req, res) => {

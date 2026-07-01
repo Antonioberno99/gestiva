@@ -148,6 +148,8 @@
   .prod-name { font-weight:600; font-size:13px; line-height:1.25; }
   .prod-cat { font-size:10px; color:var(--tx-lt); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
   .prod-price { font-weight:700; color:var(--or-dk); margin-top:auto; font-size:14px; }
+  .prod-section-title { grid-column:1/-1; display:flex; align-items:center; gap:10px; margin:8px 0 0; color:var(--tx-dark); font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; }
+  .prod-section-title::after { content:''; height:1px; background:var(--border-soft); flex:1; }
   /* Paleta de fondos por categoría inicial */
   .cat-tone-0 { background:#fef3c7; color:#b45309; }
   .cat-tone-1 { background:#dbeafe; color:#1d4ed8; }
@@ -323,6 +325,22 @@ const fmt = (n) => CURRENCY() + ' ' + Math.round(n || 0).toLocaleString('es-AR')
 // Visual minimalista del producto: foto si existe, sino tile coloreado con inicial.
 // Hash simple del nombre o categoría para mantener consistencia de color.
 function hashCode(s) { let h = 0; for (let i=0;i<s.length;i++) h = (h<<5) - h + s.charCodeAt(i), h |= 0; return Math.abs(h); }
+function productSegmentLabel(p, currentCat = 'todos') {
+  const cat = (p?.cat || 'Sin categoria').trim();
+  const segment = (p?.segment || '').trim();
+  if (currentCat === 'todos') return segment ? cat + ' / ' + segment : cat + ' / General';
+  return segment || 'General';
+}
+function groupProductsBySegment(products, currentCat = 'todos') {
+  const groups = [];
+  const index = new Map();
+  (products || []).forEach((p) => {
+    const label = productSegmentLabel(p, currentCat);
+    if (!index.has(label)) { index.set(label, groups.length); groups.push({ label, items: [] }); }
+    groups[index.get(label)].items.push(p);
+  });
+  return groups;
+}
 function productVisual(p, size = 'md') {
   const sizes = { sm: '32px', md: '56px', lg: '100%' };
   const dim = sizes[size];
@@ -352,11 +370,11 @@ function demoId(prefix) { return prefix + '-' + Date.now() + '-' + Math.random()
 function demoSeed() {
   if (!localStorage.getItem('gestiva_demo_products')) {
     demoWrite('gestiva_demo_products', [
-      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', price:5000, available:true },
-      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', price:7000, available:true },
-      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', price:3500, available:true },
-      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', price:1800, available:true },
-      { id:'demo-prod-5', name:'Postre 1', cat:'Postres', price:3000, available:true }
+      { id:'demo-prod-1', name:'Plato 1', cat:'Comida', segment:'Platos principales', price:5000, available:true },
+      { id:'demo-prod-2', name:'Plato 2', cat:'Comida', segment:'Platos principales', price:7000, available:true },
+      { id:'demo-prod-3', name:'Trago 1', cat:'Tragos', segment:'Cocteleria', price:3500, available:true },
+      { id:'demo-prod-4', name:'Bebida 1', cat:'Bebidas', segment:'Sin alcohol', price:1800, available:true },
+      { id:'demo-prod-5', name:'Postre 1', cat:'Postres', segment:'Dulces', price:3000, available:true }
     ]);
   }
   if (!localStorage.getItem('gestiva_demo_tables')) {
@@ -1126,18 +1144,21 @@ function renderTableMenu() {
   const cats = ['todos', ...new Set(CURRENT_PRODUCTS.map(p => p.cat))];
   $('#catChips').innerHTML = cats.map(c => `<button class="chip ${c===CURRENT_CAT?'active':''}" onclick="setCat('${c}')">${c}</button>`).join('');
   const filtered = CURRENT_PRODUCTS.filter(p => p.available && (CURRENT_CAT==='todos' || p.cat===CURRENT_CAT));
-  $('#prodGrid').innerHTML = filtered.map(p => {
-    const lowStock = p.stock !== null && p.stock !== undefined && p.stock <= (p.low_stock_alert||5);
-    const outOfStock = p.stock === 0;
-    return `
-    <button class="prod-card${outOfStock?' unavailable':''}" onclick="${outOfStock?'':'addItem(\''+p.id+'\')'}">
-      ${productVisual(p, 'lg')}
-      <div class="prod-cat">${p.cat}</div>
-      <div class="prod-name">${p.name}</div>
-      <div class="prod-price">${fmt(p.price)}</div>
-      ${p.stock !== null && p.stock !== undefined ? `<div style="font-size:11px;color:${outOfStock?'var(--red)':lowStock?'var(--yellow)':'var(--tx-lt)'};font-weight:600;">${outOfStock?'AGOTADO':'Stock: '+p.stock}</div>` : ''}
-    </button>`;
-  }).join('');
+  $('#prodGrid').innerHTML = groupProductsBySegment(filtered, CURRENT_CAT).map(group => `
+    <div class="prod-section-title">${group.label}</div>
+    ${group.items.map(p => {
+      const lowStock = p.stock !== null && p.stock !== undefined && p.stock <= (p.low_stock_alert||5);
+      const outOfStock = p.stock === 0;
+      return `
+      <button class="prod-card${outOfStock?' unavailable':''}" onclick="${outOfStock?'':'addItem(\''+p.id+'\')'}">
+        ${productVisual(p, 'lg')}
+        <div class="prod-cat">${p.cat}${p.segment?' / '+p.segment:''}</div>
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-price">${fmt(p.price)}</div>
+        ${p.stock !== null && p.stock !== undefined ? `<div style="font-size:11px;color:${outOfStock?'var(--red)':lowStock?'var(--yellow)':'var(--tx-lt)'};font-weight:600;">${outOfStock?'AGOTADO':'Stock: '+p.stock}</div>` : ''}
+      </button>`;
+    }).join('')}
+  `).join('');
 
   const w = CURRENT_WAITERS.find(w => w.id === CURRENT_WAITER_ID);
   const prodMap = new Map(CURRENT_PRODUCTS.map(p => [p.id, p]));
@@ -1709,12 +1730,16 @@ function renderPedidoMenu(prodMap) {
   $('#pCatChips').innerHTML = cats.map(c => `<button class="chip ${c===window.__pCAT?'active':''}" onclick="window.__pCAT='${c}';renderPedidoMenu(window.__prodMap);">${c}</button>`).join('');
   window.__prodMap = prodMap;
   const filtered = products.filter(p => p.available && (window.__pCAT==='todos' || p.cat===window.__pCAT));
-  $('#pProdGrid').innerHTML = filtered.map(p => `
-    <button class="prod-card" onclick="addPendingItem('${p.id}')">
-      ${productVisual(p, 'lg')}
-      <div class="prod-cat">${p.cat}</div>
-      <div class="prod-name">${p.name}</div>
-      <div class="prod-price">${fmt(p.price)}</div></button>`).join('');
+  $('#pProdGrid').innerHTML = groupProductsBySegment(filtered, window.__pCAT).map(group => `
+    <div class="prod-section-title">${group.label}</div>
+    ${group.items.map(p => `
+      <button class="prod-card" onclick="addPendingItem('${p.id}')">
+        ${productVisual(p, 'lg')}
+        <div class="prod-cat">${p.cat}${p.segment?' / '+p.segment:''}</div>
+        <div class="prod-name">${p.name}</div>
+        <div class="prod-price">${fmt(p.price)}</div>
+      </button>`).join('')}
+  `).join('');
 
   const items = window.__pendingItems;
   const total = items.reduce((s,it) => {
@@ -1881,13 +1906,16 @@ route('productos', async () => {
     <div class="chips">${cats.map(c => `<button class="chip ${c===PROD_FILTER?'active':''}" onclick="setProdFilter('${c}')">${c}</button>`).join('')}</div>
     <div class="prod-grid">
       ${filtered.length===0 ? `<div class="empty" style="grid-column:1/-1;"><h3>Sin productos</h3><p>Agregá un producto para que aparezca como botón al abrir una mesa y armar una comanda.</p><button class="btn btn-primary" onclick="editProduct()">+ Nuevo producto</button></div>` :
-        filtered.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
-          ${productVisual(p, 'lg')}
-          <div class="prod-cat">${p.cat}${p.segment?' · '+p.segment:''}</div>
-          <div class="prod-name">${p.name}</div>
-          <div class="prod-price">${fmt(p.price)}</div>
-          ${!p.available?'<span class="badge red">No disponible</span>':''}
-        </div>`).join('')}
+        groupProductsBySegment(filtered, PROD_FILTER).map(group => `
+          <div class="prod-section-title">${group.label}</div>
+          ${group.items.map(p => `<div class="prod-card ${!p.available?'unavailable':''}" onclick="editProduct('${p.id}')">
+            ${productVisual(p, 'lg')}
+            <div class="prod-cat">${p.cat}${p.segment?' / '+p.segment:''}</div>
+            <div class="prod-name">${p.name}</div>
+            <div class="prod-price">${fmt(p.price)}</div>
+            ${!p.available?'<span class="badge red">No disponible</span>':''}
+          </div>`).join('')}
+        `).join('')}
     </div>
     ${cartaQrCardHTML()}`;
   loadMenuSettings();
@@ -1904,7 +1932,7 @@ async function editProduct(id) {
     <div class="field"><label>Nombre</label><input id="pName" value="${p.name||''}" placeholder="Ej: Gin Tonic, Hamburguesa"/></div>
     <div class="grid grid-2" style="gap:12px;">
       <div class="field"><label>Tipo</label><input id="pCat" value="${p.cat||'Comida'}" placeholder="Comida, Tragos, Bebidas..."/></div>
-      <div class="field"><label>Sub-segmento <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
+      <div class="field"><label>Subgenero <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
         <input id="pSeg" list="segList" value="${p.segment||''}" placeholder="Ej: Coctelería, Botellas, Entradas"/>
         <datalist id="segList">${allSegs.map(s => `<option value="${s}">`).join('')}</datalist></div>
     </div>
