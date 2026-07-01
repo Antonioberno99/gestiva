@@ -1491,7 +1491,7 @@ app.post('/api/pending-orders', async (req, res) => {
   // Crear ticket de cocina automáticamente si hay items
   if (items && items.length > 0) {
     const itemsForKitchen = items.map(it => ({
-      name: it.name, emoji: it.emoji, qty: it.qty, modifiers: it.modifiers||[], notes: it.notes||''
+      name: it.name, emoji: it.emoji, qty: it.qty, cat: it.cat || it.category || it.type || '', segment: it.segment || '', modifiers: it.modifiers||[], notes: it.notes||''
     }));
     await q(`INSERT INTO kitchen_tickets (tenant_id, items, notes, status, waiter_name)
              VALUES ($1,$2,$3,'pending',$4)`,

@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.2.0'
+$AgentVersion = '3.3.0'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -365,7 +365,8 @@ function Convert-TicketToEscPos($Ticket, $Restaurant) {
   Add-Bold $list $false
   Add-TextLine $list ('-' * $width)
   Add-Center $list $true
-  Add-TextLine $list '-- COCINA --'
+  $area = if ($Ticket.area) { [string]$Ticket.area } else { 'COCINA' }
+  Add-TextLine $list ('-- ' + $area + ' --')
   Add-Center $list $false
   Add-Bytes $list ([byte[]](0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00))
   return $list.ToArray()
@@ -482,6 +483,75 @@ function Send-ConfiguredPrinterBytes($Config, [byte[]]$Bytes) {
   Send-PrinterBytes ([string]$Config.printerIp) $port $Bytes
 }
 
+function Normalize-RouteText($Value) {
+  if ($null -eq $Value) { return '' }
+  return ([string]$Value).Trim().ToLowerInvariant()
+}
+
+function Get-BarCategories($Config) {
+  $raw = if ($Config.barCategories) { [string]$Config.barCategories } else { 'Bebidas,Tragos' }
+  $out = @()
+  foreach ($p in $raw.Split(',')) {
+    $v = Normalize-RouteText $p
+    if ($v) { $out += $v }
+  }
+  return @($out)
+}
+
+function Item-GoesToBar($Item, $Config) {
+  $cat = ''
+  foreach ($name in @('cat','category','type')) {
+    if ($Item -and $Item.PSObject.Properties[$name] -and $Item.$name) {
+      $cat = [string]$Item.$name
+      break
+    }
+  }
+  $cat = Normalize-RouteText $cat
+  if (-not $cat) { return $false }
+  return @(Get-BarCategories $Config) -contains $cat
+}
+
+function Copy-TicketWithItems($Ticket, $Items, $Area) {
+  $copy = [ordered]@{}
+  foreach ($p in $Ticket.PSObject.Properties) { $copy[$p.Name] = $p.Value }
+  $copy['items'] = @($Items)
+  $copy['area'] = $Area
+  return [pscustomobject]$copy
+}
+
+function Get-BarPrinterConfig($Config) {
+  return [pscustomobject]@{
+    printerMode = if ($Config.barPrinterMode) { [string]$Config.barPrinterMode } else { 'network' }
+    printerName = if ($Config.barPrinterName) { [string]$Config.barPrinterName } else { '' }
+    printerIp = if ($Config.barPrinterIp) { [string]$Config.barPrinterIp } else { '' }
+    printerPort = if ($Config.barPrinterPort) { [int]$Config.barPrinterPort } else { 9100 }
+  }
+}
+
+function Send-RoutedTicket($Ticket, $Config) {
+  if (-not $Config.routingMode -or ([string]$Config.routingMode) -ne 'split') {
+    $bytes = Convert-TicketToEscPos $Ticket $Config.restaurant
+    Send-ConfiguredPrinterBytes $Config $bytes
+    return
+  }
+
+  $items = @($Ticket.items)
+  $barItems = @($items | Where-Object { Item-GoesToBar $_ $Config })
+  $kitchenItems = @($items | Where-Object { -not (Item-GoesToBar $_ $Config) })
+
+  if ($kitchenItems.Count -gt 0) {
+    $kitchenTicket = Copy-TicketWithItems $Ticket $kitchenItems 'COCINA'
+    $bytes = Convert-TicketToEscPos $kitchenTicket $Config.restaurant
+    Send-ConfiguredPrinterBytes $Config $bytes
+  }
+  if ($barItems.Count -gt 0) {
+    $barCfg = Get-BarPrinterConfig $Config
+    $barTicket = Copy-TicketWithItems $Ticket $barItems 'BAR'
+    $bytes = Convert-TicketToEscPos $barTicket $Config.restaurant
+    Send-ConfiguredPrinterBytes $barCfg $bytes
+  }
+}
+
 function Invoke-CloudPoll {
   $cfg = Get-AgentConfig
   $mode = Get-PrinterMode $cfg
@@ -506,8 +576,7 @@ function Invoke-CloudPoll {
       if (-not $t.id) { continue }
       $id = [string]$t.id
       if ($printed.Contains($id)) { continue }
-      $bytes = Convert-TicketToEscPos $t $cfg.restaurant
-      Send-ConfiguredPrinterBytes $cfg $bytes
+      Send-RoutedTicket $t $cfg
       [void]$printed.Add($id)
       $state.printed = @($printed)
       Save-AgentState $state
@@ -714,12 +783,12 @@ function Handle-Request($Stream, $Req) {
   if ($Req.Method -eq 'GET' -and ($path -eq '/' -or $path -eq '/setup')) { Send-Response $Stream 200 'text/html; charset=utf-8' (Get-SetupHtml); return }
   if ($Req.Method -eq 'GET' -and ($path -eq '/health' -or $path -eq '/status')) {
     $cfg = Get-AgentConfig
-    Send-Json $Stream 200 @{ ok = $true; bridge = 'gestiva-print-agent'; mode = 'station'; version = $AgentVersion; host = '127.0.0.1'; port = $Port; configured = [bool]($cfg.token -and $cfg.apiUrl); printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); subnets = @(Get-LocalSubnets) }
+    Send-Json $Stream 200 @{ ok = $true; bridge = 'gestiva-print-agent'; mode = 'station'; version = $AgentVersion; host = '127.0.0.1'; port = $Port; configured = [bool]($cfg.token -and $cfg.apiUrl); printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }); barCategories = $(if ($cfg.barCategories) { $cfg.barCategories } else { 'Bebidas,Tragos' }); barPrinterMode = $(if ($cfg.barPrinterMode) { $cfg.barPrinterMode } else { 'network' }); barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $(if ($cfg.barPrinterPort) { $cfg.barPrinterPort } else { 9100 }); subnets = @(Get-LocalSubnets) }
     return
   }
   if ($Req.Method -eq 'GET' -and $path -eq '/config') {
     $cfg = Get-AgentConfig
-    Send-Json $Stream 200 @{ ok = $true; configured = [bool]($cfg.token -and $cfg.apiUrl); restaurant = $cfg.restaurant; apiUrl = $cfg.apiUrl; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); pairedAt = $cfg.pairedAt }
+    Send-Json $Stream 200 @{ ok = $true; configured = [bool]($cfg.token -and $cfg.apiUrl); restaurant = $cfg.restaurant; apiUrl = $cfg.apiUrl; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }); barCategories = $(if ($cfg.barCategories) { $cfg.barCategories } else { 'Bebidas,Tragos' }); barPrinterMode = $(if ($cfg.barPrinterMode) { $cfg.barPrinterMode } else { 'network' }); barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $(if ($cfg.barPrinterPort) { $cfg.barPrinterPort } else { 9100 }); pairedAt = $cfg.pairedAt }
     return
   }
   if ($Req.Method -eq 'GET' -and $path -eq '/printers') {
@@ -758,6 +827,12 @@ function Handle-Request($Stream, $Req) {
       printerName = $current.printerName
       printerIp = $current.printerIp
       printerPort = if ($current.printerPort) { [int]$current.printerPort } else { 9100 }
+      routingMode = if ($current.routingMode) { [string]$current.routingMode } else { 'single' }
+      barCategories = if ($current.barCategories) { [string]$current.barCategories } else { 'Bebidas,Tragos' }
+      barPrinterMode = if ($current.barPrinterMode) { [string]$current.barPrinterMode } else { 'network' }
+      barPrinterName = if ($current.barPrinterName) { [string]$current.barPrinterName } else { '' }
+      barPrinterIp = if ($current.barPrinterIp) { [string]$current.barPrinterIp } else { '' }
+      barPrinterPort = if ($current.barPrinterPort) { [int]$current.barPrinterPort } else { 9100 }
       pairedAt = (Get-Date).ToString('o')
     }
     Save-AgentConfig $cfg
@@ -785,8 +860,18 @@ function Handle-Request($Stream, $Req) {
       $cfg | Add-Member -Force -NotePropertyName printerIp -NotePropertyValue ([string]$body.printerIp)
       $cfg | Add-Member -Force -NotePropertyName printerPort -NotePropertyValue ($(if ($body.printerPort) { [int]$body.printerPort } else { 9100 }))
     }
+    $routingMode = if ($body.routingMode) { [string]$body.routingMode } elseif ($cfg.routingMode) { [string]$cfg.routingMode } else { 'single' }
+    if ($routingMode -ne 'split') { $routingMode = 'single' }
+    $barMode = if ($body.barPrinterMode) { [string]$body.barPrinterMode } elseif ($cfg.barPrinterMode) { [string]$cfg.barPrinterMode } else { 'network' }
+    if ($barMode -ne 'windows') { $barMode = 'network' }
+    $cfg | Add-Member -Force -NotePropertyName routingMode -NotePropertyValue $routingMode
+    $cfg | Add-Member -Force -NotePropertyName barCategories -NotePropertyValue ($(if ($body.barCategories) { [string]$body.barCategories } elseif ($cfg.barCategories) { [string]$cfg.barCategories } else { 'Bebidas,Tragos' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterMode -NotePropertyValue $barMode
+    $cfg | Add-Member -Force -NotePropertyName barPrinterName -NotePropertyValue ($(if ($body.barPrinterName) { [string]$body.barPrinterName } elseif ($cfg.barPrinterName) { [string]$cfg.barPrinterName } else { '' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterIp -NotePropertyValue ($(if ($body.barPrinterIp) { [string]$body.barPrinterIp } elseif ($cfg.barPrinterIp) { [string]$cfg.barPrinterIp } else { '' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterPort -NotePropertyValue ($(if ($body.barPrinterPort) { [int]$body.barPrinterPort } elseif ($cfg.barPrinterPort) { [int]$cfg.barPrinterPort } else { 9100 }))
     Save-AgentConfig $cfg
-    Send-Json $Stream 200 @{ ok = $true; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $cfg.printerPort }
+    Send-Json $Stream 200 @{ ok = $true; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $cfg.printerPort; routingMode = $cfg.routingMode; barCategories = $cfg.barCategories; barPrinterMode = $cfg.barPrinterMode; barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $cfg.barPrinterPort }
     return
   }
   if ($Req.Method -eq 'GET' -and $path -eq '/probe') {
@@ -807,10 +892,9 @@ function Handle-Request($Stream, $Req) {
     $mode = Get-PrinterMode $cfg
     if ($mode -eq 'windows' -and -not $cfg.printerName) { Send-Json $Stream 400 @{ ok = $false; error = 'Primero elegi la impresora USB.' }; return }
     if ($mode -ne 'windows' -and -not $cfg.printerIp) { Send-Json $Stream 400 @{ ok = $false; error = 'Primero elegi la IP de la comandera.' }; return }
-    $ticket = [pscustomobject]@{ id = 'TEST01'; table_num = '5'; waiter_name = 'Prueba'; created_at = (Get-Date).ToString('o'); items = @([pscustomobject]@{ qty = 2; name = 'Milanesa napolitana'; modifiers = @('sin papas'); notes = 'bien cocida' }, [pscustomobject]@{ qty = 1; name = 'Coca-Cola 500ml'; modifiers = @(); notes = '' }) }
-    $bytes = Convert-TicketToEscPos $ticket $cfg.restaurant
-    Send-ConfiguredPrinterBytes $cfg $bytes
-    Send-Json $Stream 200 @{ ok = $true; mode = $mode; printerName = $cfg.printerName; printerIp = $cfg.printerIp; bytes = $bytes.Length }
+    $ticket = [pscustomobject]@{ id = 'TEST01'; table_num = '5'; waiter_name = 'Prueba'; created_at = (Get-Date).ToString('o'); items = @([pscustomobject]@{ qty = 2; name = 'Milanesa napolitana'; cat = 'Comida'; modifiers = @('sin papas'); notes = 'bien cocida' }, [pscustomobject]@{ qty = 1; name = 'Coca-Cola 500ml'; cat = 'Bebidas'; modifiers = @(); notes = '' }) }
+    Send-RoutedTicket $ticket $cfg
+    Send-Json $Stream 200 @{ ok = $true; mode = $mode; printerName = $cfg.printerName; printerIp = $cfg.printerIp; routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }) }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/print') {

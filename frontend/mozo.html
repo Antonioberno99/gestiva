@@ -821,6 +821,8 @@ async function saveOrder() {
     return {
       name: p?.name || 'Producto',
       qty: it.qty,
+      cat: p?.cat || '',
+      segment: p?.segment || '',
       modifiers: it.modifiers || [],
       notes: it.notes || ''
     };

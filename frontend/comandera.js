@@ -25,7 +25,13 @@
     printerMode: '',       // 'windows' | 'network'
     printerName: '',       // nombre de la impresora instalada en Windows (USB)
     printerIp: '',         // IP de la impresora de red
-    printerPort: 9100      // puerto ESC/POS estándar
+    printerPort: 9100,     // puerto ESC/POS estandar
+    routingMode: 'single', // 'single' | 'split'
+    barCategories: 'Bebidas,Tragos',
+    barPrinterMode: 'network',
+    barPrinterName: '',
+    barPrinterIp: '',
+    barPrinterPort: 9100
   };
   const DEFAULT_API_URL = 'https://gestiva-backend.onrender.com';
 
@@ -384,6 +390,29 @@
     }, 5000);
   }
 
+  async function savePrintStationFullConfig(cfg) {
+    if (!cfg || (cfg.method !== 'network' && cfg.method !== 'usb')) return null;
+    await ensurePrintStation();
+    await pairPrintStation();
+    const body = {
+      printerMode: cfg.method === 'usb' ? 'windows' : 'network',
+      printerName: cfg.method === 'usb' ? (cfg.printerName || '') : '',
+      printerIp: cfg.method === 'network' ? (cfg.printerIp || '') : '',
+      printerPort: cfg.printerPort || 9100,
+      routingMode: cfg.routingMode || 'single',
+      barCategories: cfg.barCategories || 'Bebidas,Tragos',
+      barPrinterMode: cfg.barPrinterMode || 'network',
+      barPrinterName: cfg.barPrinterName || '',
+      barPrinterIp: cfg.barPrinterIp || '',
+      barPrinterPort: cfg.barPrinterPort || 9100
+    };
+    return await fetchJson(_stationBase + '/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }, 6000);
+  }
+
   async function testPrintStation() {
     return await fetchJson(_stationBase + '/test', { method: 'POST' }, 9000);
   }
@@ -428,12 +457,39 @@
   }
 
   // ---------- Orquestador ----------
-  async function print(ticket, opts) {
-    const cfg = Object.assign(getCfg(), opts || {});
-    if (cfg.method === 'screen') return { ok: true, method: 'screen' }; // solo KDS
+  function routingCategories(cfg) {
+    return String((cfg && cfg.barCategories) || 'Bebidas,Tragos')
+      .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+  }
+  function itemGoesToBar(it, cfg) {
+    const cats = routingCategories(cfg);
+    const cat = String((it && (it.cat || it.category || it.type)) || '').trim().toLowerCase();
+    return !!cat && cats.includes(cat);
+  }
+  function splitKitchenTicket(ticket, cfg) {
+    if (!cfg || cfg.routingMode !== 'split') return [{ area: 'cocina', ticket, cfg }];
+    const items = Array.isArray(ticket.items) ? ticket.items : [];
+    const barItems = items.filter(it => itemGoesToBar(it, cfg));
+    const kitchenItems = items.filter(it => !itemGoesToBar(it, cfg));
+    const out = [];
+    if (kitchenItems.length) out.push({ area: 'cocina', ticket: Object.assign({}, ticket, { items: kitchenItems, area: 'COCINA' }), cfg });
+    if (barItems.length) {
+      const barCfg = Object.assign({}, cfg, {
+        printerMode: cfg.barPrinterMode || 'network',
+        printerName: cfg.barPrinterName || '',
+        printerIp: cfg.barPrinterIp || '',
+        printerPort: cfg.barPrinterPort || 9100,
+        header: (cfg.header || ticket.restaurant || 'Gestiva') + ' - BAR'
+      });
+      if (cfg.method === 'network' || cfg.method === 'usb') barCfg.method = barCfg.printerMode === 'windows' ? 'usb' : 'network';
+      out.push({ area: 'bar', ticket: Object.assign({}, ticket, { items: barItems, area: 'BAR' }), cfg: barCfg });
+    }
+    return out;
+  }
+  async function printSingle(ticket, cfg) {
+    if (cfg.method === 'screen') return { ok: true, method: 'screen' };
     const copies = Math.max(1, Math.min(3, cfg.copies || 1));
     if (cfg.method === 'browser') {
-      // El navegador imprime 1 hoja; para copias repetimos el bloque.
       for (let i = 0; i < copies; i++) await printBrowser(ticket, cfg);
       return { ok: true, method: 'browser' };
     }
@@ -445,8 +501,14 @@
       else await printUSB(all);
     }
     else if (cfg.method === 'network') await printNetwork(all, cfg);
-    else throw new Error('Método de comandera desconocido: ' + cfg.method);
+    else throw new Error('Metodo de comandera desconocido: ' + cfg.method);
     return { ok: true, method: cfg.method };
+  }
+  async function print(ticket, opts) {
+    const cfg = Object.assign(getCfg(), opts || {});
+    const jobs = splitKitchenTicket(ticket, cfg);
+    for (const job of jobs) await printSingle(job.ticket, job.cfg);
+    return { ok: true, method: cfg.method, jobs: jobs.map(j => j.area) };
   }
   function concatCopies(bytes, n) {
     const out = new Uint8Array(bytes.length * n);
@@ -462,9 +524,9 @@
       datetime: new Date(),
       ref: 'TEST',
       items: [
-        { name: 'Milanesa napolitana', qty: 2, modifiers: ['sin papas'], notes: 'bien cocida' },
-        { name: 'Coca-Cola 500ml', qty: 1, modifiers: [], notes: '' },
-        { name: 'Flan con dulce', qty: 1, modifiers: ['extra dulce'], notes: '' }
+        { name: 'Milanesa napolitana', cat: 'Comida', qty: 2, modifiers: ['sin papas'], notes: 'bien cocida' },
+        { name: 'Coca-Cola 500ml', cat: 'Bebidas', qty: 1, modifiers: [], notes: '' },
+        { name: 'Flan con dulce', cat: 'Postres', qty: 1, modifiers: ['extra dulce'], notes: '' }
       ]
     });
   }
@@ -514,7 +576,7 @@
         #cmdr-modal .card.wide{grid-column:1 / -1;flex-direction:row;align-items:center;gap:10px;}
         #cmdr-modal .card.wide .ds{flex:1;}
         #cmdr-modal .panel{margin-top:12px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}
-        #cmdr-modal .panel.hide{display:none;}
+        #cmdr-modal .panel.hide,#cmdr-modal .hide{display:none!important;}
         #cmdr-modal .status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:10px;}
         #cmdr-modal .dot{width:9px;height:9px;border-radius:50%;background:#ef4444;flex:none;}
         #cmdr-modal .status.ok .dot{background:#10b981;} #cmdr-modal .status.ok{color:#047857;}
@@ -611,6 +673,33 @@
         <label>Pie (opcional)</label>
         <input type="text" id="cmdr-footer" placeholder="Ej: Apurar mesa" value="${escapeHTML(cfg.footer)}">
 
+        <label><span class="step">3</span>Salida de pedidos</label>
+        <div class="seg" id="cmdr-routing">
+          <button type="button" data-v="single" class="${(cfg.routingMode || 'single') === 'single' ? 'on' : ''}">Todo junto</button>
+          <button type="button" data-v="split" class="${cfg.routingMode === 'split' ? 'on' : ''}">Dividir bar/cocina</button>
+        </div>
+        <div class="panel ${cfg.routingMode === 'split' ? '' : 'hide'}" id="cmdr-routing-panel">
+          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">La comandera principal configurada arriba queda como <strong>Cocina</strong>. Las categorias indicadas abajo salen por la comandera de <strong>Bar</strong>.</div>
+          <label style="margin-top:10px">Categorias que van al bar</label>
+          <input type="text" id="cmdr-bar-cats" placeholder="Bebidas,Tragos" value="${escapeHTML(cfg.barCategories || 'Bebidas,Tragos')}">
+          <label>Comandera del bar</label>
+          <div class="seg" id="cmdr-bar-mode">
+            <button type="button" data-v="network" class="${(cfg.barPrinterMode || 'network') === 'network' ? 'on' : ''}">Red/IP</button>
+            <button type="button" data-v="windows" class="${cfg.barPrinterMode === 'windows' ? 'on' : ''}">USB Windows</button>
+          </div>
+          <div id="cmdr-bar-net">
+            <div class="row" style="margin-top:10px;">
+              <input type="text" id="cmdr-bar-ip" placeholder="IP bar: 192.168.1.201" value="${escapeHTML(cfg.barPrinterIp || '')}">
+              <input type="number" id="cmdr-bar-port" placeholder="9100" value="${cfg.barPrinterPort || 9100}" style="max-width:90px;">
+            </div>
+          </div>
+          <div id="cmdr-bar-usb" class="hide" style="margin-top:10px;">
+            <input type="text" id="cmdr-bar-printer-name" placeholder="Nombre exacto de la impresora instalada en Windows" value="${escapeHTML(cfg.barPrinterName || '')}">
+            <div class="hint">Para USB Windows, el nombre debe coincidir con la impresora instalada en esta PC.</div>
+          </div>
+          <div class="hint">Ejemplo: productos con tipo Bebidas o Tragos salen en Bar. Comida, Postres y el resto salen en Cocina.</div>
+        </div>
+
         <div class="toggle">
           <span>Usar esta PC como estacion central</span>
           <div class="sw ${cfg.kitchenAuto ? 'on' : ''}" id="cmdr-kauto"></div>
@@ -629,7 +718,7 @@
 
     const $ = (id) => wrap.querySelector(id);
     const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
-    const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto, printerName: cfg.printerName || '' };
+    const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto, printerName: cfg.printerName || '', routingMode: cfg.routingMode || 'single', barPrinterMode: cfg.barPrinterMode || 'network' };
 
     function setMainStatus(kind, text) {
       const box = $('#cmdr-main-status');
@@ -684,7 +773,7 @@
       box.querySelectorAll('.cmdr-usb-pick').forEach(b => b.onclick = () => onPick(b.dataset.name));
     }
     async function configureUsbPrinter(printerName) {
-      await savePrintStationWindowsPrinter(printerName);
+      await savePrintStationFullConfig(Object.assign(collect(), { method: 'usb', printerMode: 'windows', printerName, printerIp: '' }));
       await testPrintStation();
       state.method = 'usb';
       state.kitchenAuto = true;
@@ -739,6 +828,16 @@
       $('#cmdr-connect').textContent = ok ? 'Volver a conectar' : 'Conectar impresora';
       syncMainStatus();
     }
+    function refreshRoutingUI() {
+      const panel = $('#cmdr-routing-panel');
+      if (panel) panel.classList.toggle('hide', state.routingMode !== 'split');
+      wrap.querySelectorAll('#cmdr-routing button').forEach(b => b.classList.toggle('on', b.dataset.v === state.routingMode));
+      wrap.querySelectorAll('#cmdr-bar-mode button').forEach(b => b.classList.toggle('on', b.dataset.v === state.barPrinterMode));
+      const barNet = $('#cmdr-bar-net');
+      const barUsb = $('#cmdr-bar-usb');
+      if (barNet) barNet.classList.toggle('hide', state.barPrinterMode !== 'network');
+      if (barUsb) barUsb.classList.toggle('hide', state.barPrinterMode !== 'windows');
+    }
     function refreshMethodUI() {
       $('#cmdr-usb').classList.toggle('hide', state.method !== 'usb');
       $('#cmdr-net').classList.toggle('hide', state.method !== 'network');
@@ -771,6 +870,7 @@
       refreshMethodUI();
     }
     refreshMethodUI();
+    refreshRoutingUI();
 
     wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.onclick = () => selectMethod(c.dataset.k));
     wrap.querySelectorAll('#cmdr-paper button').forEach(b => b.onclick = () => {
@@ -779,6 +879,8 @@
     wrap.querySelectorAll('#cmdr-copies button').forEach(b => b.onclick = () => {
       state.copies = +b.dataset.v; wrap.querySelectorAll('#cmdr-copies button').forEach(x => x.classList.toggle('on', x === b));
     });
+    wrap.querySelectorAll('#cmdr-routing button').forEach(b => b.onclick = () => { state.routingMode = b.dataset.v; refreshRoutingUI(); });
+    wrap.querySelectorAll('#cmdr-bar-mode button').forEach(b => b.onclick = () => { state.barPrinterMode = b.dataset.v; refreshRoutingUI(); });
     const autoSwitch = $('#cmdr-auto');
     if (autoSwitch) autoSwitch.onclick = () => { state.autoprint = !state.autoprint; autoSwitch.classList.toggle('on', state.autoprint); };
     $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
@@ -803,7 +905,7 @@
         const candidates = (data && data.candidates) || [];
         if (printers.length === 1) {
           $('#cmdr-ip').value = printers[0];
-          await savePrintStationPrinter(printers[0], port);
+          await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: printers[0], printerPort: port }));
           await testPrintStation();
           setNetworkStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
           setMainStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
@@ -817,7 +919,7 @@
             box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
               try {
                 $('#cmdr-ip').value = b.dataset.ip;
-                await savePrintStationPrinter(b.dataset.ip, port);
+                await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: b.dataset.ip, printerPort: port }));
                 await testPrintStation();
                 setNetworkStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
                 setMainStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
@@ -942,7 +1044,7 @@
       try {
         await ensurePrintStation();
         await pairPrintStation();
-        await savePrintStationPrinter(ip, port);
+        await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: ip, printerPort: port }));
         await testPrintStation();
         state.method = 'network';
         state.kitchenAuto = true;
@@ -994,7 +1096,13 @@
         printerName: ($('#cmdr-printer-name') ? $('#cmdr-printer-name').value.trim() : (state.printerName || cfg.printerName || '')),
         printerIp: ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp),
         printerPort: ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : cfg.printerPort),
-        bridgeUrl: ($('#cmdr-bridge') ? $('#cmdr-bridge').value.trim() : cfg.bridgeUrl)
+        bridgeUrl: ($('#cmdr-bridge') ? $('#cmdr-bridge').value.trim() : cfg.bridgeUrl),
+        routingMode: state.routingMode,
+        barCategories: ($('#cmdr-bar-cats') ? $('#cmdr-bar-cats').value.trim() : cfg.barCategories) || 'Bebidas,Tragos',
+        barPrinterMode: state.barPrinterMode || 'network',
+        barPrinterName: ($('#cmdr-bar-printer-name') ? $('#cmdr-bar-printer-name').value.trim() : cfg.barPrinterName) || '',
+        barPrinterIp: ($('#cmdr-bar-ip') ? $('#cmdr-bar-ip').value.trim() : cfg.barPrinterIp) || '',
+        barPrinterPort: ($('#cmdr-bar-port') ? (+$('#cmdr-bar-port').value || 9100) : (cfg.barPrinterPort || 9100))
       };
     }
 
@@ -1016,7 +1124,7 @@
           const port = +($('#cmdr-port')?.value || 9100) || 9100;
           await ensurePrintStation();
           await pairPrintStation();
-          await savePrintStationPrinter(ip, port);
+          await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: ip, printerPort: port }));
           await testPrintStation();
           setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
           setMainStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
@@ -1032,7 +1140,7 @@
           const printerName = ($('#cmdr-printer-name')?.value || state.printerName || '').trim();
           await ensurePrintStation();
           await pairPrintStation();
-          await savePrintStationWindowsPrinter(printerName);
+          await savePrintStationFullConfig(Object.assign(collect(), { method: 'usb', printerMode: 'windows', printerName, printerIp: '' }));
           await testPrintStation();
           state.printerName = printerName;
           setCfg(Object.assign(collect(), { method: 'usb', kitchenAuto: true, printerMode: 'windows', printerName, printerIp: '', lastUsbOkAt: new Date().toISOString() }));
@@ -1048,7 +1156,22 @@
       try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); refreshStatus(); }
       catch (e) { msg(e.message || 'No se pudo imprimir.', false); }
     };
-    $('#cmdr-save').onclick = () => { setCfg(collect()); wrap.remove(); if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg()); };
+    $('#cmdr-save').onclick = async () => {
+      const next = collect();
+      setCfg(next);
+      if ((next.method === 'network' || next.method === 'usb') && next.kitchenAuto) {
+        try {
+          await ensurePrintStation();
+          await pairPrintStation();
+          await savePrintStationFullConfig(next);
+        } catch (e) {
+          msg(e.message || 'No pude guardar la configuracion en la estacion de impresion.', false);
+          return;
+        }
+      }
+      wrap.remove();
+      if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg());
+    };
     $('#cmdr-close').onclick = () => wrap.remove();
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
     if (state.method === 'network' && cfg.printerIp) setNetworkStatus('ok', 'Conectado: Red/IP - ' + cfg.printerIp + ':' + (cfg.printerPort || 9100));

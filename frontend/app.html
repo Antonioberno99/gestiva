@@ -308,7 +308,7 @@
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="gestiva-config.js"></script>
-<script src="comandera.js?v=20260627-comandera-status-2"></script>
+<script src="comandera.js?v=20260701-split-comanderas"></script>
 <script>
 // ============================================================
 //                   GASTROPANEL APP (API-backed)
@@ -1343,7 +1343,7 @@ async function sendToKitchen() {
   const prodMap = new Map(CURRENT_PRODUCTS.map(p => [p.id, p]));
   const itemsForKitchen = pending.map(it => {
     const p = prodMap.get(it.productId);
-    return { name: p?.name, qty: it.qty, modifiers: it.modifiers||[], notes: it.notes||'' };
+    return { name: p?.name, qty: it.qty, cat: p?.cat || '', segment: p?.segment || '', modifiers: it.modifiers||[], notes: it.notes||'' };
   });
   try {
     await API.kitchenCreate({ tableId: CURRENT_TID, items: itemsForKitchen });
@@ -2899,7 +2899,7 @@ function kitchenTicketData(t) {
     waiter: t.waiter_name || '',
     ticketId: t.id,
     datetime: t.created_at ? new Date(t.created_at) : new Date(),
-    items: (t.items || []).map(it => ({ name: it.name, qty: it.qty, modifiers: it.modifiers || [], notes: it.notes || '' }))
+    items: (t.items || []).map(it => ({ name: it.name, qty: it.qty, cat: it.cat || it.category || it.type || '', segment: it.segment || '', modifiers: it.modifiers || [], notes: it.notes || '' }))
   };
 }
 function kitchenStationEnabled(cfg) {
