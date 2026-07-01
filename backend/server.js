@@ -82,7 +82,7 @@ const PLANS = {
     id: 'full',
     name: 'Full',
     price: 34000,
-    description: 'Para restaurantes grandes, bares de noche, boliches y multi-local',
+    description: 'Para restaurantes grandes, bares, cafeterias y multi-local',
     features: [
       'Todo lo de Pro',
       'Delivery / Takeaway',
