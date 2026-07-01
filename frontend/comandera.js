@@ -388,6 +388,19 @@
     return await fetchJson(_stationBase + '/test', { method: 'POST' }, 9000);
   }
 
+  // Impresoras USB conectadas pero sin instalar en Windows (para instalarlas de una)
+  async function usbDetect() {
+    return await fetchJson(_stationBase + '/usb-detect', null, 6000);
+  }
+  // Instala la USB conectada (crea la cola con driver Generic / Text Only) y devuelve su nombre
+  async function usbInstall(port) {
+    return await fetchJson(_stationBase + '/usb-install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(port ? { port } : {})
+    }, 15000);
+  }
+
   async function printWindowsPrinter(bytes, cfg) {
     if (!cfg.printerName) throw new Error('Falta elegir la impresora USB instalada en Windows.');
     await ensurePrintStation();
@@ -555,7 +568,7 @@
           <button type="button" class="btn-test" id="cmdr-usb-pair" style="margin:0 0 10px;">2. Detectar Epson USB y probar</button>
           <input type="hidden" id="cmdr-printer-name" value="${escapeHTML(cfg.printerName || '')}">
           <div id="cmdr-usb-results"></div>
-          <div class="hint">Si no aparece, Windows todavia no tiene instalada la Epson. En ese caso instalala como impresora local USB y volve a tocar detectar.</div>
+          <div class="hint">Si la comandera esta enchufada por USB y prendida, al tocar el boton se instala y conecta sola. No hace falta instalar nada a mano en Windows.</div>
         </div>
 
         <div class="panel hide" id="cmdr-net">
@@ -874,10 +887,32 @@
           });
           msg('Encontre varias impresoras. Elegi la Epson USB para guardar.', true);
         } else {
-          setUsbStatus('off', 'No encontre impresoras instaladas');
-          setMainStatus('off', 'Sin comandera conectada');
-          if (box) box.innerHTML = '<div class="hint">Windows no tiene ninguna impresora USB disponible. Conecta la Epson, instalala en Windows y volve a tocar detectar.</div>';
-          msg('No encontre una impresora instalada en Windows. Falta instalar la Epson USB en esta PC.', false);
+          // No hay impresora instalada: buscamos una USB conectada-sin-instalar y la instalamos nosotros.
+          setUsbStatus('off', 'Buscando comandera USB conectada...');
+          if (box) box.innerHTML = '<div class="hint">No hay impresoras instaladas. Reviso si hay una comandera USB conectada para instalarla sola...</div>';
+          let pending = [];
+          try { const d = await usbDetect(); pending = (d && d.pending) || []; } catch (e) {}
+          if (pending.length) {
+            try {
+              if (box) box.innerHTML = '<div class="hint">Detecte una comandera USB conectada (<strong>' + escapeHTML(pending[0].device) + '</strong>) sin instalar. Instalandola sola...</div>';
+              const inst = await usbInstall(pending[0].port);
+              const name = inst && inst.printerName;
+              if (!name) throw new Error('No se pudo instalar la impresora USB.');
+              await configureUsbPrinter(name);
+              if (box) box.innerHTML = '<div class="hint">Comandera USB instalada y conectada: <strong>' + escapeHTML(name) + '</strong>. Se envio una prueba.</div>';
+              msg('Instale y conecte la comandera USB automaticamente. Se envio una prueba de impresion.', true);
+            } catch (e) {
+              setUsbStatus('off', 'No pude instalar la comandera USB');
+              setMainStatus('off', 'Sin comandera conectada');
+              if (box) box.innerHTML = '<div class="hint">Encontre una comandera USB conectada pero no la pude instalar sola: ' + escapeHTML(e.message || '') + '</div>';
+              msg(e.message || 'No pude instalar la comandera USB automaticamente.', false);
+            }
+          } else {
+            setUsbStatus('off', 'No hay comandera USB conectada');
+            setMainStatus('off', 'Sin comandera conectada');
+            if (box) box.innerHTML = '<div class="hint">No detecte ninguna comandera USB conectada a esta PC. Revisa que el cable USB este bien enchufado y la impresora prendida, y volve a tocar detectar.</div>';
+            msg('No detecte ninguna comandera USB conectada. Revisa el cable USB y que este prendida.', false);
+          }
         }
       } catch (e) {
         setUsbStatus('off', 'Falta instalar o actualizar estacion');

@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.1.0'
+$AgentVersion = '3.2.0'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -238,6 +238,45 @@ function Get-SuggestedWindowsPrinter($Printers) {
   $pick = @($items | Where-Object { -not $_.isVirtual } | Select-Object -First 1)
   if ($pick.Count -gt 0) { return $pick[0] }
   return $null
+}
+
+# Impresoras USB fisicamente conectadas pero SIN instalar como cola de Windows.
+# Truco: cada puerto USBnnn trae en su Description el modelo del equipo conectado.
+# Si ese puerto no lo usa ninguna impresora instalada, hay una USB lista para instalar.
+function Get-UsbPrinterInfo {
+  $installed = @(); try { $installed = @(Get-Printer -ErrorAction SilentlyContinue) } catch {}
+  $usedPorts = @($installed | ForEach-Object { $_.PortName })
+  $usbPorts = @(); try { $usbPorts = @(Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^USB\d+' }) } catch {}
+  $pending = New-Object System.Collections.Generic.List[object]
+  foreach ($p in $usbPorts) {
+    if ($usedPorts -notcontains $p.Name) {
+      $desc = [string]$p.Description
+      if ([string]::IsNullOrWhiteSpace($desc)) { $desc = 'Impresora USB' }
+      $pending.Add([pscustomobject]@{ port = $p.Name; device = $desc })
+    }
+  }
+  return @($pending.ToArray())
+}
+
+# Crea la cola de impresion para una USB conectada, con driver "Generic / Text Only"
+# (deja pasar el ESC/POS crudo tal cual). Devuelve el nombre de la impresora instalada.
+function Install-UsbPrinter($PortName) {
+  $usbPorts = @(Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^USB\d+' })
+  $usedPorts = @(Get-Printer -ErrorAction SilentlyContinue | ForEach-Object { $_.PortName })
+  $target = $null
+  if ($PortName) { $target = @($usbPorts | Where-Object { $_.Name -eq $PortName })[0] }
+  if (-not $target) { $target = @($usbPorts | Where-Object { $usedPorts -notcontains $_.Name })[0] }
+  if (-not $target) { throw 'No hay ninguna impresora USB conectada sin instalar.' }
+  if (-not (Get-PrinterDriver -Name 'Generic / Text Only' -ErrorAction SilentlyContinue)) {
+    Add-PrinterDriver -Name 'Generic / Text Only'
+  }
+  $base = [string]$target.Description
+  if ([string]::IsNullOrWhiteSpace($base)) { $base = 'Comandera USB' }
+  $base = ($base -replace '^EPSON(?=TM)', 'EPSON ').Trim()
+  $name = $base; $n = 1
+  while (@(Get-Printer -Name $name -ErrorAction SilentlyContinue).Count -gt 0) { $n++; $name = "$base ($n)" }
+  Add-Printer -Name $name -DriverName 'Generic / Text Only' -PortName $target.Name
+  return $name
 }
 
 function Add-Bytes($List, [byte[]]$Bytes) {
@@ -676,6 +715,24 @@ function Handle-Request($Stream, $Req) {
     $printers = @(Get-WindowsPrinters)
     $suggested = Get-SuggestedWindowsPrinter $printers
     Send-Json $Stream 200 @{ ok = $true; printers = $printers; suggested = $suggested }
+    return
+  }
+  if ($Req.Method -eq 'GET' -and $path -eq '/usb-detect') {
+    # Impresoras USB: las conectadas-sin-instalar (para ofrecer instalarlas de una)
+    $pending = @(Get-UsbPrinterInfo)
+    $installedUsb = @(Get-WindowsPrinters | Where-Object { $_.isUsb -and -not $_.isVirtual })
+    Send-Json $Stream 200 @{ ok = $true; pending = $pending; installed = $installedUsb }
+    return
+  }
+  if ($Req.Method -eq 'POST' -and $path -eq '/usb-install') {
+    try {
+      $body = if ($Req.Body) { $Req.Body | ConvertFrom-Json } else { $null }
+      $port = if ($body -and $body.port) { [string]$body.port } else { $null }
+      $name = Install-UsbPrinter $port
+      Send-Json $Stream 200 @{ ok = $true; printerName = $name }
+    } catch {
+      Send-Json $Stream 400 @{ ok = $false; error = $_.Exception.Message }
+    }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/pair') {
