@@ -1898,14 +1898,12 @@ async function editProduct(id) {
   let p = { name:'', cat:'', segment:'', price:0, photo_url:'', description:'', available:true, stock:null, low_stock_alert:5, modifiers:[] };
   const allProducts = await API.products();
   if (id) { p = allProducts.find(x => x.id === id) || p; }
-  const allCats = [...new Set([...PRODUCT_TYPES, ...allProducts.map(x => x.cat).filter(Boolean)])];
   const allSegs = [...new Set(allProducts.map(x => x.segment).filter(Boolean))];
   window.__editingMods = JSON.parse(JSON.stringify(p.modifiers || []));
   openModal(id?'Editar producto':'Nuevo producto', `
     <div class="field"><label>Nombre</label><input id="pName" value="${p.name||''}" placeholder="Ej: Gin Tonic, Hamburguesa"/></div>
     <div class="grid grid-2" style="gap:12px;">
-      <div class="field"><label>Tipo</label><input id="pCat" list="catList" value="${p.cat||'Comida'}" placeholder="Comida, Tragos, Bebidas..."/>
-        <datalist id="catList">${allCats.map(c => `<option value="${c}">`).join('')}</datalist></div>
+      <div class="field"><label>Tipo</label><input id="pCat" value="${p.cat||'Comida'}" placeholder="Comida, Tragos, Bebidas..."/></div>
       <div class="field"><label>Sub-segmento <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
         <input id="pSeg" list="segList" value="${p.segment||''}" placeholder="Ej: Coctelería, Botellas, Entradas"/>
         <datalist id="segList">${allSegs.map(s => `<option value="${s}">`).join('')}</datalist></div>
