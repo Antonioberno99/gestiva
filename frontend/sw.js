@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-equipo-v2-print-station';
+const CACHE_NAME = 'gestiva-equipo-v3-pedidos-section';
 const APP_SHELL = [
   './mozo.html',
   './gestiva-config.js',
@@ -19,8 +19,20 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  if (req.mode === 'navigate' || req.destination === 'document') {
+    event.respondWith(
+      fetch(new Request(req, { cache: 'reload' })).catch(() => caches.match('./mozo.html'))
+    );
+    return;
+  }
+
   event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
