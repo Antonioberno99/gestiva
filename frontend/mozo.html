@@ -32,10 +32,10 @@
   * { box-sizing:border-box; }
   html { min-height:100%; background:var(--soft); }
   body { margin:0; min-height:100vh; font-family:var(--ff); background:var(--soft); color:var(--ink); -webkit-font-smoothing:antialiased; overflow-x:hidden; }
-  button,input { font:inherit; }
+  button,input,textarea { font:inherit; }
   button { border:0; cursor:pointer; -webkit-tap-highlight-color:transparent; }
   button:disabled { cursor:not-allowed; }
-  button:focus-visible,input:focus-visible { outline:3px solid rgba(249,115,22,.24); outline-offset:2px; }
+  button:focus-visible,input:focus-visible,textarea:focus-visible { outline:3px solid rgba(249,115,22,.24); outline-offset:2px; }
   .screen { min-height:100dvh; }
   .login { display:grid; place-items:center; padding:22px; background:linear-gradient(180deg,#fff7ed 0%,#fff 48%,#f8fafc 100%); }
   .login-card { width:100%; max-width:430px; background:#fff; border:1px solid var(--line); border-radius:26px; padding:28px; box-shadow:var(--shadow); }
@@ -47,8 +47,9 @@
   .sub { color:var(--muted); margin:0 0 22px; line-height:1.5; font-size:15px; }
   .field { margin-bottom:14px; }
   label { display:block; font-size:13px; font-weight:700; color:var(--muted); margin-bottom:6px; }
-  input { width:100%; min-height:50px; padding:13px 14px; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--ink); }
-  input:focus { border-color:var(--or); }
+  input,textarea { width:100%; min-height:50px; padding:13px 14px; border:1px solid var(--line); border-radius:14px; background:#fff; color:var(--ink); }
+  textarea { min-height:92px; resize:vertical; line-height:1.35; }
+  input:focus,textarea:focus { border-color:var(--or); }
   .btn { min-height:46px; border-radius:14px; padding:12px 16px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .15s ease, box-shadow .15s ease, background .15s ease; }
   .btn:active { transform:scale(.98); }
   .login-card .btn-primary { width:100%; }
@@ -105,9 +106,19 @@
   .cart { position:static; margin:18px 0 8px; background:#fff; border:1px solid var(--line); border-radius:22px; overflow:hidden; box-shadow:0 8px 18px rgba(15,23,42,.06); }
   .cart-title { padding:15px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; gap:12px; font-weight:900; font-family:var(--display); letter-spacing:0; }
   .cart-list { padding:2px 14px; max-height:none; overflow:visible; }
-  .cart-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:12px 0; border-bottom:1px solid #f1f5f9; align-items:center; }
+  .cart-row { display:grid; grid-template-columns:1fr; gap:8px; padding:12px 0; border-bottom:1px solid #f1f5f9; align-items:stretch; }
   .cart-row:last-child { border-bottom:0; }
   .cart-row strong { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; vertical-align:bottom; }
+  .cart-main { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; }
+  .cart-detail { min-width:0; }
+  .cart-line { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .cart-tools { display:flex; gap:7px; flex-wrap:wrap; }
+  .mini-btn { min-height:36px; padding:7px 10px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); font-size:12px; font-weight:900; }
+  .mini-btn.note-on { border-color:#fed7aa; background:#fff7ed; color:#9a3412; }
+  .note-preview { color:#9a3412; background:#fff7ed; border:1px solid #fed7aa; border-radius:12px; padding:8px 10px; font-size:12px; line-height:1.35; }
+  .note-editor { display:grid; gap:8px; padding:10px; border:1px solid #fed7aa; border-radius:16px; background:#fffbeb; }
+  .note-editor textarea { min-height:86px; background:#fff; }
+  .note-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .qty { display:flex; align-items:center; gap:0; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
   .qty button { width:40px; min-height:38px; background:#fff; font-weight:900; color:var(--ink); }
   .qty span { min-width:34px; text-align:center; font-weight:900; }
@@ -244,10 +255,11 @@
 <script>
 let token = localStorage.getItem('gestiva_waiter_token');
 let WAITER_DEMO = false; // demo desactivado para producción
-let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos' };
+let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos', noteIndex:null };
 
 const $ = (s) => document.querySelector(s);
 const money = (n) => new Intl.NumberFormat('es-AR', { style:'currency', currency:'ARS', maximumFractionDigits:0 }).format(Number(n||0));
+const h = (v) => String(v ?? '').replace(/[&<>'"]/g, (ch) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]));
 function _hash(s) { let h = 0; for (let i=0;i<s.length;i++) h = (h<<5) - h + s.charCodeAt(i), h |= 0; return Math.abs(h); }
 function pVisual(p) {
   if (p && p.photo_url) return `<div class="pmedia"><img src="${p.photo_url}" alt="" loading="lazy"/></div>`;
@@ -510,6 +522,7 @@ async function selectTable(id) {
   }
   state.table = table;
   state.items = structuredClone(open?.items || []);
+  state.noteIndex = null;
   state.cat = 'todos';
   $('#tablesView').classList.add('hidden');
   $('#orderView').classList.remove('hidden');
@@ -623,7 +636,7 @@ async function persistCurrentItems(opts = {}) {
 async function addItem(productId) {
   const existing = state.items.find(i => i.productId === productId && !i.sentToKitchen);
   if (existing) existing.qty += 1;
-  else state.items.push({ productId, qty:1, sentToKitchen:false });
+  else state.items.push({ productId, qty:1, sentToKitchen:false, notes:'' });
   renderCart();
   try {
     await persistCurrentItems();
@@ -644,7 +657,11 @@ async function changeQty(index, delta) {
     if (!confirm('Este item ya fue enviado a cocina. ¿Cancelarlo igual?')) return;
   }
   it.qty += delta;
-  if (it.qty <= 0) state.items.splice(index, 1);
+  if (it.qty <= 0) {
+    state.items.splice(index, 1);
+    if (state.noteIndex === index) state.noteIndex = null;
+    else if (state.noteIndex > index) state.noteIndex -= 1;
+  }
   renderCart();
   try { await persistCurrentItems(); renderTables(); }
   catch (e) { alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa esta asignada a otro mozo.' : e.message); }
@@ -653,10 +670,39 @@ async function changeQty(index, delta) {
 async function clearCart() {
   if (!state.items.length || confirm('Vaciar este pedido?')) {
     state.items = [];
+    state.noteIndex = null;
     renderCart();
     try { await persistCurrentItems({ create:false }); renderTables(); }
     catch (e) { alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa esta asignada a otro mozo.' : e.message); }
   }
+}
+
+function editItemNote(index) {
+  const it = state.items[index];
+  if (!it) return;
+  if (it.sentToKitchen) {
+    alert('Este producto ya fue enviado a cocina. Para corregirlo, agregalo de nuevo con otra nota.');
+    return;
+  }
+  state.noteIndex = index;
+  renderCart();
+  setTimeout(() => document.getElementById('itemNote' + index)?.focus(), 0);
+}
+
+function cancelItemNote() {
+  state.noteIndex = null;
+  renderCart();
+}
+
+async function saveItemNote(index) {
+  const it = state.items[index];
+  if (!it || it.sentToKitchen) return;
+  const input = document.getElementById('itemNote' + index);
+  it.notes = (input?.value || '').trim().slice(0, 160);
+  state.noteIndex = null;
+  renderCart();
+  try { await persistCurrentItems(); renderTables(); }
+  catch (e) { alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa esta asignada a otro mozo.' : e.message); }
 }
 
 function renderCart() {
@@ -673,9 +719,27 @@ function renderCart() {
     const sentBadge = it.sentToKitchen
       ? '<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">en cocina</span>'
       : '<span style="font-size:10px;background:#fff7ed;color:#9a3412;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">nuevo</span>';
+    const note = (it.notes || '').trim();
+    const editingNote = state.noteIndex === i && !it.sentToKitchen;
     return `<div class="cart-row" style="${it.sentToKitchen?'opacity:.8;background:#f8fafc;':''}">
-      <div><strong>${p ? p.name : 'Producto'}</strong>${sentBadge}<div class="meta">${p ? money(p.price) : ''}</div></div>
-      <div class="qty"><button onclick="changeQty(${i},-1)">-</button><span>${it.qty}</span><button onclick="changeQty(${i},1)" ${it.sentToKitchen?'disabled style="opacity:.4;"':''}>+</button></div>
+      <div class="cart-main">
+        <div class="cart-detail">
+          <div class="cart-line"><strong>${h(p ? p.name : 'Producto')}</strong>${sentBadge}</div>
+          <div class="meta">${p ? money(p.price) : ''}</div>
+        </div>
+        <div class="qty"><button onclick="changeQty(${i},-1)">-</button><span>${it.qty}</span><button onclick="changeQty(${i},1)" ${it.sentToKitchen?'disabled style="opacity:.4;"':''}>+</button></div>
+      </div>
+      ${note ? `<div class="note-preview">Nota: ${h(note)}</div>` : ''}
+      ${editingNote ? `<div class="note-editor">
+        <label for="itemNote${i}">Nota para cocina/comandera</label>
+        <textarea id="itemNote${i}" maxlength="160" placeholder="Ej: sin tomate, solo mayonesa, bien cocida">${h(note)}</textarea>
+        <div class="note-actions">
+          <button class="mini-btn" onclick="cancelItemNote()">Cancelar</button>
+          <button class="mini-btn note-on" onclick="saveItemNote(${i})">Guardar nota</button>
+        </div>
+      </div>` : `<div class="cart-tools">
+        <button class="mini-btn ${note ? 'note-on' : ''}" onclick="editItemNote(${i})" ${it.sentToKitchen?'disabled style="opacity:.5;"':''}>${note ? 'Editar nota' : 'Agregar nota'}</button>
+      </div>`}
     </div>`;
   }).join('');
   $('#cartTotal').textContent = money(total);
@@ -705,8 +769,10 @@ async function saveOrder() {
     // 2) Marcar items como enviados
     state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
     // 3) Persistir en open_tables
-    await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
+    await persistCurrentItems();
+    state.noteIndex = null;
     renderCart();
+    renderTables();
     // El pedido queda en cocina y la PC principal lo imprime en la comandera.
     // El celular no imprime ni abre PDF.
     alert('Pedido enviado a cocina (' + newItems.length + ' items)');
@@ -730,7 +796,7 @@ if ('serviceWorker' in navigator) {
     reloadingForUpdate = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js?v=20260701-compact-orders').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20260701-item-notes').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {
