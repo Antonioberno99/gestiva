@@ -36,10 +36,82 @@
   const DEFAULT_API_URL = 'https://gestiva-backend.onrender.com';
 
   function getCfg() {
-    try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); }
-    catch { return Object.assign({}, DEFAULTS); }
+    let cfg;
+    try { cfg = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); }
+    catch { cfg = Object.assign({}, DEFAULTS); }
+    // Migración: config vieja de una sola comandera (+bar) → lista de comanderas con nombre
+    if (!Array.isArray(cfg.stations)) cfg.stations = legacyToStations(cfg);
+    return cfg;
   }
   function setCfg(c) { localStorage.setItem(LS_KEY, JSON.stringify(Object.assign(getCfg(), c))); }
+
+  // ---------- Comanderas con nombre (lista) ----------
+  const newId = () => 'st_' + Math.random().toString(36).slice(2, 9);
+  // Construye la lista a partir de la config vieja (método único + bar opcional)
+  function legacyToStations(cfg) {
+    const out = [];
+    if (cfg.method && cfg.method !== 'screen') {
+      out.push({
+        id: newId(), name: 'Cocina', method: cfg.method,
+        printerName: cfg.printerName || '', printerIp: cfg.printerIp || '', printerPort: cfg.printerPort || 9100,
+        paper: cfg.paper || 58, copies: cfg.copies || 1,
+        route: cfg.routingMode === 'split' ? 'resto' : 'todo',
+        categories: cfg.routingMode === 'split' ? (cfg.barCategories || 'Bebidas,Tragos') : '',
+        receipts: true
+      });
+      if (cfg.routingMode === 'split' && (cfg.barPrinterIp || cfg.barPrinterName)) {
+        out.push({
+          id: newId(), name: 'Bar', method: cfg.barPrinterMode === 'windows' ? 'usb' : 'network',
+          printerName: cfg.barPrinterName || '', printerIp: cfg.barPrinterIp || '', printerPort: cfg.barPrinterPort || 9100,
+          paper: cfg.paper || 58, copies: 1,
+          route: 'solo', categories: cfg.barCategories || 'Bebidas,Tragos',
+          receipts: false
+        });
+      }
+    }
+    return out;
+  }
+  // Deriva los campos viejos desde la lista (compatibilidad: app/mozo y agente main+bar)
+  function deriveLegacy(stations) {
+    const agentCapable = (s) => s.method === 'network' || s.method === 'usb';
+    const main = stations.find(s => s.route !== 'solo' && agentCapable(s)) || stations.find(s => s.route !== 'solo') || stations[0] || null;
+    const bar = stations.find(s => s !== main && s.route === 'solo' && agentCapable(s)) || null;
+    const legacy = {
+      method: main ? main.method : 'screen',
+      printerMode: main ? (main.method === 'usb' ? 'windows' : (main.method === 'network' ? 'network' : '')) : '',
+      printerName: (main && main.method === 'usb' && main.printerName) || '',
+      printerIp: (main && main.method === 'network' && main.printerIp) || '',
+      printerPort: (main && main.printerPort) || 9100,
+      paper: (main && main.paper) || 58,
+      copies: (main && main.copies) || 1,
+      routingMode: bar ? 'split' : 'single',
+      barCategories: bar ? (bar.categories || 'Bebidas,Tragos') : 'Bebidas,Tragos',
+      barPrinterMode: bar ? (bar.method === 'usb' ? 'windows' : 'network') : 'network',
+      barPrinterName: (bar && bar.printerName) || '',
+      barPrinterIp: (bar && bar.printerIp) || '',
+      barPrinterPort: (bar && bar.printerPort) || 9100
+    };
+    return legacy;
+  }
+  function saveStations(stations, extra) {
+    setCfg(Object.assign({ stations }, deriveLegacy(stations), extra || {}));
+  }
+  const getStations = () => getCfg().stations || [];
+  // Categorías: "Bebidas,Tragos" → ['bebidas','tragos']
+  function parseCats(s) { return String(s || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean); }
+  function itemInCats(it, cats) {
+    const cat = String((it && (it.cat || it.category || it.type)) || '').trim().toLowerCase();
+    const seg = String((it && it.segment) || '').trim().toLowerCase();
+    return !!(cat && cats.includes(cat)) || !!(seg && cats.includes(seg));
+  }
+  // Qué items del pedido imprime esta comandera según su regla
+  function stationItems(st, items) {
+    items = Array.isArray(items) ? items : [];
+    const cats = parseCats(st.categories);
+    if (st.route === 'solo') return items.filter(it => itemInCats(it, cats));
+    if (st.route === 'resto') return items.filter(it => !itemInCats(it, cats));
+    return items;
+  }
 
   // ---------- Utilidades de texto ----------
   const charsPerLine = (paper) => (paper === 80 ? 48 : 32);
@@ -457,35 +529,6 @@
   }
 
   // ---------- Orquestador ----------
-  function routingCategories(cfg) {
-    return String((cfg && cfg.barCategories) || 'Bebidas,Tragos')
-      .split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-  }
-  function itemGoesToBar(it, cfg) {
-    const cats = routingCategories(cfg);
-    const cat = String((it && (it.cat || it.category || it.type)) || '').trim().toLowerCase();
-    return !!cat && cats.includes(cat);
-  }
-  function splitKitchenTicket(ticket, cfg) {
-    if (!cfg || cfg.routingMode !== 'split') return [{ area: 'cocina', ticket, cfg }];
-    const items = Array.isArray(ticket.items) ? ticket.items : [];
-    const barItems = items.filter(it => itemGoesToBar(it, cfg));
-    const kitchenItems = items.filter(it => !itemGoesToBar(it, cfg));
-    const out = [];
-    if (kitchenItems.length) out.push({ area: 'cocina', ticket: Object.assign({}, ticket, { items: kitchenItems, area: 'COCINA' }), cfg });
-    if (barItems.length) {
-      const barCfg = Object.assign({}, cfg, {
-        printerMode: cfg.barPrinterMode || 'network',
-        printerName: cfg.barPrinterName || '',
-        printerIp: cfg.barPrinterIp || '',
-        printerPort: cfg.barPrinterPort || 9100,
-        header: (cfg.header || ticket.restaurant || 'Gestiva') + ' - BAR'
-      });
-      if (cfg.method === 'network' || cfg.method === 'usb') barCfg.method = barCfg.printerMode === 'windows' ? 'usb' : 'network';
-      out.push({ area: 'bar', ticket: Object.assign({}, ticket, { items: barItems, area: 'BAR' }), cfg: barCfg });
-    }
-    return out;
-  }
   async function printSingle(ticket, cfg) {
     if (cfg.method === 'screen') return { ok: true, method: 'screen' };
     const copies = Math.max(1, Math.min(3, cfg.copies || 1));
@@ -504,11 +547,46 @@
     else throw new Error('Metodo de comandera desconocido: ' + cfg.method);
     return { ok: true, method: cfg.method };
   }
+  // Config efectiva para imprimir en UNA comandera de la lista
+  function stationCfg(st, globalCfg, multi) {
+    const base = globalCfg || getCfg();
+    return Object.assign({}, base, {
+      method: st.method,
+      paper: st.paper || base.paper || 58,
+      copies: st.copies || 1,
+      printerMode: st.method === 'usb' ? 'windows' : (st.method === 'network' ? 'network' : ''),
+      printerName: st.printerName || '',
+      printerIp: st.printerIp || '',
+      printerPort: st.printerPort || 9100,
+      // Con varias comanderas, cada ticket dice en cuál salió (BAR, CAJA...)
+      header: (base.header || '') ,
+      _nameSuffix: multi ? String(st.name || '').toUpperCase() : ''
+    });
+  }
+  async function printStation(st, ticket, globalCfg, multi) {
+    const items = stationItems(st, ticket.items);
+    if (!items.length) return { ok: true, skipped: true };
+    const scfg = stationCfg(st, globalCfg, multi);
+    const head = (scfg.header || ticket.restaurant || 'Gestiva') + (scfg._nameSuffix ? ' - ' + scfg._nameSuffix : '');
+    return printSingle(Object.assign({}, ticket, { items }), Object.assign({}, scfg, { header: head }));
+  }
+  // Imprime el pedido en TODAS las comanderas configuradas (cada una con su regla).
   async function print(ticket, opts) {
     const cfg = Object.assign(getCfg(), opts || {});
-    const jobs = splitKitchenTicket(ticket, cfg);
-    for (const job of jobs) await printSingle(job.ticket, job.cfg);
-    return { ok: true, method: cfg.method, jobs: jobs.map(j => j.area) };
+    const stations = cfg.stations || [];
+    if (!stations.length) return { ok: true, method: 'screen' };
+    const multi = stations.length > 1;
+    const errors = []; const printed = [];
+    for (const st of stations) {
+      try {
+        const r = await printStation(st, ticket, cfg, multi);
+        if (!r.skipped) printed.push(st.name);
+      } catch (e) {
+        errors.push((st.name || 'Comandera') + ': ' + (e.message || e));
+      }
+    }
+    if (errors.length) throw new Error(errors.join('\n'));
+    return { ok: true, method: cfg.method, printed };
   }
   function concatCopies(bytes, n) {
     const out = new Uint8Array(bytes.length * n);
@@ -516,19 +594,28 @@
     return out;
   }
 
-  function testPrint() {
-    return print({
-      restaurant: getCfg().header || 'GESTIVA',
-      table: '5',
-      waiter: 'Prueba',
-      datetime: new Date(),
-      ref: 'TEST',
-      items: [
-        { name: 'Milanesa napolitana', cat: 'Comida', qty: 2, modifiers: ['sin papas'], notes: 'bien cocida' },
-        { name: 'Coca-Cola 500ml', cat: 'Bebidas', qty: 1, modifiers: [], notes: '' },
-        { name: 'Flan con dulce', cat: 'Postres', qty: 1, modifiers: ['extra dulce'], notes: '' }
-      ]
-    });
+  const TEST_TICKET = () => ({
+    restaurant: getCfg().header || 'GESTIVA',
+    table: '5',
+    waiter: 'Prueba',
+    datetime: new Date(),
+    ref: 'TEST',
+    items: [
+      { name: 'Milanesa napolitana', cat: 'Comida', qty: 2, modifiers: ['sin papas'], notes: 'bien cocida' },
+      { name: 'Coca-Cola 500ml', cat: 'Bebidas', qty: 1, modifiers: [], notes: '' },
+      { name: 'Flan con dulce', cat: 'Postres', qty: 1, modifiers: ['extra dulce'], notes: '' }
+    ]
+  });
+  // Sin id: prueba en todas. Con id: prueba SOLO esa comandera (ticket completo, sin filtrar).
+  function testPrint(stationId) {
+    if (!stationId) return print(TEST_TICKET());
+    const cfg = getCfg();
+    const st = (cfg.stations || []).find(s => s.id === stationId);
+    if (!st) throw new Error('No encontré esa comandera.');
+    const scfg = stationCfg(st, cfg, true);
+    const t = TEST_TICKET();
+    const head = (scfg.header || t.restaurant) + (scfg._nameSuffix ? ' - ' + scfg._nameSuffix : '');
+    return printSingle(t, Object.assign({}, scfg, { header: head }));
   }
 
   // ---------- UI de configuración (modal autocontenido) ----------
@@ -540,17 +627,20 @@
     network: 'Red / WiFi'
   };
 
-  // Tarjetas visuales: cada tipo de comandera con su explicación simple.
+  // Tarjetas visuales: cada tipo de conexión con su explicación simple.
   const METHOD_CARDS = [
-    { k: 'network',   code: 'RED', name: 'Red / WiFi',     desc: 'Impresora con IP propia en la red del local.' },
-    { k: 'usb',       code: 'USB', name: 'USB',            desc: 'Cable directo a esta PC. Usa la impresora instalada en Windows.' },
-    { k: 'bluetooth', code: 'BT',  name: 'Bluetooth',      desc: 'Termica portatil emparejada con este equipo.' },
-    { k: 'browser',   code: 'PC',  name: 'Navegador',      desc: 'Abre el dialogo normal de impresion.' },
-    { k: 'screen',    code: 'KDS', name: 'Solo pantalla',  desc: 'Los pedidos quedan en la pantalla de cocina.' }
+    { k: 'network',   code: 'RED', name: 'Red / WiFi',   desc: 'Impresora con IP propia: cable al router o WiFi del local.' },
+    { k: 'usb',       code: 'USB', name: 'USB',          desc: 'Cable directo a esta PC. Usa la impresora instalada en Windows.' },
+    { k: 'bluetooth', code: 'BT',  name: 'Bluetooth',    desc: 'Termica portatil emparejada con este equipo.' },
+    { k: 'browser',   code: 'PC',  name: 'Navegador',    desc: 'Abre el dialogo normal de impresion de la compu.' }
   ];
 
   function openConfig() {
     const cfg = getCfg();
+    let stations = (cfg.stations || []).map(s => Object.assign({}, s));
+    let editing = null;   // comandera en edición (copia de trabajo)
+    let isNew = false;
+    let kitchenAuto = !!cfg.kitchenAuto;
     const existing = document.getElementById('cmdr-modal');
     if (existing) existing.remove();
     const wrap = document.createElement('div');
@@ -570,11 +660,9 @@
         #cmdr-modal .card{display:flex;flex-direction:column;gap:3px;padding:12px;border:2px solid #e2e8f0;border-radius:14px;background:#fff;cursor:pointer;text-align:left;font-family:inherit;transition:.12s;}
         #cmdr-modal .card:hover{border-color:#fdba74;}
         #cmdr-modal .card.on{border-color:#f97316;background:#fff7ed;}
-        #cmdr-modal .card .code{display:inline-flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:999px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:900;letter-spacing:.04em;}
+        #cmdr-modal .card .code,#cmdr-modal .strow .code{display:inline-flex;align-items:center;justify-content:center;width:36px;height:24px;border-radius:999px;background:#f8fafc;color:#64748b;font-size:11px;font-weight:900;letter-spacing:.04em;flex:none;}
         #cmdr-modal .card .nm{font-weight:800;font-size:14px;color:#0f172a;}
         #cmdr-modal .card .ds{font-size:11px;color:#64748b;line-height:1.35;}
-        #cmdr-modal .card.wide{grid-column:1 / -1;flex-direction:row;align-items:center;gap:10px;}
-        #cmdr-modal .card.wide .ds{flex:1;}
         #cmdr-modal .panel{margin-top:12px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;}
         #cmdr-modal .panel.hide,#cmdr-modal .hide{display:none!important;}
         #cmdr-modal .status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:10px;}
@@ -597,165 +685,180 @@
         #cmdr-modal .btn-ghost{background:#f1f5f9;color:#475569;}
         #cmdr-modal .btn-test{width:100%;margin-top:14px;padding:12px;border:1px dashed #f97316;background:#fff7ed;color:#ea580c;border-radius:12px;font-weight:700;cursor:pointer;font-family:inherit;}
         #cmdr-modal .flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:8px;margin:12px 0 16px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;color:#475569;font-size:12px;font-weight:800;text-align:center;}#cmdr-modal .flow .arr{color:#94a3b8;}#cmdr-modal .hint{font-size:11.5px;color:#94a3b8;margin-top:8px;line-height:1.5;}
-        #cmdr-modal .msg{font-size:13px;margin-top:10px;padding:10px;border-radius:8px;display:none;}
+        #cmdr-modal .msg{font-size:13px;margin-top:10px;padding:10px;border-radius:8px;display:none;white-space:pre-line;}
         #cmdr-modal .msg.ok{display:block;background:#d1fae5;color:#047857;}
         #cmdr-modal .msg.err{display:block;background:#fee2e2;color:#b91c1c;}
+        #cmdr-modal .strow{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid #e2e8f0;border-radius:14px;background:#fff;margin-bottom:8px;}
+        #cmdr-modal .strow .stinfo{flex:1;min-width:0;}
+        #cmdr-modal .strow .stname{font-weight:800;font-size:14.5px;color:#0f172a;}
+        #cmdr-modal .strow .stsub{font-size:11.5px;color:#64748b;margin-top:1px;line-height:1.4;}
+        #cmdr-modal .stdot{width:9px;height:9px;border-radius:50%;background:#ef4444;flex:none;}
+        #cmdr-modal .stdot.ok{background:#10b981;}
+        #cmdr-modal .stbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+        #cmdr-modal .stbtn{padding:8px 10px;border:1px solid #e2e8f0;background:#fff;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;color:#475569;font-family:inherit;}
+        #cmdr-modal .stbtn.danger{color:#b91c1c;border-color:#fecaca;}
       </style>
       <div class="sheet">
-        <h2>Conectar comandera</h2>
-        <p class="sub">Elegí cómo está conectada la comandera en este local. Gestiva conserva todos los métodos: USB, red/IP, Bluetooth, navegador o pantalla.</p>
-        <div class="flow"><span>App equipo</span><span class="arr">&rarr;</span><span>Panel central</span><span class="arr">&rarr;</span><span>Comandera</span></div>
-        <div class="status off" id="cmdr-main-status"><span class="dot"></span><span id="cmdr-main-status-txt">Sin comandera conectada</span></div>
 
-        <label><span class="step">1</span>Tipo de conexion</label>
-        <div class="cards" id="cmdr-cards">
-          ${METHOD_CARDS.map(m => `
-            <button type="button" class="card ${m.k === 'screen' ? 'wide ' : ''}${cfg.method === m.k ? 'on' : ''}" data-k="${m.k}">
+        <!-- VISTA LISTA: mis comanderas -->
+        <div id="cmdr-list-view">
+          <h2>Mis comanderas</h2>
+          <p class="sub">Conectá cada comandera por separado y ponele nombre (Caja, Bar, Cocina...). Cada pedido sale en las que corresponda según lo que imprime cada una.</p>
+          <div class="flow"><span>App equipo</span><span class="arr">&rarr;</span><span>Panel central</span><span class="arr">&rarr;</span><span>Comanderas</span></div>
+          <div id="cmdr-stlist"></div>
+          <button type="button" class="btn-connect" id="cmdr-add" style="margin-top:10px;">+ Conectar comandera</button>
+
+          <label>Encabezado de los tickets (opcional)</label>
+          <input type="text" id="cmdr-header" placeholder="Nombre del restaurante" value="${escapeHTML(cfg.header)}">
+          <label>Pie (opcional)</label>
+          <input type="text" id="cmdr-footer" placeholder="Ej: Apurar mesa" value="${escapeHTML(cfg.footer)}">
+
+          <div class="toggle">
+            <span>Usar esta PC como estacion central</span>
+            <div class="sw ${cfg.kitchenAuto ? 'on' : ''}" id="cmdr-kauto"></div>
+          </div>
+          <div class="hint">Activala solo en la computadora del restaurante que queda prendida junto a las comanderas. El celular del mozo no imprime: solo envia el pedido.</div>
+
+          <button type="button" class="btn-test" id="cmdr-test">Imprimir prueba en todas</button>
+          <div class="msg" id="cmdr-msg"></div>
+
+          <div class="btns">
+            <button type="button" class="btn btn-ghost" id="cmdr-close">Cerrar</button>
+            <button type="button" class="btn btn-primary" id="cmdr-save">Guardar</button>
+          </div>
+        </div>
+
+        <!-- VISTA EDITAR: conectar una comandera -->
+        <div id="cmdr-edit-view" class="hide">
+          <h2 id="cmdr-edit-title">Conectar comandera</h2>
+          <p class="sub">Le pones un nombre, elegis como esta conectada y la probas. Despues podes volver y agregar otra.</p>
+
+          <label><span class="step">1</span>Nombre de la comandera</label>
+          <input type="text" id="cmdr-name" placeholder="Ej: Caja, Bar, Cocina" maxlength="24">
+
+          <label><span class="step">2</span>Como esta conectada</label>
+          <div class="cards" id="cmdr-cards">
+            ${METHOD_CARDS.map(m => `
+            <button type="button" class="card" data-k="${m.k}">
               <span class="code">${m.code}</span>
               <span class="nm">${m.name}</span>
               <span class="ds">${m.desc}</span>
             </button>`).join('')}
-        </div>
+          </div>
 
-        <div class="panel hide" id="cmdr-connect-panel">
-          <div class="status off" id="cmdr-status"><span class="dot"></span><span id="cmdr-status-txt">Sin conectar</span></div>
-          <button type="button" class="btn-connect" id="cmdr-connect">Conectar impresora</button>
-          <div class="hint" id="cmdr-connect-hint"></div>
-        </div>
+          <div class="panel hide" id="cmdr-net">
+            <div class="status off" id="cmdr-net-status"><span class="dot"></span><span>Sin conectar</span></div>
+            <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion (una vez por PC)</a>
+            <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Buscar comanderas en la red</button>
+            <div id="cmdr-scan-results"></div>
+            <label style="margin-top:12px">Si no la encuentra, escribi la IP del selftest</label>
+            <div class="row">
+              <input type="text" id="cmdr-ip" placeholder="Ej: 192.168.1.200">
+              <input type="number" id="cmdr-port" placeholder="9100" value="9100" style="max-width:90px;">
+            </div>
+            <button type="button" class="btn-test" id="cmdr-save-ip" style="margin:10px 0 0;background:#fff;color:#475569;border-color:#cbd5e1;">Usar esta IP e imprimir prueba</button>
+            <button type="button" class="btn-test" id="cmdr-download-pair" style="margin:10px 0 0;background:#fff;color:#64748b;border-color:#e2e8f0;">Modo soporte: descargar vinculacion</button>
+            <div class="hint">Muchas comanderas imprimen su IP con un selftest: prendelas manteniendo apretado FEED. Puerto normal: 9100.</div>
+          </div>
 
-        <div class="panel hide" id="cmdr-usb">
-          <div class="status off" id="cmdr-usb-status"><span class="dot"></span><span id="cmdr-usb-status-txt">Estacion USB sin vincular</span></div>
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Usá esta opción cuando la comandera está conectada con cable USB a esta PC.</div>
-          <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion</a>
-          <button type="button" class="btn-test" id="cmdr-usb-pair" style="margin:0 0 10px;">2. Detectar Epson USB y probar</button>
-          <input type="hidden" id="cmdr-printer-name" value="${escapeHTML(cfg.printerName || '')}">
-          <div id="cmdr-usb-results"></div>
-          <div class="hint">Si la comandera esta enchufada por USB y prendida, al tocar el boton se instala y conecta sola. No hace falta instalar nada a mano en Windows.</div>
-        </div>
+          <div class="panel hide" id="cmdr-usb">
+            <div class="status off" id="cmdr-usb-status"><span class="dot"></span><span>Sin conectar</span></div>
+            <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion (una vez por PC)</a>
+            <button type="button" class="btn-test" id="cmdr-usb-pair" style="margin:0 0 10px;">2. Detectar impresora USB y probar</button>
+            <div id="cmdr-usb-results"></div>
+            <div class="hint">Si la comandera esta enchufada por USB y prendida, se instala y conecta sola. No hace falta tocar nada en Windows.</div>
+          </div>
 
-        <div class="panel hide" id="cmdr-net">
-          <div class="status off" id="cmdr-net-status"><span class="dot"></span><span id="cmdr-net-status-txt">Estacion de impresion sin vincular</span></div>
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">Usá esta opción cuando la comandera imprime por red, WiFi o Ethernet y tiene una IP propia.</div>
-          <a href="assets/comandera-bridge/instalar-gestiva-comandera.bat" download class="btn-test" style="display:block;text-align:center;text-decoration:none;margin:0 0 10px;">1. Instalar / actualizar estacion</a>
-          <button type="button" class="btn-test" id="cmdr-pair" style="margin:0 0 10px;">2. Conectar automaticamente</button>
-          <div id="cmdr-scan-results"></div>
-          <label style="margin-top:12px">Si no la encuentra, escribir IP del selftest</label>
+          <div class="panel hide" id="cmdr-bt">
+            <div class="status off" id="cmdr-bt-status"><span class="dot"></span><span>Sin conectar</span></div>
+            <button type="button" class="btn-connect" id="cmdr-bt-connect">Conectar impresora Bluetooth</button>
+            <div class="hint">Encende la impresora y toca Conectar (Chrome en Android). Se puede usar una comandera Bluetooth por equipo.</div>
+          </div>
+
+          <div class="panel hide" id="cmdr-browser-note">
+            <div class="hint" style="margin:0;color:#475569;font-size:12.5px;">No hace falta conectar nada: al imprimir se abre el dialogo del navegador y elegis la impresora de esta computadora.</div>
+          </div>
+
+          <label><span class="step">3</span>Que imprime esta comandera</label>
+          <div class="seg" id="cmdr-route">
+            <button type="button" data-v="todo">Todo el pedido</button>
+            <button type="button" data-v="solo">Solo estas categorias</button>
+            <button type="button" data-v="resto">Todo menos estas</button>
+          </div>
+          <div id="cmdr-cats-box" class="hide" style="margin-top:10px;">
+            <input type="text" id="cmdr-cats" placeholder="Bebidas,Tragos">
+            <div class="hint">Separa con comas. Ejemplo: el <b>Bar</b> con "Solo estas categorias" y <b>Bebidas,Tragos</b> imprime unicamente las bebidas; la <b>Cocina</b> con "Todo menos estas" imprime el resto.</div>
+          </div>
+
+          <div class="toggle">
+            <span>Imprime tambien los comprobantes de venta</span>
+            <div class="sw" id="cmdr-receipts"></div>
+          </div>
+          <div class="hint">Prendelo en la comandera de la <b>caja</b>: ahi sale el ticket para el cliente al cobrar.</div>
+
+          <label><span class="step">4</span>Papel y copias</label>
           <div class="row">
-            <input type="text" id="cmdr-ip" placeholder="Ej: 192.168.1.200" value="${escapeHTML(cfg.printerIp)}">
-            <input type="number" id="cmdr-port" placeholder="9100" value="${cfg.printerPort || 9100}" style="max-width:90px;">
-          </div>
-          <button type="button" class="btn-test" id="cmdr-save-ip" style="margin:10px 0 0;background:#fff;color:#475569;border-color:#cbd5e1;">Guardar IP e imprimir prueba</button>
-          <button type="button" class="btn-test" id="cmdr-download-pair" style="margin:10px 0 0;background:#fff;color:#64748b;border-color:#e2e8f0;">Modo soporte: descargar vinculacion</button>
-          <div class="hint">Para ver la IP, muchas comanderas imprimen un selftest al prenderlas manteniendo apretado FEED. Puerto normal: 9100.</div>
-        </div>
-
-        <div class="panel hide" id="cmdr-browser-note">
-          <div class="hint" style="margin:0;color:#475569;font-size:12.5px;">No hace falta conectar nada. Al imprimir se abre el dialogo del navegador y elegis la impresora instalada en esta computadora.</div>
-        </div>
-
-        <label><span class="step">2</span>Ajustes de impresion</label>
-        <div class="row">
-          <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Ancho de papel</div>
-            <div class="seg" id="cmdr-paper">
-              <button type="button" data-v="58" class="${cfg.paper === 58 ? 'on' : ''}">58 mm</button>
-              <button type="button" data-v="80" class="${cfg.paper === 80 ? 'on' : ''}">80 mm</button>
+            <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Ancho de papel</div>
+              <div class="seg" id="cmdr-paper">
+                <button type="button" data-v="58">58 mm</button>
+                <button type="button" data-v="80">80 mm</button>
+              </div>
+            </div>
+            <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Copias</div>
+              <div class="seg" id="cmdr-copies">
+                ${[1, 2, 3].map(n => `<button type="button" data-v="${n}">${n}</button>`).join('')}
+              </div>
             </div>
           </div>
-          <div style="flex:1"><div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px;">Copias</div>
-            <div class="seg" id="cmdr-copies">
-              ${[1, 2, 3].map(n => `<button type="button" data-v="${n}" class="${cfg.copies === n ? 'on' : ''}">${n}</button>`).join('')}
-            </div>
+
+          <button type="button" class="btn-test" id="cmdr-etest">Imprimir prueba en esta comandera</button>
+          <div class="msg" id="cmdr-emsg"></div>
+
+          <div class="btns">
+            <button type="button" class="btn btn-ghost" id="cmdr-back">Volver</button>
+            <button type="button" class="btn btn-primary" id="cmdr-esave">Guardar comandera</button>
           </div>
-        </div>
-
-        <label>Encabezado (opcional)</label>
-        <input type="text" id="cmdr-header" placeholder="Nombre del restaurante" value="${escapeHTML(cfg.header)}">
-        <label>Pie (opcional)</label>
-        <input type="text" id="cmdr-footer" placeholder="Ej: Apurar mesa" value="${escapeHTML(cfg.footer)}">
-
-        <label><span class="step">3</span>Salida de pedidos</label>
-        <div class="seg" id="cmdr-routing">
-          <button type="button" data-v="single" class="${(cfg.routingMode || 'single') === 'single' ? 'on' : ''}">Todo junto</button>
-          <button type="button" data-v="split" class="${cfg.routingMode === 'split' ? 'on' : ''}">Dividir bar/cocina</button>
-        </div>
-        <div class="panel ${cfg.routingMode === 'split' ? '' : 'hide'}" id="cmdr-routing-panel">
-          <div class="hint" style="margin:0 0 10px;color:#475569;font-size:12.5px;">La comandera principal configurada arriba queda como <strong>Cocina</strong>. Las categorias indicadas abajo salen por la comandera de <strong>Bar</strong>.</div>
-          <label style="margin-top:10px">Categorias que van al bar</label>
-          <input type="text" id="cmdr-bar-cats" placeholder="Bebidas,Tragos" value="${escapeHTML(cfg.barCategories || 'Bebidas,Tragos')}">
-          <label>Comandera del bar</label>
-          <div class="seg" id="cmdr-bar-mode">
-            <button type="button" data-v="network" class="${(cfg.barPrinterMode || 'network') === 'network' ? 'on' : ''}">Red/IP</button>
-            <button type="button" data-v="windows" class="${cfg.barPrinterMode === 'windows' ? 'on' : ''}">USB Windows</button>
-          </div>
-          <div id="cmdr-bar-net">
-            <div class="row" style="margin-top:10px;">
-              <input type="text" id="cmdr-bar-ip" placeholder="IP bar: 192.168.1.201" value="${escapeHTML(cfg.barPrinterIp || '')}">
-              <input type="number" id="cmdr-bar-port" placeholder="9100" value="${cfg.barPrinterPort || 9100}" style="max-width:90px;">
-            </div>
-          </div>
-          <div id="cmdr-bar-usb" class="hide" style="margin-top:10px;">
-            <input type="text" id="cmdr-bar-printer-name" placeholder="Nombre exacto de la impresora instalada en Windows" value="${escapeHTML(cfg.barPrinterName || '')}">
-            <div class="hint">Para USB Windows, el nombre debe coincidir con la impresora instalada en esta PC.</div>
-          </div>
-          <div class="hint">Ejemplo: productos con tipo Bebidas o Tragos salen en Bar. Comida, Postres y el resto salen en Cocina.</div>
-        </div>
-
-        <div class="toggle">
-          <span>Usar esta PC como estacion central</span>
-          <div class="sw ${cfg.kitchenAuto ? 'on' : ''}" id="cmdr-kauto"></div>
-        </div>
-        <div class="hint">Activa la estacion central solo en la computadora del restaurante que queda abierta junto a la comandera. El celular del mozo no imprime: solo envia el pedido.</div>
-
-        <button type="button" class="btn-test" id="cmdr-test">Imprimir prueba</button>
-        <div class="msg" id="cmdr-msg"></div>
-
-        <div class="btns">
-          <button type="button" class="btn btn-ghost" id="cmdr-close">Cerrar</button>
-          <button type="button" class="btn btn-primary" id="cmdr-save">Guardar</button>
         </div>
       </div>`;
     document.body.appendChild(wrap);
 
-    const $ = (id) => wrap.querySelector(id);
-    const msg = (txt, ok) => { const m = $('#cmdr-msg'); m.textContent = txt; m.className = 'msg ' + (ok ? 'ok' : 'err'); };
-    const state = { method: cfg.method, paper: cfg.paper, copies: cfg.copies, autoprint: cfg.autoprint, kitchenAuto: cfg.kitchenAuto, printerName: cfg.printerName || '', routingMode: cfg.routingMode || 'single', barPrinterMode: cfg.barPrinterMode || 'network' };
+    const $ = (sel) => wrap.querySelector(sel);
+    const msgIn = (sel, txt, ok) => { const m = $(sel); if (!m) return; m.textContent = txt; m.className = txt ? ('msg ' + (ok ? 'ok' : 'err')) : 'msg'; };
+    const msg = (txt, ok) => msgIn('#cmdr-msg', txt, ok);
+    const emsg = (txt, ok) => msgIn('#cmdr-emsg', txt, ok);
 
-    function setMainStatus(kind, text) {
-      const box = $('#cmdr-main-status');
-      const txt = $('#cmdr-main-status-txt');
-      if (!box || !txt) return;
-      box.className = 'status ' + (kind === 'ok' ? 'ok' : 'off');
-      txt.textContent = text;
+    // ---------- helpers ----------
+    function globalNow() {
+      return {
+        kitchenAuto,
+        autoprint: cfg.autoprint,
+        header: $('#cmdr-header').value.trim(),
+        footer: $('#cmdr-footer').value.trim(),
+        bridgeUrl: cfg.bridgeUrl
+      };
     }
-    function connectedTextForCurrentMethod() {
-      const ip = ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp) || '';
-      const port = ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : (cfg.printerPort || 9100));
-      const printerName = ($('#cmdr-printer-name') ? $('#cmdr-printer-name').value.trim() : state.printerName) || '';
-      if (state.method === 'usb' && printerName) return 'Conectado: USB - ' + printerName;
-      if (state.method === 'network' && ip) return 'Conectado: Red/IP - ' + ip + ':' + port;
-      if (state.method === 'bluetooth' && isConnected()) return 'Conectado: Bluetooth';
-      if (state.method === 'browser') return 'Listo: imprime con el dialogo del sistema';
-      if (state.method === 'screen') return 'Listo: pantalla de cocina';
-      return '';
+    function stationReady(st) {
+      if (st.method === 'network') return !!st.printerIp;
+      if (st.method === 'usb') return !!st.printerName;
+      return true;
     }
-    function syncMainStatus() {
-      const text = connectedTextForCurrentMethod();
-      if (text) setMainStatus('ok', text);
-      else setMainStatus('off', 'Sin comandera conectada');
+    function stationSummary(st) {
+      if (st.method === 'network') return st.printerIp ? ('Red/IP - ' + st.printerIp + ':' + (st.printerPort || 9100)) : 'Red/IP - falta conectar';
+      if (st.method === 'usb') return st.printerName ? ('USB - ' + st.printerName) : 'USB - falta conectar';
+      if (st.method === 'bluetooth') return 'Bluetooth' + ((_btChar && _btChar.service.device.gatt.connected) ? ' - conectada' : '');
+      if (st.method === 'browser') return 'Navegador (dialogo del sistema)';
+      return st.method || '';
     }
-    function setNetworkStatus(kind, text) {
-      const box = $('#cmdr-net-status');
-      const txt = $('#cmdr-net-status-txt');
-      if (!box || !txt) return;
-      box.className = 'status ' + (kind === 'ok' ? 'ok' : 'off');
-      txt.textContent = text;
+    function routeText(st) {
+      if (st.route === 'solo') return 'Imprime solo: ' + (st.categories || '—');
+      if (st.route === 'resto') return 'Imprime todo menos: ' + (st.categories || '—');
+      return 'Imprime todo el pedido';
     }
-    function setUsbStatus(kind, text) {
-      const box = $('#cmdr-usb-status');
-      const txt = $('#cmdr-usb-status-txt');
-      if (!box || !txt) return;
-      box.className = 'status ' + (kind === 'ok' ? 'ok' : 'off');
-      txt.textContent = text;
+    function setStatus(sel, ok, text) {
+      const box = $(sel); if (!box) return;
+      box.className = 'status ' + (ok ? 'ok' : 'off');
+      const t = box.querySelector('span:last-child');
+      if (t) t.textContent = text;
     }
     function printerLabel(p) {
       const parts = [p.name];
@@ -769,301 +872,209 @@
         .join('');
       const box = $('#cmdr-usb-results');
       if (!box) return;
-      box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Toca la Epson USB que queres usar:</div>' + visible;
+      box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Toca la impresora USB que corresponde a esta comandera:</div>' + visible;
       box.querySelectorAll('.cmdr-usb-pick').forEach(b => b.onclick = () => onPick(b.dataset.name));
     }
-    async function configureUsbPrinter(printerName) {
-      await savePrintStationFullConfig(Object.assign(collect(), { method: 'usb', printerMode: 'windows', printerName, printerIp: '' }));
-      await testPrintStation();
-      state.method = 'usb';
-      state.kitchenAuto = true;
-      state.printerName = printerName;
-      const hidden = $('#cmdr-printer-name');
-      if (hidden) hidden.value = printerName;
-      setCfg(Object.assign(collect(), {
-        method: 'usb',
-        kitchenAuto: true,
-        printerMode: 'windows',
-        printerName,
-        printerIp: '',
-        lastUsbOkAt: new Date().toISOString()
-      }));
-      setUsbStatus('ok', 'Conectado: USB - ' + printerName);
-      setMainStatus('ok', 'Conectado: USB - ' + printerName);
+    // Imprime un ticket de prueba SOLO en esta comandera (con su conexión propia)
+    async function probeStation(st) {
+      const t = TEST_TICKET();
+      const g = Object.assign({}, getCfg(), globalNow());
+      const scfg = stationCfg(st, g, true);
+      const head = (g.header || t.restaurant || 'Gestiva') + ' - ' + String(st.name || 'COMANDERA').toUpperCase();
+      await printSingle(t, Object.assign({}, scfg, { header: head }));
     }
-    function showBridgeInstaller(show) {
-      const box = $('#cmdr-install-box');
-      if (box) box.style.display = show ? 'block' : 'none';
-    }
-    async function detectNetworkConnection(silent) {
-      const next = collect();
-      setNetworkStatus('off', 'Verificando puente...');
-      try {
-        await checkBridge(next);
-        setNetworkStatus('off', 'Puente activo. Verificando comandera...');
-        await probeNetworkPrinter(next);
-        setCfg(Object.assign(next, { lastNetworkOkAt: new Date().toISOString() }));
-        setNetworkStatus('ok', 'Conectado: Red/IP - ' + next.printerIp + ':' + (next.printerPort || 9100));
-        setMainStatus('ok', 'Conectado: Red/IP - ' + next.printerIp + ':' + (next.printerPort || 9100));
-        if (!silent) msg('Comandera conectada. Ya podes imprimir una prueba.', true);
-        return true;
-      } catch (e) {
-        showBridgeInstaller(true);
-        setNetworkStatus('off', 'Sin conexion confirmada');
-        if (!silent) msg(e.message || 'No se pudo detectar la comandera.', false);
-        return false;
-      }
+    // Mantiene el agente local sincronizado (imprime solo las 2 primeras red/USB en modo automático)
+    async function syncAgent() {
+      const next = getCfg();
+      if (!next.kitchenAuto) return;
+      if (!(next.method === 'network' || (next.method === 'usb' && next.printerName))) return;
+      await ensurePrintStation();
+      await pairPrintStation();
+      await savePrintStationFullConfig(next);
     }
 
-    function isConnected() {
-      if (state.method === 'bluetooth') return !!(_btChar && _btChar.service.device.gatt.connected);
-      if (state.method === 'usb') return !!(_usbDev && _usbDev.opened);
-      return false;
-    }
-    function refreshStatus() {
-      const s = $('#cmdr-status'); if (!s) return;
-      const ok = isConnected();
-      s.className = 'status ' + (ok ? 'ok' : 'off');
-      $('#cmdr-status-txt').textContent = ok ? 'Conectado: Bluetooth' : 'Sin conectar';
-      $('#cmdr-connect').textContent = ok ? 'Volver a conectar' : 'Conectar impresora';
-      syncMainStatus();
-    }
-    function refreshRoutingUI() {
-      const panel = $('#cmdr-routing-panel');
-      if (panel) panel.classList.toggle('hide', state.routingMode !== 'split');
-      wrap.querySelectorAll('#cmdr-routing button').forEach(b => b.classList.toggle('on', b.dataset.v === state.routingMode));
-      wrap.querySelectorAll('#cmdr-bar-mode button').forEach(b => b.classList.toggle('on', b.dataset.v === state.barPrinterMode));
-      const barNet = $('#cmdr-bar-net');
-      const barUsb = $('#cmdr-bar-usb');
-      if (barNet) barNet.classList.toggle('hide', state.barPrinterMode !== 'network');
-      if (barUsb) barUsb.classList.toggle('hide', state.barPrinterMode !== 'windows');
-    }
-    function refreshMethodUI() {
-      $('#cmdr-usb').classList.toggle('hide', state.method !== 'usb');
-      $('#cmdr-net').classList.toggle('hide', state.method !== 'network');
-      const needsConnect = (state.method === 'bluetooth');
-      $('#cmdr-connect-panel').classList.toggle('hide', !needsConnect);
-      $('#cmdr-browser-note').classList.toggle('hide', state.method !== 'browser');
-      if (state.method === 'network') {
-        const ip = ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp) || '';
-        const port = ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : (cfg.printerPort || 9100));
-        if (ip) setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
-        else setNetworkStatus('off', 'Instala la estacion y toca Conectar automaticamente');
+    // ---------- vista LISTA ----------
+    function renderList() {
+      const box = $('#cmdr-stlist');
+      if (!stations.length) {
+        box.innerHTML = '<div class="panel" style="margin-top:0;text-align:center;color:#64748b;font-size:13px;line-height:1.5;">Todavia no conectaste ninguna comandera.<br>Los pedidos quedan solo en la pantalla de cocina.</div>';
+      } else {
+        box.innerHTML = stations.map(st => {
+          const card = METHOD_CARDS.find(m => m.k === st.method) || { code: '?' };
+          return `<div class="strow" data-id="${st.id}">
+            <span class="stdot ${stationReady(st) ? 'ok' : ''}"></span>
+            <span class="code">${card.code}</span>
+            <div class="stinfo">
+              <div class="stname">${escapeHTML(st.name || 'Comandera')}</div>
+              <div class="stsub">${escapeHTML(stationSummary(st))}<br>${escapeHTML(routeText(st))}${st.receipts ? ' · comprobantes' : ''}</div>
+            </div>
+            <div class="stbtns">
+              <button type="button" class="stbtn st-probar">Probar</button>
+              <button type="button" class="stbtn st-editar">Editar</button>
+              <button type="button" class="stbtn danger st-borrar">Quitar</button>
+            </div>
+          </div>`;
+        }).join('');
       }
-      else if (state.method === 'usb') {
-        if (state.printerName) setUsbStatus('ok', 'Conectado: USB - ' + state.printerName);
-        else setUsbStatus('off', 'Instala la estacion y detecta la Epson USB');
-      }
-      else showBridgeInstaller(false);
-      if (needsConnect) {
-        $('#cmdr-connect-hint').textContent = 'Encende la impresora y toca Conectar para emparejarla. Funciona con Chrome en Android.';
-        refreshStatus();
-      }
-      syncMainStatus();
+      box.querySelectorAll('.strow').forEach(row => {
+        const st = stations.find(s => s.id === row.dataset.id);
+        if (!st) return;
+        row.querySelector('.st-probar').onclick = async (ev) => {
+          const b = ev.target; const o = b.textContent; b.disabled = true; b.textContent = '...';
+          try { await probeStation(st); msg('Prueba enviada a "' + (st.name || 'Comandera') + '". Revisa esa impresora.', true); }
+          catch (e) { msg((st.name || 'Comandera') + ': ' + (e.message || 'no se pudo imprimir.'), false); }
+          b.disabled = false; b.textContent = o;
+        };
+        row.querySelector('.st-editar').onclick = () => openEditor(st);
+        row.querySelector('.st-borrar').onclick = () => {
+          if (!confirm('¿Quitar la comandera "' + (st.name || '') + '"? Deja de recibir pedidos desde este equipo.')) return;
+          stations = stations.filter(s => s.id !== st.id);
+          renderList();
+        };
+      });
+      $('#cmdr-add').textContent = stations.length ? '+ Conectar otra comandera' : '+ Conectar mi primera comandera';
     }
-    function selectMethod(k) {
-      state.method = k;
-      if (k === 'usb' || k === 'network') state.kitchenAuto = true;
-      wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.classList.toggle('on', c.dataset.k === k));
-      const kauto = $('#cmdr-kauto');
-      if (kauto) kauto.classList.toggle('on', state.kitchenAuto);
-      refreshMethodUI();
+    function showView(which) {
+      $('#cmdr-list-view').classList.toggle('hide', which !== 'list');
+      $('#cmdr-edit-view').classList.toggle('hide', which !== 'edit');
+      const sheet = wrap.querySelector('.sheet');
+      if (sheet) sheet.scrollTop = 0;
     }
-    refreshMethodUI();
-    refreshRoutingUI();
 
-    wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.onclick = () => selectMethod(c.dataset.k));
-    wrap.querySelectorAll('#cmdr-paper button').forEach(b => b.onclick = () => {
-      state.paper = +b.dataset.v; wrap.querySelectorAll('#cmdr-paper button').forEach(x => x.classList.toggle('on', x === b));
+    // ---------- vista EDITAR ----------
+    function openEditor(st) {
+      isNew = !st;
+      editing = st ? Object.assign({}, st) : {
+        id: newId(), name: '', method: 'network', printerName: '', printerIp: '', printerPort: 9100,
+        paper: 58, copies: 1, route: 'todo', categories: '', receipts: stations.length === 0
+      };
+      $('#cmdr-edit-title').textContent = isNew ? 'Conectar comandera' : 'Editar: ' + (editing.name || 'Comandera');
+      $('#cmdr-name').value = editing.name || '';
+      $('#cmdr-ip').value = editing.printerIp || '';
+      $('#cmdr-port').value = editing.printerPort || 9100;
+      $('#cmdr-cats').value = editing.categories || '';
+      $('#cmdr-scan-results').innerHTML = '';
+      $('#cmdr-usb-results').innerHTML = '';
+      emsg('', true);
+      refreshEditUI();
+      showView('edit');
+      setTimeout(() => { try { $('#cmdr-name').focus(); } catch (e) {} }, 60);
+    }
+    function refreshEditUI() {
+      if (!editing) return;
+      wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.classList.toggle('on', c.dataset.k === editing.method));
+      $('#cmdr-net').classList.toggle('hide', editing.method !== 'network');
+      $('#cmdr-usb').classList.toggle('hide', editing.method !== 'usb');
+      $('#cmdr-bt').classList.toggle('hide', editing.method !== 'bluetooth');
+      $('#cmdr-browser-note').classList.toggle('hide', editing.method !== 'browser');
+      wrap.querySelectorAll('#cmdr-route button').forEach(b => b.classList.toggle('on', b.dataset.v === (editing.route || 'todo')));
+      $('#cmdr-cats-box').classList.toggle('hide', (editing.route || 'todo') === 'todo');
+      wrap.querySelectorAll('#cmdr-paper button').forEach(b => b.classList.toggle('on', +b.dataset.v === (editing.paper || 58)));
+      wrap.querySelectorAll('#cmdr-copies button').forEach(b => b.classList.toggle('on', +b.dataset.v === (editing.copies || 1)));
+      $('#cmdr-receipts').classList.toggle('on', !!editing.receipts);
+      setStatus('#cmdr-net-status', !!editing.printerIp, editing.printerIp ? ('Conectada: Red/IP - ' + editing.printerIp + ':' + (editing.printerPort || 9100)) : 'Sin conectar');
+      setStatus('#cmdr-usb-status', !!editing.printerName, editing.printerName ? ('Conectada: USB - ' + editing.printerName) : 'Sin conectar');
+      const btOk = !!(_btChar && _btChar.service.device.gatt.connected);
+      setStatus('#cmdr-bt-status', btOk, btOk ? 'Conectada: Bluetooth' : 'Sin conectar');
+    }
+    function collectEditing() {
+      editing.name = $('#cmdr-name').value.trim();
+      editing.printerIp = $('#cmdr-ip').value.trim();
+      editing.printerPort = +$('#cmdr-port').value || 9100;
+      editing.categories = $('#cmdr-cats').value.trim();
+      return editing;
+    }
+
+    // eventos del editor
+    wrap.querySelectorAll('#cmdr-cards .card').forEach(c => c.onclick = () => {
+      editing.method = c.dataset.k;
+      if (c.dataset.k === 'network' || c.dataset.k === 'usb') { kitchenAuto = true; $('#cmdr-kauto').classList.add('on'); }
+      refreshEditUI();
     });
-    wrap.querySelectorAll('#cmdr-copies button').forEach(b => b.onclick = () => {
-      state.copies = +b.dataset.v; wrap.querySelectorAll('#cmdr-copies button').forEach(x => x.classList.toggle('on', x === b));
-    });
-    wrap.querySelectorAll('#cmdr-routing button').forEach(b => b.onclick = () => { state.routingMode = b.dataset.v; refreshRoutingUI(); });
-    wrap.querySelectorAll('#cmdr-bar-mode button').forEach(b => b.onclick = () => { state.barPrinterMode = b.dataset.v; refreshRoutingUI(); });
-    const autoSwitch = $('#cmdr-auto');
-    if (autoSwitch) autoSwitch.onclick = () => { state.autoprint = !state.autoprint; autoSwitch.classList.toggle('on', state.autoprint); };
-    $('#cmdr-kauto').onclick = () => { state.kitchenAuto = !state.kitchenAuto; $('#cmdr-kauto').classList.toggle('on', state.kitchenAuto); };
-    const pairBtn = $('#cmdr-pair');
-    if (pairBtn) pairBtn.onclick = async () => {
-      const orig = pairBtn.textContent;
+    wrap.querySelectorAll('#cmdr-route button').forEach(b => b.onclick = () => { editing.route = b.dataset.v; refreshEditUI(); });
+    wrap.querySelectorAll('#cmdr-paper button').forEach(b => b.onclick = () => { editing.paper = +b.dataset.v; refreshEditUI(); });
+    wrap.querySelectorAll('#cmdr-copies button').forEach(b => b.onclick = () => { editing.copies = +b.dataset.v; refreshEditUI(); });
+    $('#cmdr-receipts').onclick = () => { editing.receipts = !editing.receipts; refreshEditUI(); };
+
+    // RED: buscar comanderas en la red y elegir la de ESTA comandera
+    $('#cmdr-pair').onclick = async () => {
+      const pairBtn = $('#cmdr-pair');
       const box = $('#cmdr-scan-results');
-      const port = +($('#cmdr-port')?.value || 9100) || 9100;
-      pairBtn.disabled = true; pairBtn.textContent = 'Conectando...';
-      if (box) box.innerHTML = '<div class="hint">Revisando estacion de impresion...</div>';
+      const orig = pairBtn.textContent;
+      const port = +($('#cmdr-port').value || 9100) || 9100;
+      pairBtn.disabled = true; pairBtn.textContent = 'Buscando...';
+      box.innerHTML = '<div class="hint">Revisando estacion de impresion...</div>';
+      const useIp = async (ip) => {
+        editing.printerIp = ip; editing.printerPort = port;
+        $('#cmdr-ip').value = ip;
+        refreshEditUI();
+        try {
+          await probeStation(collectEditing());
+          box.innerHTML = '<div class="hint">Comandera conectada: <strong>' + escapeHTML(ip) + '</strong>. Se envio una prueba.</div>';
+          emsg('Si salio el ticket en esta comandera, toca "Guardar comandera".', true);
+        } catch (e) { emsg(e.message || 'No pude imprimir la prueba.', false); }
+      };
       try {
-        state.method = 'network';
-        state.kitchenAuto = true;
-        setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true }));
         await ensurePrintStation();
-        setNetworkStatus('off', 'Estacion detectada. Vinculando...');
+        setStatus('#cmdr-net-status', false, 'Estacion detectada. Vinculando...');
         await pairPrintStation();
-        setNetworkStatus('off', 'Vinculada. Buscando comandera...');
-        if (box) box.innerHTML = '<div class="hint">Buscando comanderas en la red. Puede tardar unos segundos...</div>';
+        box.innerHTML = '<div class="hint">Buscando comanderas en la red. Puede tardar unos segundos...</div>';
         const data = await scanPrintStation(port);
-        const printers = (data && data.printers) || [];
+        const found = (data && data.printers) || [];
         const candidates = (data && data.candidates) || [];
-        if (printers.length === 1) {
-          $('#cmdr-ip').value = printers[0];
-          await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: printers[0], printerPort: port }));
-          await testPrintStation();
-          setNetworkStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
-          setMainStatus('ok', 'Conectado: Red/IP - ' + printers[0] + ':' + port);
-          if (box) box.innerHTML = '<div class="hint">Comandera encontrada y guardada: ' + escapeHTML(printers[0]) + '</div>';
-          msg('Comandera conectada. Se envio una prueba de impresion.', true);
-        } else if (printers.length > 1) {
-          setNetworkStatus('off', 'Elegir comandera encontrada');
-          if (box) {
-            box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Toca la comandera a usar:</div>' +
-              printers.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">${escapeHTML(ip)}</button>`).join('');
-            box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = async () => {
-              try {
-                $('#cmdr-ip').value = b.dataset.ip;
-                await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: b.dataset.ip, printerPort: port }));
-                await testPrintStation();
-                setNetworkStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
-                setMainStatus('ok', 'Conectado: Red/IP - ' + b.dataset.ip + ':' + port);
-                msg('Comandera conectada. Se envio una prueba de impresion.', true);
-              } catch (e) {
-                msg(e.message || 'No se pudo imprimir la prueba.', false);
-              }
-            });
-          }
-          msg('Encontre varias comanderas. Elegi una para guardar e imprimir prueba.', true);
+        const usedIps = stations.filter(s => s.id !== editing.id && s.method === 'network' && s.printerIp).map(s => s.printerIp);
+        if (found.length === 1) await useIp(found[0]);
+        else if (found.length > 1) {
+          box.innerHTML = '<div class="hint" style="margin:6px 0 8px;">Toca la comandera que corresponde a "' + escapeHTML($('#cmdr-name').value.trim() || 'esta comandera') + '":</div>' +
+            found.map(ip => `<button type="button" class="cmdr-pick" data-ip="${escapeHTML(ip)}" style="display:block;width:100%;text-align:left;margin:0 0 6px;padding:11px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-weight:700;cursor:pointer;font-family:inherit;">${escapeHTML(ip)}${usedIps.includes(ip) ? '<br><span style="font-size:11px;color:#94a3b8;">ya usada por otra comandera tuya</span>' : ''}</button>`).join('');
+          box.querySelectorAll('.cmdr-pick').forEach(b => b.onclick = () => useIp(b.dataset.ip));
+          emsg('Encontre varias comanderas en la red. Toca la que va con esta.', true);
         } else {
-          setNetworkStatus('off', 'No se encontro automaticamente');
-          setMainStatus('off', 'Sin comandera conectada');
-          if (box) {
-            const wifi = (data && data.wifi) ? String(data.wifi).trim() : '';
-            const subnet = (data && data.subnets && data.subnets[0]) ? (data.subnets[0] + '.x') : '';
-            const dondeEstoy = wifi
-              ? ('la WiFi <strong>' + escapeHTML(wifi) + '</strong>' + (subnet ? ' (red ' + escapeHTML(subnet) + ')' : ''))
-              : (subnet ? ('la red <strong>' + escapeHTML(subnet) + '</strong>') : 'esta red');
-            const visible = candidates
-              .slice(0, 8)
-              .map(c => '<div class="hint" style="margin:6px 0;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">Equipo visible: <strong>' + escapeHTML(c.ip) + '</strong> - puertos ' + escapeHTML((c.ports || []).join(', ')) + (c.likelyPrinter ? ' - posible impresora' : '') + '</div>')
-              .join('');
-            box.innerHTML =
-              '<div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:12px 13px;border-radius:12px;line-height:1.5;font-size:13px;">' +
-                '<strong>No hay comanderas en ' + dondeEstoy + '.</strong><br>' +
-                'Si tus comanderas ya imprimen con otro sistema, casi seguro <strong>esta PC esta conectada a otra WiFi que las comanderas</strong>.<br><br>' +
-                '<strong>&rarr; Conecta esta PC a la misma WiFi/red que las comanderas</strong> y volve a tocar &laquo;Conectar automaticamente&raquo;.' +
-              '</div>' +
-              (visible ? '<div class="hint" style="margin-top:10px;">Otros equipos que vi en la red (por las dudas):</div>' + visible : '') +
-              '<div class="hint" style="margin-top:8px;">Si sabes la IP de la comandera (la que imprime el selftest), cargala abajo y toca &laquo;Guardar IP e imprimir prueba&raquo;.</div>';
-          }
-          msg('No hay comanderas en tu red actual. Puede que esta PC este en otra WiFi que las comanderas.', false);
+          setStatus('#cmdr-net-status', false, 'No se encontro automaticamente');
+          const wifi = (data && data.wifi) ? String(data.wifi).trim() : '';
+          const subnet = (data && data.subnets && data.subnets[0]) ? (data.subnets[0] + '.x') : '';
+          const dondeEstoy = wifi
+            ? ('la WiFi <strong>' + escapeHTML(wifi) + '</strong>' + (subnet ? ' (red ' + escapeHTML(subnet) + ')' : ''))
+            : (subnet ? ('la red <strong>' + escapeHTML(subnet) + '</strong>') : 'esta red');
+          const visible = candidates
+            .slice(0, 8)
+            .map(c => '<div class="hint" style="margin:6px 0;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">Equipo visible: <strong>' + escapeHTML(c.ip) + '</strong> - puertos ' + escapeHTML((c.ports || []).join(', ')) + (c.likelyPrinter ? ' - posible impresora' : '') + '</div>')
+            .join('');
+          box.innerHTML =
+            '<div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:12px 13px;border-radius:12px;line-height:1.5;font-size:13px;">' +
+              '<strong>No hay comanderas en ' + dondeEstoy + '.</strong><br>' +
+              'Si tus comanderas ya imprimen con otro sistema, casi seguro <strong>esta PC esta conectada a otra WiFi que las comanderas</strong>.<br><br>' +
+              '<strong>&rarr; Conecta esta PC a la misma WiFi/red que las comanderas</strong> y volve a tocar &laquo;Buscar comanderas en la red&raquo;.' +
+            '</div>' +
+            (visible ? '<div class="hint" style="margin-top:10px;">Otros equipos que vi en la red (por las dudas):</div>' + visible : '') +
+            '<div class="hint" style="margin-top:8px;">Si sabes la IP de la comandera (la que imprime el selftest), cargala abajo y toca &laquo;Usar esta IP e imprimir prueba&raquo;.</div>';
+          emsg('No hay comanderas en tu red actual. Puede que esta PC este en otra WiFi que las comanderas.', false);
         }
       } catch (e) {
-        setNetworkStatus('off', 'Falta instalar o actualizar estacion');
-        setMainStatus('off', 'Sin comandera conectada');
-        if (box) box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a conectar.</div>';
-        msg(e.message || 'No se pudo conectar la estacion.', false);
+        setStatus('#cmdr-net-status', false, 'Falta instalar o actualizar estacion');
+        box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a buscar.</div>';
+        emsg(e.message || 'No se pudo conectar la estacion.', false);
       } finally {
         pairBtn.disabled = false; pairBtn.textContent = orig;
       }
     };
-    const usbPairBtn = $('#cmdr-usb-pair');
-    if (usbPairBtn) usbPairBtn.onclick = async () => {
-      const orig = usbPairBtn.textContent;
-      const box = $('#cmdr-usb-results');
-      usbPairBtn.disabled = true; usbPairBtn.textContent = 'Detectando...';
-      if (box) box.innerHTML = '<div class="hint">Revisando estacion e impresoras instaladas en Windows...</div>';
+    // RED: IP manual
+    $('#cmdr-save-ip').onclick = async () => {
+      const b = $('#cmdr-save-ip'); const orig = b.textContent;
+      collectEditing();
+      if (!editing.printerIp) { emsg('Escribi la IP de la comandera (ej: 192.168.1.200).', false); return; }
+      b.disabled = true; b.textContent = 'Probando...';
       try {
-        state.method = 'usb';
-        state.kitchenAuto = true;
-        setCfg(Object.assign(collect(), { method: 'usb', kitchenAuto: true, printerMode: 'windows' }));
-        await ensurePrintStation();
-        setUsbStatus('off', 'Estacion detectada. Vinculando...');
-        await pairPrintStation();
-        const data = await listPrintStationPrinters();
-        const printers = (data && data.printers) || [];
-        const suggested = data && data.suggested;
-        const likely = printers.filter(p => p.likelyComandera && !p.isVirtual);
-        const usable = likely.length ? likely : printers.filter(p => !p.isVirtual);
-        const autoPick = suggested && suggested.name ? suggested.name : (usable.length === 1 ? usable[0].name : '');
-        if (autoPick) {
-          await configureUsbPrinter(autoPick);
-          if (box) box.innerHTML = '<div class="hint">Impresora USB guardada: <strong>' + escapeHTML(autoPick) + '</strong>. Se envio una prueba.</div>';
-          msg('Comandera USB conectada. Se envio una prueba de impresion.', true);
-        } else if (usable.length > 1) {
-          setUsbStatus('off', 'Elegir impresora USB');
-          renderPrinterChoices(usable, async (name) => {
-            try {
-              await configureUsbPrinter(name);
-              if (box) box.innerHTML = '<div class="hint">Impresora USB guardada: <strong>' + escapeHTML(name) + '</strong>. Se envio una prueba.</div>';
-              msg('Comandera USB conectada. Se envio una prueba de impresion.', true);
-            } catch (e) {
-              msg(e.message || 'No pude imprimir la prueba USB.', false);
-            }
-          });
-          msg('Encontre varias impresoras. Elegi la Epson USB para guardar.', true);
-        } else {
-          // No hay impresora instalada: buscamos una USB conectada-sin-instalar y la instalamos nosotros.
-          setUsbStatus('off', 'Buscando comandera USB conectada...');
-          if (box) box.innerHTML = '<div class="hint">No hay impresoras instaladas. Reviso si hay una comandera USB conectada para instalarla sola...</div>';
-          let pending = [];
-          try { const d = await usbDetect(); pending = (d && d.pending) || []; } catch (e) {}
-          if (pending.length) {
-            try {
-              if (box) box.innerHTML = '<div class="hint">Detecte una comandera USB conectada (<strong>' + escapeHTML(pending[0].device) + '</strong>) sin instalar. Instalandola sola...</div>';
-              const inst = await usbInstall(pending[0].port);
-              const name = inst && inst.printerName;
-              if (!name) throw new Error('No se pudo instalar la impresora USB.');
-              await configureUsbPrinter(name);
-              if (box) box.innerHTML = '<div class="hint">Comandera USB instalada y conectada: <strong>' + escapeHTML(name) + '</strong>. Se envio una prueba.</div>';
-              msg('Instale y conecte la comandera USB automaticamente. Se envio una prueba de impresion.', true);
-            } catch (e) {
-              setUsbStatus('off', 'No pude instalar la comandera USB');
-              setMainStatus('off', 'Sin comandera conectada');
-              if (box) box.innerHTML = '<div class="hint">Encontre una comandera USB conectada pero no la pude instalar sola: ' + escapeHTML(e.message || '') + '</div>';
-              msg(e.message || 'No pude instalar la comandera USB automaticamente.', false);
-            }
-          } else {
-            setUsbStatus('off', 'No hay comandera USB conectada');
-            setMainStatus('off', 'Sin comandera conectada');
-            if (box) box.innerHTML = '<div class="hint">No detecte ninguna comandera USB conectada a esta PC. Revisa que el cable USB este bien enchufado y la impresora prendida, y volve a tocar detectar.</div>';
-            msg('No detecte ninguna comandera USB conectada. Revisa el cable USB y que este prendida.', false);
-          }
-        }
-      } catch (e) {
-        setUsbStatus('off', 'Falta instalar o actualizar estacion');
-        setMainStatus('off', 'Sin comandera conectada');
-        if (box) box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a detectar la Epson USB.</div>';
-        msg(e.message || 'No se pudo conectar la estacion USB.', false);
-      } finally {
-        usbPairBtn.disabled = false; usbPairBtn.textContent = orig;
-      }
+        await probeStation(editing);
+        refreshEditUI();
+        emsg('Prueba enviada a ' + editing.printerIp + '. Si salio el ticket, toca "Guardar comandera".', true);
+      } catch (e) { emsg(e.message || 'No se pudo imprimir en esa IP.', false); }
+      b.disabled = false; b.textContent = orig;
     };
-    const saveIpBtn = $('#cmdr-save-ip');
-    if (saveIpBtn) saveIpBtn.onclick = async () => {
-      const orig = saveIpBtn.textContent;
-      const ip = ($('#cmdr-ip')?.value || '').trim();
-      const port = +($('#cmdr-port')?.value || 9100) || 9100;
-      saveIpBtn.disabled = true; saveIpBtn.textContent = 'Probando...';
-      try {
-        await ensurePrintStation();
-        await pairPrintStation();
-        await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: ip, printerPort: port }));
-        await testPrintStation();
-        state.method = 'network';
-        state.kitchenAuto = true;
-        setCfg(Object.assign(collect(), { method: 'network', kitchenAuto: true, printerIp: ip, printerPort: port, lastNetworkOkAt: new Date().toISOString() }));
-        setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
-        setMainStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
-        msg('Comandera guardada. Se envio una prueba de impresion.', true);
-      } catch (e) {
-        setNetworkStatus('off', 'No se pudo imprimir prueba');
-        setMainStatus('off', 'Sin comandera conectada');
-        msg(e.message || 'No se pudo guardar o imprimir la prueba.', false);
-      } finally {
-        saveIpBtn.disabled = false; saveIpBtn.textContent = orig;
-      }
-    };
-    const downloadPairBtn = $('#cmdr-download-pair');
-    if (downloadPairBtn) downloadPairBtn.onclick = async () => {
-      const orig = downloadPairBtn.textContent;
-      downloadPairBtn.disabled = true; downloadPairBtn.textContent = 'Preparando...';
+    // Soporte: descargar vinculación
+    $('#cmdr-download-pair').onclick = async () => {
+      const b = $('#cmdr-download-pair'); const orig = b.textContent;
+      b.disabled = true; b.textContent = 'Preparando...';
       try {
         const data = await createPrintStationToken();
         const payload = {
@@ -1081,102 +1092,135 @@
         document.body.appendChild(a);
         a.click();
         setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
-        msg('Archivo de vinculacion descargado. Usalo solo para soporte tecnico de esta PC.', true);
+        emsg('Archivo de vinculacion descargado. Usalo solo para soporte tecnico de esta PC.', true);
       } catch (e) {
-        msg(e.message || 'No pude preparar la vinculacion.', false);
+        emsg(e.message || 'No pude preparar la vinculacion.', false);
       } finally {
-        downloadPairBtn.disabled = false; downloadPairBtn.textContent = orig;
+        b.disabled = false; b.textContent = orig;
       }
     };
-    function collect() {
-      return {
-        method: state.method, paper: state.paper, copies: state.copies, autoprint: state.autoprint, kitchenAuto: state.kitchenAuto,
-        header: $('#cmdr-header').value.trim(), footer: $('#cmdr-footer').value.trim(),
-        printerMode: state.method === 'usb' ? 'windows' : (state.method === 'network' ? 'network' : (cfg.printerMode || '')),
-        printerName: ($('#cmdr-printer-name') ? $('#cmdr-printer-name').value.trim() : (state.printerName || cfg.printerName || '')),
-        printerIp: ($('#cmdr-ip') ? $('#cmdr-ip').value.trim() : cfg.printerIp),
-        printerPort: ($('#cmdr-port') ? (+$('#cmdr-port').value || 9100) : cfg.printerPort),
-        bridgeUrl: ($('#cmdr-bridge') ? $('#cmdr-bridge').value.trim() : cfg.bridgeUrl),
-        routingMode: state.routingMode,
-        barCategories: ($('#cmdr-bar-cats') ? $('#cmdr-bar-cats').value.trim() : cfg.barCategories) || 'Bebidas,Tragos',
-        barPrinterMode: state.barPrinterMode || 'network',
-        barPrinterName: ($('#cmdr-bar-printer-name') ? $('#cmdr-bar-printer-name').value.trim() : cfg.barPrinterName) || '',
-        barPrinterIp: ($('#cmdr-bar-ip') ? $('#cmdr-bar-ip').value.trim() : cfg.barPrinterIp) || '',
-        barPrinterPort: ($('#cmdr-bar-port') ? (+$('#cmdr-bar-port').value || 9100) : (cfg.barPrinterPort || 9100))
+    // USB: detectar impresora instalada (o instalarla sola)
+    $('#cmdr-usb-pair').onclick = async () => {
+      const usbBtn = $('#cmdr-usb-pair');
+      const box = $('#cmdr-usb-results');
+      const orig = usbBtn.textContent;
+      usbBtn.disabled = true; usbBtn.textContent = 'Detectando...';
+      box.innerHTML = '<div class="hint">Revisando estacion e impresoras instaladas en Windows...</div>';
+      const useName = async (name) => {
+        editing.printerName = name;
+        refreshEditUI();
+        try {
+          await probeStation(collectEditing());
+          box.innerHTML = '<div class="hint">Impresora USB conectada: <strong>' + escapeHTML(name) + '</strong>. Se envio una prueba.</div>';
+          emsg('Si salio el ticket, toca "Guardar comandera".', true);
+        } catch (e) { emsg(e.message || 'No pude imprimir la prueba USB.', false); }
       };
-    }
-
-    $('#cmdr-connect').onclick = async () => {
-      const btn = $('#cmdr-connect'); btn.disabled = true;
       try {
-        msg('Buscando impresora...', true);
-        if (state.method === 'bluetooth') await getBluetoothChar();
-        else await getUsbDevice();
-        msg('Impresora conectada. Proba imprimir abajo.', true);
-      } catch (e) { msg(e.message || 'No se pudo conectar.', false); }
-      btn.disabled = false; refreshStatus();
+        await ensurePrintStation();
+        setStatus('#cmdr-usb-status', false, 'Estacion detectada. Vinculando...');
+        await pairPrintStation();
+        const data = await listPrintStationPrinters();
+        const printers = (data && data.printers) || [];
+        const suggested = data && data.suggested;
+        const likely = printers.filter(p => p.likelyComandera && !p.isVirtual);
+        const usable = likely.length ? likely : printers.filter(p => !p.isVirtual);
+        const usedNames = stations.filter(s => s.id !== editing.id && s.method === 'usb' && s.printerName).map(s => s.printerName);
+        const fresh = usable.filter(p => !usedNames.includes(p.name));
+        const pickFrom = fresh.length ? fresh : usable;
+        const autoPick = (suggested && suggested.name && !usedNames.includes(suggested.name)) ? suggested.name : (pickFrom.length === 1 ? pickFrom[0].name : '');
+        if (autoPick) await useName(autoPick);
+        else if (pickFrom.length > 1) {
+          renderPrinterChoices(pickFrom, useName);
+          emsg('Encontre varias impresoras. Toca la que corresponde a esta comandera.', true);
+        } else {
+          box.innerHTML = '<div class="hint">No hay impresoras instaladas. Reviso si hay una comandera USB conectada para instalarla sola...</div>';
+          let pending = [];
+          try { const d = await usbDetect(); pending = (d && d.pending) || []; } catch (e) {}
+          if (pending.length) {
+            box.innerHTML = '<div class="hint">Detecte una comandera USB (<strong>' + escapeHTML(pending[0].device) + '</strong>) sin instalar. Instalandola sola...</div>';
+            const inst = await usbInstall(pending[0].port);
+            const name = inst && inst.printerName;
+            if (!name) throw new Error('No se pudo instalar la impresora USB.');
+            await useName(name);
+          } else {
+            setStatus('#cmdr-usb-status', false, 'No hay comandera USB conectada');
+            box.innerHTML = '<div class="hint">No detecte ninguna comandera USB conectada a esta PC. Revisa que el cable este bien enchufado y la impresora prendida, y volve a detectar.</div>';
+            emsg('No detecte ninguna comandera USB conectada.', false);
+          }
+        }
+      } catch (e) {
+        setStatus('#cmdr-usb-status', false, 'Falta instalar o actualizar estacion');
+        box.innerHTML = '<div class="hint">Primero toca "Instalar / actualizar estacion", ejecuta el archivo descargado y despues volve a detectar.</div>';
+        emsg(e.message || 'No se pudo conectar la estacion USB.', false);
+      } finally {
+        usbBtn.disabled = false; usbBtn.textContent = orig;
+      }
     };
+    // BLUETOOTH
+    $('#cmdr-bt-connect').onclick = async () => {
+      const b = $('#cmdr-bt-connect'); b.disabled = true;
+      try {
+        emsg('Buscando impresora Bluetooth...', true);
+        await getBluetoothChar();
+        emsg('Impresora Bluetooth conectada. Proba imprimir abajo.', true);
+      } catch (e) { emsg(e.message || 'No se pudo conectar.', false); }
+      b.disabled = false; refreshEditUI();
+    };
+    // Probar SOLO esta comandera
+    $('#cmdr-etest').onclick = async () => {
+      collectEditing();
+      if (!stationReady(editing)) { emsg('Primero conecta la comandera (paso 2).', false); return; }
+      const b = $('#cmdr-etest'); b.disabled = true;
+      try { emsg('Enviando prueba...', true); await probeStation(editing); emsg('Prueba enviada. Revisa la impresora.', true); }
+      catch (e) { emsg(e.message || 'No se pudo imprimir.', false); }
+      b.disabled = false;
+    };
+    // Guardar comandera (vuelve a la lista)
+    $('#cmdr-esave').onclick = () => {
+      collectEditing();
+      if (!editing.name) { emsg('Ponele un nombre a la comandera (ej: Caja, Bar, Cocina).', false); try { $('#cmdr-name').focus(); } catch (e) {} return; }
+      if (editing.method === 'network' && !editing.printerIp) { emsg('Falta conectarla: busca la comandera en la red o escribi su IP.', false); return; }
+      if (editing.method === 'usb' && !editing.printerName) { emsg('Falta conectarla: detecta la impresora USB.', false); return; }
+      if ((editing.route === 'solo' || editing.route === 'resto') && !parseCats(editing.categories).length) { emsg('Escribi las categorias (ej: Bebidas,Tragos).', false); return; }
+      const i = stations.findIndex(s => s.id === editing.id);
+      if (i >= 0) stations[i] = Object.assign({}, editing); else stations.push(Object.assign({}, editing));
+      renderList();
+      showView('list');
+      msg('Comandera "' + editing.name + '" lista. Toca Guardar para confirmar los cambios.', true);
+    };
+    $('#cmdr-back').onclick = () => showView('list');
+
+    // eventos vista lista
+    $('#cmdr-add').onclick = () => openEditor(null);
+    $('#cmdr-kauto').onclick = () => { kitchenAuto = !kitchenAuto; $('#cmdr-kauto').classList.toggle('on', kitchenAuto); };
     $('#cmdr-test').onclick = async () => {
-      setCfg(collect());
-      if (state.method === 'network') {
-        try {
-          const ip = ($('#cmdr-ip')?.value || '').trim();
-          const port = +($('#cmdr-port')?.value || 9100) || 9100;
-          await ensurePrintStation();
-          await pairPrintStation();
-          await savePrintStationFullConfig(Object.assign(collect(), { method: 'network', printerMode: 'network', printerIp: ip, printerPort: port }));
-          await testPrintStation();
-          setNetworkStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
-          setMainStatus('ok', 'Conectado: Red/IP - ' + ip + ':' + port);
-          msg('Prueba enviada. Si salio el ticket, la comandera ya queda conectada.', true);
-        } catch (e) {
-          setMainStatus('off', 'Sin comandera conectada');
-          msg(e.message || 'No pude imprimir la prueba.', false);
-        }
-        return;
+      if (!stations.length) { msg('Conecta al menos una comandera primero.', false); return; }
+      const b = $('#cmdr-test'); b.disabled = true;
+      msg('Enviando prueba a todas...', true);
+      const errs = [];
+      for (const st of stations) {
+        try { await probeStation(st); } catch (e) { errs.push((st.name || 'Comandera') + ': ' + (e.message || e)); }
       }
-      if (state.method === 'usb') {
-        try {
-          const printerName = ($('#cmdr-printer-name')?.value || state.printerName || '').trim();
-          await ensurePrintStation();
-          await pairPrintStation();
-          await savePrintStationFullConfig(Object.assign(collect(), { method: 'usb', printerMode: 'windows', printerName, printerIp: '' }));
-          await testPrintStation();
-          state.printerName = printerName;
-          setCfg(Object.assign(collect(), { method: 'usb', kitchenAuto: true, printerMode: 'windows', printerName, printerIp: '', lastUsbOkAt: new Date().toISOString() }));
-          setUsbStatus('ok', 'Conectado: USB - ' + printerName);
-          setMainStatus('ok', 'Conectado: USB - ' + printerName);
-          msg('Prueba enviada. Si salio el ticket, la comandera USB ya queda conectada.', true);
-        } catch (e) {
-          setMainStatus('off', 'Sin comandera conectada');
-          msg(e.message || 'No pude imprimir la prueba USB.', false);
-        }
-        return;
-      }
-      try { msg('Enviando prueba...', true); await testPrint(); msg('Prueba enviada ✓ Revisá la impresora.', true); refreshStatus(); }
-      catch (e) { msg(e.message || 'No se pudo imprimir.', false); }
+      if (errs.length) msg(errs.join('\n'), false);
+      else msg('Prueba enviada a ' + stations.length + ' comandera' + (stations.length === 1 ? '' : 's') + '.', true);
+      b.disabled = false;
     };
     $('#cmdr-save').onclick = async () => {
-      const next = collect();
-      setCfg(next);
-      if ((next.method === 'network' || next.method === 'usb') && next.kitchenAuto) {
-        try {
-          await ensurePrintStation();
-          await pairPrintStation();
-          await savePrintStationFullConfig(next);
-        } catch (e) {
-          msg(e.message || 'No pude guardar la configuracion en la estacion de impresion.', false);
-          return;
-        }
+      saveStations(stations, globalNow());
+      try {
+        await syncAgent();
+      } catch (e) {
+        msg((e.message || 'No pude configurar la estacion de impresion.') + '\nLas comanderas quedaron guardadas igual. Podes cerrar.', false);
+        return;
       }
       wrap.remove();
       if (typeof window.onComanderaSaved === 'function') window.onComanderaSaved(getCfg());
     };
     $('#cmdr-close').onclick = () => wrap.remove();
     wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
-    if (state.method === 'network' && cfg.printerIp) setNetworkStatus('ok', 'Conectado: Red/IP - ' + cfg.printerIp + ':' + (cfg.printerPort || 9100));
-    if (state.method === 'usb' && cfg.printerName) setUsbStatus('ok', 'Conectado: USB - ' + cfg.printerName);
-    syncMainStatus();
+
+    renderList();
+    showView('list');
   }
 
   // ============================================================
@@ -1295,37 +1339,53 @@
     return new Uint8Array(bytes);
   }
 
+  // Imprime el comprobante por el navegador (diálogo del sistema)
+  function receiptViaBrowser(sale, cfg) {
+    const html = receiptHTML(sale, cfg);
+    const ifr = document.createElement('iframe');
+    ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(ifr);
+    return new Promise((resolve) => {
+      ifr.onload = () => { try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) {} setTimeout(() => { ifr.remove(); resolve(); }, 1500); };
+      const d = ifr.contentWindow.document; d.open(); d.write(html); d.close();
+    });
+  }
+  // El comprobante sale en las comanderas marcadas "imprime comprobantes" (la caja).
+  // Si no hay ninguna, se abre el diálogo del navegador: al cliente hay que darle algo.
   async function printReceipt(sale, opts) {
     const cfg = Object.assign(getCfg(), opts || {});
-    const copies = Math.max(1, Math.min(3, cfg.copies || 1));
-    if (cfg.method === 'screen' || cfg.method === 'browser') {
-      // El comprobante siempre se puede imprimir por navegador aunque la comandera
-      // esté en "solo pantalla" (al cliente hay que darle algo).
-      const html = receiptHTML(sale, cfg);
-      const ifr = document.createElement('iframe');
-      ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-      document.body.appendChild(ifr);
-      await new Promise((resolve) => {
-        ifr.onload = () => { try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) {} setTimeout(() => { ifr.remove(); resolve(); }, 1500); };
-        const d = ifr.contentWindow.document; d.open(); d.write(html); d.close();
-      });
+    const targets = (cfg.stations || []).filter(st => st.receipts);
+    if (!targets.length) {
+      await receiptViaBrowser(sale, cfg);
       return { ok: true, method: 'browser' };
     }
-    let bytes = escposReceipt(sale, cfg);
-    if (copies > 1) bytes = concatCopies(bytes, copies);
-    if (cfg.method === 'bluetooth') await printBluetooth(bytes);
-    else if (cfg.method === 'usb') {
-      if (cfg.printerName || cfg.printerMode === 'windows') await printWindowsPrinter(bytes, cfg);
-      else await printUSB(bytes);
+    const errors = [];
+    for (const st of targets) {
+      try {
+        const scfg = stationCfg(st, cfg, false);
+        if (st.method === 'browser') { await receiptViaBrowser(sale, scfg); continue; }
+        let bytes = escposReceipt(sale, scfg);
+        const copies = Math.max(1, Math.min(3, scfg.copies || 1));
+        if (copies > 1) bytes = concatCopies(bytes, copies);
+        if (st.method === 'bluetooth') await printBluetooth(bytes);
+        else if (st.method === 'usb') {
+          if (scfg.printerName) await printWindowsPrinter(bytes, scfg);
+          else await printUSB(bytes);
+        }
+        else if (st.method === 'network') await printNetwork(bytes, scfg);
+      } catch (e) {
+        errors.push((st.name || 'Comandera') + ': ' + (e.message || e));
+      }
     }
-    else if (cfg.method === 'network') await printNetwork(bytes, cfg);
-    return { ok: true, method: cfg.method };
+    if (errors.length) throw new Error(errors.join('\n'));
+    return { ok: true, printed: targets.map(t => t.name) };
   }
 
   window.Comandera = {
     getCfg, setCfg, print, testPrint, ticketHTML, escpos, openConfig,
     checkBridge, probeNetworkPrinter,
     receiptHTML, escposReceipt, printReceipt, payLabel,
+    getStations, saveStations,
     METHOD_LABELS, PAY_LABELS,
     _methods: ['screen', 'browser', 'bluetooth', 'usb', 'network']
   };
