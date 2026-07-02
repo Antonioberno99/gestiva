@@ -793,9 +793,10 @@ window.addEventListener('hashchange', navigate);
 route('dashboard', async () => {
   const d = await API.dashboard();
   const totalToday = d.ordersToday.reduce((s,o) => s + parseFloat(o.total), 0);
-  const cashTotal = d.cash
-    ? parseFloat(d.cash.opening_amount) + (d.cash.transactions||[]).reduce((s,t) => s + (t.type==='in'?t.amount:-t.amount), 0)
-    : 0;
+  const cashTxs = d.cash ? (d.cash.transactions || []) : [];
+  const cashIn  = cashTxs.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0);
+  const cashOut = cashTxs.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
+  const cashTotal = d.cash ? parseFloat(d.cash.opening_amount) + cashIn - cashOut : 0;
 
   // top products today
   const prodSales = {};
@@ -815,16 +816,59 @@ route('dashboard', async () => {
       </div>
       <a href="#/mesas" class="btn btn-primary">+ Abrir mesa</a>
     </div>
-    <div class="grid grid-4" style="margin-bottom:24px;">
+    ${d.cash ? `
+    <div class="card" style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:inline-block;box-shadow:0 0 0 4px rgba(16,185,129,.15);"></span>
+          <h3 style="font-size:16px;margin:0;">Caja abierta</h3>
+          <span style="font-size:12.5px;color:var(--tx-mid);">desde las ${new Date(d.cash.opened_at).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="addMovement()">+ Movimiento</button>
+          <a class="btn btn-secondary btn-sm" href="#/caja">Ver movimientos</a>
+          <button class="btn btn-danger btn-sm" onclick="closeCashUI()">Cerrar caja</button>
+        </div>
+      </div>
+      <div class="grid grid-4">
+        <div style="background:var(--bg);border-radius:12px;padding:14px;">
+          <div class="card-title">Apertura</div>
+          <div style="font-size:20px;font-weight:800;margin-top:4px;">${fmt(d.cash.opening_amount)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:12px;padding:14px;">
+          <div class="card-title">Ingresos</div>
+          <div style="font-size:20px;font-weight:800;margin-top:4px;color:var(--green);">+ ${fmt(cashIn)}</div>
+          <div style="font-size:11.5px;color:var(--tx-mid);margin-top:2px;">${(n=>n+' movimiento'+(n===1?'':'s'))(cashTxs.filter(t=>t.type==='in').length)}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:12px;padding:14px;">
+          <div class="card-title">Egresos</div>
+          <div style="font-size:20px;font-weight:800;margin-top:4px;color:var(--red);">− ${fmt(cashOut)}</div>
+          <div style="font-size:11.5px;color:var(--tx-mid);margin-top:2px;">${(n=>n+' movimiento'+(n===1?'':'s'))(cashTxs.filter(t=>t.type==='out').length)}</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#fff7ed,#fff);border:1px solid var(--or-200);border-radius:12px;padding:14px;">
+          <div class="card-title">En caja ahora</div>
+          <div style="font-size:22px;font-weight:800;margin-top:4px;color:var(--or-dk);">${fmt(cashTotal)}</div>
+        </div>
+      </div>
+    </div>` : `
+    <div class="card" style="margin-bottom:24px;background:linear-gradient(135deg,#fff7ed,#fffbf5);border-color:var(--or-200);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid var(--or-200);display:grid;place-items:center;font-size:22px;">💰</div>
+        <div>
+          <h3 style="font-size:16px;margin:0 0 2px;">La caja está cerrada</h3>
+          <div style="font-size:13px;color:var(--tx-mid);">Abrila para empezar a registrar las ventas del día.</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="openCashUI()" style="min-width:150px;">Abrir caja</button>
+    </div>`}
+
+    <div class="grid grid-3" style="margin-bottom:24px;">
       <div class="card"><div class="card-title">Vendido hoy</div>
         <div class="card-value">${fmt(totalToday)}</div>
         <div class="card-delta ${totalToday>0?'up':'neu'}">${d.ordersToday.length} órdenes</div></div>
       <div class="card"><div class="card-title">Mesas activas</div>
         <div class="card-value">${d.openCount} / ${d.tablesCount}</div>
         <div class="card-delta neu">${d.tablesCount - d.openCount} libres</div></div>
-      <div class="card"><div class="card-title">En caja</div>
-        <div class="card-value">${d.cash ? fmt(cashTotal) : '—'}</div>
-        <div class="card-delta ${d.cash?'up':'down'}">${d.cash?'Caja abierta':'Caja cerrada'}</div></div>
       <div class="card"><div class="card-title">Productos</div>
         <div class="card-value">${d.productsAvailable}</div>
         <div class="card-delta neu">${d.productsTotal} en catálogo</div></div>
