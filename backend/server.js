@@ -1087,8 +1087,8 @@ app.put('/api/tables/:id', async (req, res) => {
     return res.status(400).json({ error: 'invalid_status' });
   }
   if (status === 'reserved') {
-    const open = await q('SELECT 1 FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
-    if (open.rows[0]) return res.status(409).json({ error: 'table_is_open' });
+    const open = await q('SELECT items FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
+    if (open.rows.some(ot => itemQty(ot.items) > 0)) return res.status(409).json({ error: 'table_is_open' });
   }
   try {
     const r = await q(`UPDATE tables SET
@@ -1107,8 +1107,9 @@ app.put('/api/tables/:id', async (req, res) => {
   }
 });
 app.delete('/api/tables/:id', async (req, res) => {
-  const open = await q('SELECT 1 FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
-  if (open.rows[0]) return res.status(409).json({ error: 'table_is_open' });
+  const open = await q('SELECT items FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
+  if (open.rows.some(ot => itemQty(ot.items) > 0)) return res.status(409).json({ error: 'table_is_open' });
+  await q('DELETE FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
   await q('DELETE FROM tables WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
   res.json({ ok: true });
 });
@@ -1202,6 +1203,7 @@ app.post('/api/orders', async (req, res) => {
 
   const ot = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
   if (!ot) return res.status(404).json({ error: 'table_not_open' });
+  if (itemQty(ot.items) === 0) return res.status(400).json({ error: 'table_empty' });
 
   const products = (await q('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
   const prodMap = new Map(products.map(p => [p.id, p]));
@@ -1612,10 +1614,10 @@ app.get('/api/dashboard', async (req, res) => {
   const today = new Date().toISOString().slice(0,10);
   const last7 = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
 
-  const [ordersToday, ordersWeek, openCount, tablesCount, prodCount, cash] = await Promise.all([
+  const [ordersToday, ordersWeek, openTables, tablesCount, prodCount, cash] = await Promise.all([
     q(`SELECT * FROM orders WHERE tenant_id=$1 AND closed_at::date=$2 ORDER BY closed_at DESC`, [tid, today]),
     q(`SELECT * FROM orders WHERE tenant_id=$1 AND closed_at::date >= $2`, [tid, last7]),
-    q(`SELECT count(*)::int AS n FROM open_tables WHERE tenant_id=$1`, [tid]),
+    q(`SELECT items FROM open_tables WHERE tenant_id=$1`, [tid]),
     q(`SELECT count(*)::int AS n FROM tables WHERE tenant_id=$1`, [tid]),
     q(`SELECT count(*)::int AS n, sum(CASE WHEN available THEN 1 ELSE 0 END)::int AS avail FROM products WHERE tenant_id=$1`, [tid]),
     q(`SELECT * FROM current_cash WHERE tenant_id=$1`, [tid])
@@ -1624,7 +1626,7 @@ app.get('/api/dashboard', async (req, res) => {
   res.json({
     ordersToday: ordersToday.rows,
     ordersWeek: ordersWeek.rows,
-    openCount: openCount.rows[0].n,
+    openCount: openTables.rows.filter(ot => itemQty(ot.items) > 0).length,
     tablesCount: tablesCount.rows[0].n,
     productsTotal: prodCount.rows[0].n,
     productsAvailable: prodCount.rows[0].avail,

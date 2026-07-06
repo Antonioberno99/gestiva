@@ -526,7 +526,7 @@ async function demoApi(path, opts = {}) {
     demoWrite('gestiva_demo_cash', null);
     return { ok:true, diff, expected };
   }
-  if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
+  if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.filter(openTableHasOrder).length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
   if (path === '/api/settings') { USER = { ...USER, restaurantName:body.restaurantName || USER.restaurantName, ownerName:body.ownerName || USER.ownerName, phone:body.phone || USER.phone, currency:body.currency || USER.currency }; localStorage.setItem('gestiva_user', JSON.stringify(USER)); return USER; }
   // Customers
   const customers = demoRead('gestiva_demo_customers', []);
@@ -926,9 +926,16 @@ function setMesasView(v) {
   localStorage.setItem('gestiva_mesas_view', v);
   navigate();
 }
+function openTableItemQty(open) {
+  return (open && Array.isArray(open.items) ? open.items : []).reduce((sum, it) => sum + (Number(it && it.qty) || 0), 0);
+}
+function openTableHasOrder(open) {
+  return openTableItemQty(open) > 0;
+}
 route('mesas', async () => {
   const [tables, open] = await Promise.all([API.tables(), API.openTables()]);
-  const openMap = new Map(open.map(o => [o.table_id, o]));
+  const activeOpen = open.filter(openTableHasOrder);
+  const openMap = new Map(activeOpen.map(o => [o.table_id, o]));
   const reservedCount = tables.filter(t => !openMap.has(t.id) && t.status === 'reserved').length;
   const products = await API.products();
   const prodMap = new Map(products.map(p => [p.id, p]));
@@ -945,7 +952,7 @@ route('mesas', async () => {
   $('#view').innerHTML = `
     <div class="page-header">
       <div><h1 class="page-title">Mesas</h1>
-        <div class="page-subtitle">${open.length} ocupadas · ${reservedCount} reservadas · ${tables.length - open.length - reservedCount} libres</div>
+        <div class="page-subtitle">${activeOpen.length} ocupadas - ${reservedCount} reservadas - ${tables.length - activeOpen.length - reservedCount} libres</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="display:flex;gap:4px;background:white;border:1px solid var(--border);border-radius:8px;padding:3px;">
@@ -1124,16 +1131,16 @@ route('mesa', async (params) => {
 
   if (!ot) {
     if (CURRENT_WAITERS.length === 0) {
-      $('#view').innerHTML = `<div class="empty"><h3>No tenés mozos</h3><p>Creá uno primero para poder abrir mesas.</p><a href="#/mozos" class="btn btn-primary">Ir a Mozos</a></div>`;
+      $('#view').innerHTML = `<div class="empty"><h3>No tenes mozos</h3><p>Crea uno primero para poder abrir mesas.</p><a href="#/mozos" class="btn btn-primary">Ir a Mozos</a></div>`;
       return;
     }
     const isReserved = t.status === 'reserved';
     const reserveTime = t.reservation_time ? new Date(t.reservation_time).toLocaleString('es-AR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
     $('#view').innerHTML = `
       <div class="page-header"><div style="display:flex;align-items:center;gap:14px;">
-        <a href="#/mesas" class="btn-ghost btn-icon">←</a>
+        <a href="#/mesas" class="btn-ghost btn-icon">&larr;</a>
         <div><h1 class="page-title">Mesa ${t.num}</h1>
-          <div class="page-subtitle">${t.seats} lugares · ${isReserved ? '<span class="badge yellow">reservada</span>' : 'libre'}</div></div>
+          <div class="page-subtitle">${t.seats} lugares - ${isReserved ? '<span class="badge yellow">reservada</span>' : 'libre'}</div></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn btn-secondary" onclick="reserveTable('${tableId}')">${isReserved ? 'Editar reserva' : 'Reservar'}</button>
@@ -1141,22 +1148,23 @@ route('mesa', async (params) => {
       </div></div>
       <div class="card" style="text-align:center;padding:40px 20px;max-width:480px;margin:0 auto;">
         <h3 style="margin-bottom:8px;">Abrir mesa</h3>
-        <p style="color:var(--tx-mid);margin-bottom:20px;">${isReserved ? `Reserva: ${t.reservation_name || 'sin nombre'}${reserveTime ? ' · ' + reserveTime : ''}` : 'Seleccioná un mozo'}</p>
+        <p style="color:var(--tx-mid);margin-bottom:20px;">${isReserved ? `Reserva: ${t.reservation_name || 'sin nombre'}${reserveTime ? ' - ' + reserveTime : ''}` : 'Selecciona un mozo'}</p>
         <div class="field"><label>Mozo</label><select id="newWaiter">${CURRENT_WAITERS.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}</select></div>
         <button class="btn btn-primary btn-block" onclick="openTableNow('${tableId}')">Abrir mesa</button>
       </div>`;
     return;
   }
 
+  const tableHasOrder = openTableHasOrder(ot);
   CURRENT_ITEMS = ot.items || [];
   CURRENT_WAITER_ID = ot.waiter_id;
   CURRENT_PRODUCTS = await API.products();
 
   $('#view').innerHTML = `
     <div class="page-header"><div style="display:flex;align-items:center;gap:14px;">
-      <a href="#/mesas" class="btn-ghost btn-icon">←</a>
+      <a href="#/mesas" class="btn-ghost btn-icon">&larr;</a>
       <div><h1 class="page-title">Mesa ${t.num}</h1>
-        <div class="page-subtitle">${t.seats} lugares · <span class="badge yellow">ocupada</span></div></div>
+        <div class="page-subtitle">${t.seats} lugares - ${tableHasOrder ? '<span class="badge yellow">ocupada</span>' : 'libre'}</div></div>
     </div></div>
     <div class="grid grid-2" style="grid-template-columns:1.4fr 1fr;align-items:start;gap:20px;">
       <div><div class="chips" id="catChips"></div><div class="prod-grid" id="prodGrid"></div></div>
@@ -2184,7 +2192,7 @@ route('mozos', async () => {
     </div>
     <div class="grid grid-3" style="margin-bottom:24px;">
       ${waiters.length===0 ? '<div class="empty" style="grid-column:1/-1;"><h3>Sin integrantes</h3><button class="btn btn-primary" onclick="editWaiter()">+ Crear integrante</button></div>' : waiters.map(w => {
-        const activeTables = open.filter(ot => ot.waiter_id === w.id).length;
+        const activeTables = open.filter(ot => ot.waiter_id === w.id && openTableHasOrder(ot)).length;
         const activeShift = activeShifts.find(s => s.waiter_id === w.id);
         const todayOrders = orders.filter(o => o.waiter_id === w.id && o.closed_at.slice(0,10) === today_);
         const todaySales = todayOrders.reduce((s,o) => s + parseFloat(o.total), 0);
