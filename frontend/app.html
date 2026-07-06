@@ -101,21 +101,21 @@
   @media (max-width:1100px) { .grid-4 { grid-template-columns: repeat(2,1fr); } }
   @media (max-width:700px) { .grid-4,.grid-3,.grid-2 { grid-template-columns: 1fr; } }
 
-  .table-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:14px; }
-  .table-card { border-radius:var(--r-lg); padding:18px 16px; cursor:pointer; transition:transform .15s var(--ease),box-shadow .15s,border-color .15s; border:2px solid var(--border); background:white; position:relative; text-align:left; display:flex; flex-direction:column; gap:6px; min-height:130px; }
-  .table-card:hover { transform:translateY(-3px); box-shadow:var(--sh-md); }
+  .table-grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(108px,1fr)); gap:8px; }
+  .table-card { border-radius:12px; padding:9px; cursor:pointer; transition:transform .15s var(--ease),box-shadow .15s,border-color .15s; border:1px solid var(--border); background:white; position:relative; text-align:left; display:flex; flex-direction:column; gap:3px; min-height:96px; }
+  .table-card:hover { transform:translateY(-1px); box-shadow:var(--sh-sm); }
   .table-card.libre { border-color:var(--border); }
   .table-card.ocupada { border-color:var(--or); background:linear-gradient(135deg,#fff7ed,#fff); box-shadow:0 4px 16px rgba(249,115,22,.15); }
   .table-card.reservada { border-color:var(--purple); background:linear-gradient(135deg,#f5f3ff,#fff); }
-  .table-status { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; padding:3px 8px; border-radius:999px; align-self:flex-start; }
+  .table-status { display:inline-flex; align-items:center; gap:4px; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; padding:2px 6px; border-radius:999px; align-self:flex-start; }
   .table-status.libre { background:var(--green-lt); color:#047857; }
   .table-status.ocupada { background:var(--or-100); color:var(--or-dk); }
   .table-status.reservada { background:#ede9fe; color:#6d28d9; }
-  .table-num { font-size:26px; font-weight:800; font-family:var(--ff-display); }
-  .table-total { font-size:18px; font-weight:700; color:var(--or-dk); }
-  .table-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
-  .table-actions .btn-ghost { font-size:12px; padding:5px 8px; border:1px solid var(--border-soft); background:rgba(255,255,255,.85); }
-  .table-meta { font-size:12px; color:var(--tx-mid); }
+  .table-num { font-size:21px; line-height:1; font-weight:800; font-family:var(--ff-display); }
+  .table-total { font-size:14px; font-weight:800; color:var(--or-dk); line-height:1.1; }
+  .table-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; margin-top:auto; }
+  .table-actions .btn-ghost { font-size:10px; min-height:32px; padding:4px 5px; border:1px solid var(--border-soft); background:rgba(255,255,255,.9); }
+  .table-meta { font-size:10.5px; line-height:1.25; color:var(--tx-mid); }
 
   .list { display:flex; flex-direction:column; }
   .list-row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-soft); }
@@ -175,6 +175,8 @@
   .cart-total { display:flex; justify-content:space-between; margin-bottom:12px; font-size:18px; font-weight:700; }
 
   .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  .room-chips { margin:-4px 0 14px; gap:6px; }
+  .room-chips .chip { min-height:36px; padding:6px 11px; font-size:12px; }
   .chip { padding:7px 14px; border-radius:999px; background:white; border:1px solid var(--border); font-size:13px; font-weight:500; transition:all .15s; }
   .chip:hover { border-color:var(--or); }
   .chip.active { background:var(--or); color:white; border-color:var(--or); }
@@ -379,7 +381,7 @@ function demoSeed() {
   }
   if (!localStorage.getItem('gestiva_demo_tables')) {
     demoWrite('gestiva_demo_tables', Array.from({ length: 8 }, (_, i) => ({
-      id:'demo-table-' + (i + 1), num:i + 1, seats:i < 4 ? 4 : 6, status:'free',
+      id:'demo-table-' + (i + 1), num:i + 1, seats:i < 4 ? 4 : 6, room:i < 4 ? 'Salon' : 'Terraza', status:'free',
       reservation_name:null, reservation_time:null
     })));
   }
@@ -407,8 +409,8 @@ async function demoApi(path, opts = {}) {
   if (path.startsWith('/api/products/') && method === 'PUT') { const id = path.split('/').pop(); const p = products.find(x => x.id === id); Object.assign(p, body); demoWrite('gestiva_demo_products', products); return p; }
   if (path.startsWith('/api/products/') && method === 'DELETE') { demoWrite('gestiva_demo_products', products.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
   if (path === '/api/tables' && method === 'GET') return tables;
-  if (path === '/api/tables' && method === 'POST') { const t = { id:demoId('table'), status:'free', reservation_name:null, reservation_time:null, ...body, num:body.num || (tables.length + 1), seats:body.seats || 4 }; tables.push(t); demoWrite('gestiva_demo_tables', tables); return t; }
-  if (path.startsWith('/api/tables/') && method === 'PUT') { const id = path.split('/').pop(); const t = tables.find(x => x.id === id); Object.assign(t, { num:body.num ?? t.num, seats:body.seats ?? t.seats, status:body.status ?? t.status, reservation_name:body.reservationName ?? t.reservation_name, reservation_time:body.reservationTime ?? t.reservation_time }); demoWrite('gestiva_demo_tables', tables); return t; }
+  if (path === '/api/tables' && method === 'POST') { const t = { id:demoId('table'), status:'free', reservation_name:null, reservation_time:null, ...body, room:cleanTableRoom(body.room), num:body.num || (tables.length + 1), seats:body.seats || 4 }; tables.push(t); demoWrite('gestiva_demo_tables', tables); return t; }
+  if (path.startsWith('/api/tables/') && method === 'PUT') { const id = path.split('/').pop(); const t = tables.find(x => x.id === id); Object.assign(t, { num:body.num ?? t.num, seats:body.seats ?? t.seats, room:body.room != null ? cleanTableRoom(body.room) : (t.room || 'Salon'), status:body.status ?? t.status, reservation_name:body.reservationName ?? t.reservation_name, reservation_time:body.reservationTime ?? t.reservation_time }); demoWrite('gestiva_demo_tables', tables); return t; }
   if (path.startsWith('/api/tables/') && method === 'DELETE') { demoWrite('gestiva_demo_tables', tables.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
   if (path === '/api/waiters' && method === 'GET') return waiters;
   if (path === '/api/waiters' && method === 'POST') { const w = { id:demoId('waiter'), role:'Mozo', color:'#f97316', hasPin:!!body.pin, created_at:new Date().toISOString(), ...body }; delete w.pin; waiters.push(w); demoWrite('gestiva_demo_waiters', waiters); return w; }
@@ -932,11 +934,54 @@ function openTableItemQty(open) {
 function openTableHasOrder(open) {
   return openTableItemQty(open) > 0;
 }
+const TABLE_ROOMS_KEY = 'gestiva_table_rooms';
+const DEFAULT_TABLE_ROOM = 'Salon';
+let MESAS_ROOM = localStorage.getItem('gestiva_mesas_room') || 'todos';
+function cleanTableRoom(room) {
+  const value = String(room || DEFAULT_TABLE_ROOM).replace(/[<>"'\\]/g, '').trim();
+  return (value || DEFAULT_TABLE_ROOM).slice(0, 40);
+}
+function safeHTML(v) {
+  return String(v ?? '').replace(/[&<>"]/g, (ch) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[ch]));
+}
+function customTableRooms() {
+  try { return JSON.parse(localStorage.getItem(TABLE_ROOMS_KEY) || '[]').map(cleanTableRoom).filter(Boolean); }
+  catch(e) { return []; }
+}
+function saveCustomTableRooms(rooms) { localStorage.setItem(TABLE_ROOMS_KEY, JSON.stringify([...new Set(rooms.map(cleanTableRoom))])); }
+function tableRoom(t) { return cleanTableRoom(t && (t.room || t.salon)); }
+function tableRooms(tables) {
+  const rooms = [DEFAULT_TABLE_ROOM, ...customTableRooms(), ...(tables || []).map(tableRoom)];
+  return [...new Set(rooms.map(cleanTableRoom))];
+}
+function roomArg(room) { return cleanTableRoom(room).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+function tableRoomChips(rooms) {
+  return '<div class="chips room-chips">' +
+    '<button class="chip ' + (MESAS_ROOM === 'todos' ? 'active' : '') + '" onclick="setMesasRoom(\'todos\')">Todos</button>' +
+    rooms.map(r => '<button class="chip ' + (MESAS_ROOM === r ? 'active' : '') + '" onclick="setMesasRoom(\'' + roomArg(r) + '\')">' + safeHTML(r) + '</button>').join('') +
+    '<button class="chip" onclick="addRoom()">+ Salon</button>' +
+  '</div>';
+}
+function setMesasRoom(room) {
+  MESAS_ROOM = room === 'todos' ? 'todos' : cleanTableRoom(room);
+  localStorage.setItem('gestiva_mesas_room', MESAS_ROOM);
+  navigate();
+}
+function addRoom() {
+  const room = cleanTableRoom(prompt('Nombre del salon o zona. Ej: Terraza, Patio, Barra') || '');
+  if (!room) return;
+  saveCustomTableRooms([...customTableRooms(), room]);
+  setMesasRoom(room);
+}
 route('mesas', async () => {
   const [tables, open] = await Promise.all([API.tables(), API.openTables()]);
-  const activeOpen = open.filter(openTableHasOrder);
+  const rooms = tableRooms(tables);
+  if (MESAS_ROOM !== 'todos' && !rooms.includes(MESAS_ROOM)) MESAS_ROOM = 'todos';
+  const visibleTables = MESAS_ROOM === 'todos' ? tables : tables.filter(t => tableRoom(t) === MESAS_ROOM);
+  const visibleIds = new Set(visibleTables.map(t => t.id));
+  const activeOpen = open.filter(o => visibleIds.has(o.table_id) && openTableHasOrder(o));
   const openMap = new Map(activeOpen.map(o => [o.table_id, o]));
-  const reservedCount = tables.filter(t => !openMap.has(t.id) && t.status === 'reserved').length;
+  const reservedCount = visibleTables.filter(t => !openMap.has(t.id) && t.status === 'reserved').length;
   const products = await API.products();
   const prodMap = new Map(products.map(p => [p.id, p]));
   const waiters = await API.waiters();
@@ -952,7 +997,7 @@ route('mesas', async () => {
   $('#view').innerHTML = `
     <div class="page-header">
       <div><h1 class="page-title">Mesas</h1>
-        <div class="page-subtitle">${activeOpen.length} ocupadas - ${reservedCount} reservadas - ${tables.length - activeOpen.length - reservedCount} libres</div>
+        <div class="page-subtitle">${activeOpen.length} ocupadas - ${reservedCount} reservadas - ${visibleTables.length - activeOpen.length - reservedCount} libres</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="display:flex;gap:4px;background:white;border:1px solid var(--border);border-radius:8px;padding:3px;">
@@ -962,9 +1007,10 @@ route('mesas', async () => {
         <button class="btn btn-secondary" onclick="addTable()">+ Agregar mesa</button>
       </div>
     </div>
-    ${MESAS_VIEW === 'salon' ? renderSalon(tables, openMap, waiterMap, calcTotal) : `
+    ${tableRoomChips(rooms)}
+    ${MESAS_VIEW === 'salon' ? renderSalon(visibleTables, openMap, waiterMap, calcTotal) : `
     <div class="table-grid">
-      ${tables.map(t => {
+      ${visibleTables.map(t => {
         const ot = openMap.get(t.id);
         const st = ot ? 'ocupada' : (t.status === 'reserved' ? 'reservada' : 'libre');
         const total = ot ? calcTotal(ot.items) : 0;
@@ -974,8 +1020,8 @@ route('mesas', async () => {
         return `<div class="table-card ${st}" onclick="location.hash='#/mesa/${t.id}'">
           <span class="table-status ${st}">${st}</span>
           <div class="table-num">M${t.num}</div>
-          <div class="table-meta">${t.seats} lugares</div>
-          ${ot ? `<div class="table-total">${fmt(total)}</div><div class="table-meta">${w?w.name:''} · ${(ot.items||[]).length} items</div>` : ''}
+          <div class="table-meta">${safeHTML(tableRoom(t))} - ${t.seats} lug.</div>
+          ${ot ? `<div class="table-total">${fmt(total)}</div><div class="table-meta">${w?w.name:''} - ${openTableItemQty(ot)} items</div>` : ''}
           ${st === 'reservada' ? `<div class="table-meta">${reserveText}${reserveTime ? ' · ' + reserveTime : ''}</div>` : ''}
           <div class="table-actions" onclick="event.stopPropagation()">
             ${!ot ? `<button class="btn-ghost" onclick="reserveTable('${t.id}')">${st==='reservada'?'Editar reserva':'Reservar'}</button>` : ''}
@@ -998,17 +1044,17 @@ function renderSalon(tables, openMap, waiterMap, calcTotal) {
         ${tables.map((t, i) => {
           const ot = openMap.get(t.id);
           const st = ot ? 'ocupada' : (t.status === 'reserved' ? 'reservada' : 'libre');
-          const x = t.pos_x != null ? t.pos_x : (i % 5) * 130 + 20;
-          const y = t.pos_y != null ? t.pos_y : Math.floor(i / 5) * 130 + 20;
+          const x = t.pos_x != null ? t.pos_x : (i % 7) * 92 + 14;
+          const y = t.pos_y != null ? t.pos_y : Math.floor(i / 7) * 92 + 14;
           const color = st === 'ocupada' ? 'var(--or)' : st === 'reservada' ? 'var(--purple)' : '#cbd5e1';
           const bg = st === 'ocupada' ? '#fff7ed' : st === 'reservada' ? '#f5f3ff' : 'white';
           return `<div class="salon-table" data-id="${t.id}" data-st="${st}"
-            style="position:absolute;left:${x}px;top:${y}px;width:110px;height:110px;border:3px solid ${color};
-            background:${bg};border-radius:14px;cursor:move;display:flex;flex-direction:column;align-items:center;justify-content:center;
-            user-select:none;box-shadow:0 4px 12px rgba(0,0,0,.08);transition:box-shadow .15s;">
-            <div style="font-family:var(--ff-display);font-size:28px;font-weight:800;">M${t.num}</div>
-            <div style="font-size:11px;color:var(--tx-mid);">${t.seats} lug.</div>
-            ${ot ? `<div style="font-size:11px;font-weight:700;color:var(--or-dk);">${fmt(calcTotal(ot.items))}</div>` : ''}
+            style="position:absolute;left:${x}px;top:${y}px;width:76px;height:76px;border:2px solid ${color};
+            background:${bg};border-radius:12px;cursor:move;display:flex;flex-direction:column;align-items:center;justify-content:center;
+            user-select:none;box-shadow:0 3px 8px rgba(0,0,0,.07);transition:box-shadow .15s;">
+            <div style="font-family:var(--ff-display);font-size:21px;line-height:1;font-weight:800;">M${t.num}</div>
+            <div style="font-size:10px;color:var(--tx-mid);">${t.seats} lug.</div>
+            ${ot ? `<div style="font-size:10px;font-weight:800;color:var(--or-dk);">${fmt(calcTotal(ot.items))}</div>` : ''}
           </div>`;
         }).join('')}
       </div>
@@ -1050,19 +1096,22 @@ function initSalonDrag() {
   });
 }
 async function addTable() {
-  try { await API.tableCreate({}); navigate(); toast('Mesa agregada','success'); }
+  const room = MESAS_ROOM !== 'todos' ? MESAS_ROOM : DEFAULT_TABLE_ROOM;
+  try { await API.tableCreate({ room }); navigate(); toast('Mesa agregada','success'); }
   catch(e) { toast(e.message,'error'); }
 }
 async function editTable(id) {
   const tables = await API.tables();
   const t = tables.find(t => t.id === id);
   if (!t) return toast('Mesa no encontrada','error');
+  const rooms = tableRooms(tables);
   openModal('Editar mesa', `
     <div class="grid grid-2" style="gap:12px;">
-      <div class="field"><label>Número de mesa</label><input id="tableNum" type="number" min="1" step="1" value="${t.num}" autofocus/></div>
+      <div class="field"><label>Numero de mesa</label><input id="tableNum" type="number" min="1" step="1" value="${t.num}" autofocus/></div>
       <div class="field"><label>Lugares</label><input id="tableSeats" type="number" min="1" step="1" value="${t.seats || 4}"/></div>
+      <div class="field" style="grid-column:1/-1;"><label>Salon / zona</label><input id="tableRoom" list="tableRoomList" value="${safeHTML(tableRoom(t))}" placeholder="Salon, Terraza, Patio"/><datalist id="tableRoomList">${rooms.map(r => `<option value="${safeHTML(r)}"></option>`).join('')}</datalist></div>
     </div>
-    <p style="font-size:13px;color:var(--tx-mid);margin-top:8px;">Usá lugares para diferenciar mesas chicas, grandes, barra o mesas compartidas.</p>`,
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:8px;">Usa salones para separar terraza, patio, barra o ambientes del restaurante.</p>`,
     `<button class="btn btn-danger" style="margin-right:auto;" onclick="deleteTableCfm('${id}')">Eliminar</button>
      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="saveTable('${id}')">Guardar</button>`);
@@ -1070,8 +1119,10 @@ async function editTable(id) {
 async function saveTable(id) {
   const num = parseInt($('#tableNum').value, 10);
   const seats = parseInt($('#tableSeats').value, 10);
-  if (!num || num < 1 || !seats || seats < 1) return toast('Número y lugares inválidos','error');
-  try { await API.tableUpdate(id, { num, seats }); closeModal(); navigate(); toast('Mesa actualizada','success'); }
+  const room = cleanTableRoom($('#tableRoom') ? $('#tableRoom').value : DEFAULT_TABLE_ROOM);
+  if (!num || num < 1 || !seats || seats < 1) return toast('Numero y lugares invalidos','error');
+  saveCustomTableRooms([...customTableRooms(), room]);
+  try { await API.tableUpdate(id, { num, seats, room }); closeModal(); navigate(); toast('Mesa actualizada','success'); }
   catch(e) { toast(e.message === 'duplicate_num' ? 'Ya existe una mesa con ese número' : e.message, 'error'); }
 }
 async function reserveTable(id) {

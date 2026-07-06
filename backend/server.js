@@ -261,6 +261,10 @@ function itemQty(items) {
   if (!Array.isArray(items)) return 0;
   return items.reduce((sum, it) => sum + (Number(it && it.qty) || 0), 0);
 }
+function tableRoomValue(room) {
+  const value = String(room || 'Salon').replace(/[<>\"']/g, '').trim();
+  return (value || 'Salon').slice(0, 40);
+}
 
 function publicWaiter(w) {
   return {
@@ -1066,15 +1070,15 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // ----- TABLES -----
 app.get('/api/tables', async (req, res) => {
-  const r = await q('SELECT * FROM tables WHERE tenant_id=$1 ORDER BY num', [req.tenant.id]);
+  const r = await q("SELECT * FROM tables WHERE tenant_id=$1 ORDER BY COALESCE(room, 'Salon'), num", [req.tenant.id]);
   res.json(r.rows);
 });
 app.post('/api/tables', async (req, res) => {
-  const { num, seats } = req.body || {};
+  const { num, seats, room } = req.body || {};
   const numToUse = num || (await q('SELECT COALESCE(MAX(num),0)+1 AS n FROM tables WHERE tenant_id=$1', [req.tenant.id])).rows[0].n;
   try {
-    const r = await q(`INSERT INTO tables (tenant_id, num, seats, status) VALUES ($1,$2,$3,'free') RETURNING *`,
-      [req.tenant.id, numToUse, seats || 4]);
+    const r = await q(`INSERT INTO tables (tenant_id, num, seats, room, status) VALUES ($1,$2,$3,$4,'free') RETURNING *`,
+      [req.tenant.id, numToUse, seats || 4, tableRoomValue(room)]);
     res.json(r.rows[0]);
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'duplicate_num' });
@@ -1082,7 +1086,7 @@ app.post('/api/tables', async (req, res) => {
   }
 });
 app.put('/api/tables/:id', async (req, res) => {
-  const { num, seats, status, reservationName, reservationTime } = req.body || {};
+  const { num, seats, room, status, reservationName, reservationTime } = req.body || {};
   if (status && !['free', 'reserved'].includes(status)) {
     return res.status(400).json({ error: 'invalid_status' });
   }
@@ -1094,11 +1098,12 @@ app.put('/api/tables/:id', async (req, res) => {
     const r = await q(`UPDATE tables SET
                          num=COALESCE($1,num),
                          seats=COALESCE($2,seats),
-                         status=COALESCE($3,status),
-                         reservation_name=CASE WHEN $3='free' THEN NULL ELSE COALESCE($4,reservation_name) END,
-                         reservation_time=CASE WHEN $3='free' THEN NULL ELSE COALESCE($5,reservation_time) END
-                       WHERE id=$6 AND tenant_id=$7 RETURNING *`,
-      [num, seats, status || null, reservationName || null, reservationTime || null, req.params.id, req.tenant.id]);
+                         room=COALESCE($3,room),
+                         status=COALESCE($4,status),
+                         reservation_name=CASE WHEN $4='free' THEN NULL ELSE COALESCE($5,reservation_name) END,
+                         reservation_time=CASE WHEN $4='free' THEN NULL ELSE COALESCE($6,reservation_time) END
+                       WHERE id=$7 AND tenant_id=$8 RETURNING *`,
+      [num, seats, room != null ? tableRoomValue(room) : null, status || null, reservationName || null, reservationTime || null, req.params.id, req.tenant.id]);
     if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
     res.json(r.rows[0]);
   } catch (e) {
