@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Registrarse · Gestiva</title>
+<title>Crear cuenta · Gestiva</title>
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2">
 <link rel="icon" type="image/png" href="assets/favicon.png?v=2">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
@@ -23,17 +23,25 @@
   body { margin:0; font-family: var(--ff-body); background: linear-gradient(135deg, #fff7ed 0%, #fafafa 50%, #fff7ed 100%); min-height: 100vh; color: var(--tx-dark); -webkit-font-smoothing: antialiased; display:flex; align-items:center; justify-content:center; padding: 24px; position: relative; overflow-x: hidden; }
   body::before { content:''; position:absolute; top:-200px; right:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.12), transparent 70%); border-radius:50%; pointer-events:none; }
   body::after { content:''; position:absolute; bottom:-200px; left:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.08), transparent 70%); border-radius:50%; pointer-events:none; }
-  .wrap { max-width: 500px; width:100%; position: relative; z-index: 1; }
-  .brand { display:flex; align-items:center; gap:10px; margin-bottom:32px; text-decoration:none; color:inherit; }
-  .brand-logo { width:40px; height:40px; border-radius:11px; background:#fff; display:grid; place-items:center; color:white; box-shadow:0 6px 16px rgba(15,23,42,.08); overflow:hidden; }
-  .brand-logo img { width:38px; height:38px; object-fit:contain; display:block; }
+  .wrap { max-width: 460px; width:100%; position: relative; z-index: 1; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; text-decoration:none; color:inherit; justify-content:center; }
+  .brand-logo { width:40px; height:40px; overflow:hidden; }
+  .brand-logo img { width:40px; height:40px; object-fit:contain; display:block; }
   .brand-name { font-family:var(--ff-display); font-weight:800; font-size:20px; color:var(--or); }
   .card { background:white; border-radius:24px; padding:36px; box-shadow:var(--sh-md); }
-  h1 { font-family:var(--ff-display); font-size:26px; margin:0 0 8px; letter-spacing:-0.02em; }
-  .sub { color:var(--tx-mid); margin-bottom:24px; font-size:14px; }
+
+  .steps { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:26px; font-size:12px; color:var(--tx-lt); font-weight:600; }
+  .steps .st { display:flex; align-items:center; gap:7px; }
+  .steps .num { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--border); color:var(--tx-mid); font-size:12px; }
+  .steps .st.on .num { background:linear-gradient(135deg,var(--or),var(--or-dk)); color:#fff; }
+  .steps .st.on { color:var(--tx-dark); }
+  .steps .sep { width:18px; height:1px; background:var(--border); }
+
+  h1 { font-family:var(--ff-display); font-size:25px; margin:0 0 6px; letter-spacing:-0.02em; text-align:center; }
+  .sub { color:var(--tx-mid); margin-bottom:22px; font-size:14px; text-align:center; }
   .field { margin-bottom:14px; }
   .field label { display:block; font-size:13px; font-weight:600; color:var(--tx-mid); margin-bottom:6px; }
-  .field input { width:100%; padding:11px 14px; border-radius:10px; border:1px solid var(--border); font-size:14px; font-family:inherit; transition: border-color .15s, box-shadow .15s; }
+  .field input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border); font-size:14px; font-family:inherit; transition: border-color .15s, box-shadow .15s; }
   .field input:focus { outline:none; border-color:var(--or); box-shadow:0 0 0 3px rgba(249,115,22,.15); }
   .btn { width:100%; padding:13px 16px; border:none; border-radius:12px; font-weight:600; font-size:15px; font-family:inherit; cursor:pointer; transition: transform .15s, box-shadow .15s; background: linear-gradient(135deg, var(--or), var(--or-dk)); color:white; box-shadow:0 6px 16px rgba(249,115,22,.3); }
   .btn:hover { transform:translateY(-1px); box-shadow:0 8px 22px rgba(249,115,22,.4); }
@@ -42,15 +50,15 @@
   .err.on { display:block; }
   .alt { text-align:center; margin-top:20px; font-size:13px; color:var(--tx-mid); }
   .alt a { color:var(--or-dk); font-weight:600; text-decoration:none; }
-  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px;}
+  .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-lt);font-size:12px;}
   .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
   #gBtn{display:flex;justify-content:center;}
   #gBtn:empty{display:none;}
-  .price-pill { display:inline-flex; align-items:center; gap:8px; background:var(--or-lt); color:var(--or-dk); padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600; margin-bottom:20px; }
-  .feat-list { background:var(--bg); border-radius:12px; padding:14px 18px; margin:20px 0; font-size:13px; color:var(--tx-mid); }
-  .feat-list ul { margin:0; padding:0; list-style:none; }
-  .feat-list li { padding:5px 0; display:flex; align-items:center; gap:8px; }
-  .feat-list svg { color:var(--or); flex-shrink:0; }
+  .refline { text-align:center; margin-top:14px; font-size:12px; }
+  .refline a { color:var(--tx-mid); text-decoration:underline; cursor:pointer; }
+  #refWrap { margin-top:12px; display:none; }
+  #refWrap.on { display:block; }
+  .reassure { margin-top:18px; font-size:12px; color:var(--tx-lt); text-align:center; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -61,51 +69,41 @@
   </a>
 
   <div class="card">
-    <div class="price-pill" id="planPill">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
-      <span id="planPillText">Plan Pro · $20.000 / mes · Sin compromisos</span>
+    <div class="steps">
+      <div class="st on"><span class="num">1</span> Cuenta</div>
+      <div class="sep"></div>
+      <div class="st"><span class="num">2</span> Tu negocio</div>
+      <div class="sep"></div>
+      <div class="st"><span class="num">3</span> Plan</div>
     </div>
-    <h1>Empezá tu mes gratis</h1>
-    <p class="sub">Creá tu cuenta y dejá tu tarjeta para activar Gestiva. No se te cobra por 30 días y cancelás cuando quieras. <a href="landing.html#precios" style="color:var(--or-dk);">Ver planes</a></p>
+
+    <h1>Creá tu cuenta</h1>
+    <p class="sub">Empezá con Google o tu email. Después cargás los datos de tu negocio y elegís tu plan.</p>
 
     <div class="err" id="err"></div>
+
     <div id="gBtn"></div>
-    <div class="divider" id="gDivider" style="display:none;">o con email</div>
+    <div class="divider" id="gDivider" style="display:none;">o con tu email</div>
+
     <form id="signupForm">
       <div class="field">
-        <label>Nombre del restaurante / bar</label>
-        <input id="restaurantName" required placeholder="Ej: Bar Don Pedro" autofocus />
-      </div>
-      <div class="field">
-        <label>Tu nombre</label>
-        <input id="ownerName" placeholder="Juan Pérez" />
-      </div>
-      <div class="field">
         <label>Email</label>
-        <input id="email" type="email" required placeholder="tu@email.com" autocomplete="email" />
-      </div>
-      <div class="field">
-        <label>Teléfono / WhatsApp</label>
-        <input id="phone" type="tel" placeholder="3884-XXXXXXX" />
+        <input id="email" type="email" required placeholder="tu@email.com" autocomplete="email" autofocus />
       </div>
       <div class="field">
         <label>Contraseña (mínimo 6 caracteres)</label>
-        <input id="password" type="password" required minlength="6" autocomplete="new-password" />
+        <input id="password" type="password" required minlength="6" autocomplete="new-password" placeholder="••••••••" />
       </div>
-      <div class="field">
-        <label>Código de invitación o vendedor <span style="color:var(--tx-lt);font-weight:400;">(opcional)</span></label>
-        <input id="refInput" placeholder="Si tenés un código, ponelo acá" style="text-transform:uppercase" />
+
+      <div class="refline"><a id="refToggle">¿Tenés un código de invitación o vendedor?</a></div>
+      <div class="field" id="refWrap">
+        <input id="refInput" placeholder="Ingresá tu código" style="text-transform:uppercase" />
       </div>
-      <button type="submit" class="btn" id="submitBtn">Crear cuenta y continuar</button>
+
+      <button type="submit" class="btn" id="submitBtn" style="margin-top:8px;">Crear cuenta →</button>
     </form>
 
-    <div class="feat-list">
-      <ul>
-        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/></svg> Sistema completo: mesas, caja, productos, reportes</li>
-        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/></svg> Datos seguros en la nube · Acceso desde cualquier dispositivo</li>
-        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/></svg> Pago automático mensual con MercadoPago</li>
-      </ul>
-    </div>
+    <p class="reassure">Sin tarjeta en este paso. La pedimos recién al final, para tu mes gratis.</p>
 
     <div class="alt">¿Ya tenés cuenta? <a href="login.html">Iniciar sesión</a></div>
   </div>
@@ -117,34 +115,43 @@ const form = document.getElementById('signupForm');
 const errEl = document.getElementById('err');
 const btn = document.getElementById('submitBtn');
 
-// Lee el plan del query string (?plan=start|pro|full) y lo refleja en la pill
-const PLAN_LABELS = {
-  start: { name: 'Start', price: '$11.000' },
-  pro:   { name: 'Pro',   price: '$20.000' },
-  full:  { name: 'Full',  price: '$34.000' }
-};
 const urlParams = new URLSearchParams(window.location.search);
+// Plan preseleccionado desde la landing (?plan=start|pro|full). Se guarda en la
+// cuenta y se puede cambiar en el paso 3 (checkout).
 let selectedPlan = (urlParams.get('plan') || 'pro').toLowerCase();
-if (!PLAN_LABELS[selectedPlan]) selectedPlan = 'pro';
-// Código de vendedor: si viene en URL, lo guardamos y pre-llenamos el campo.
+if (!['start','pro','full'].includes(selectedPlan)) selectedPlan = 'pro';
+
+// Código de vendedor/invitación: si viene en la URL lo guardamos y abrimos el campo.
 const refFromUrl = urlParams.get('ref');
 if (refFromUrl) localStorage.setItem('gestiva_ref', refFromUrl.toUpperCase().trim());
 const storedRef = localStorage.getItem('gestiva_ref') || '';
-(function updatePlanPill(){
-  const info = PLAN_LABELS[selectedPlan];
-  const el = document.getElementById('planPillText');
-  if (el) el.textContent = `Prueba gratis · luego Plan ${info.name} ${info.price}/mes · Sin compromisos`;
-  const refEl = document.getElementById('refInput');
-  if (refEl && storedRef) refEl.value = storedRef;
-})();
-// El código a enviar = lo que esté en el campo (el usuario puede tipearlo) o el guardado.
+if (storedRef) {
+  document.getElementById('refInput').value = storedRef;
+  document.getElementById('refWrap').classList.add('on');
+}
+document.getElementById('refToggle').onclick = () => {
+  document.getElementById('refWrap').classList.toggle('on');
+  const inp = document.getElementById('refInput');
+  if (document.getElementById('refWrap').classList.contains('on')) inp.focus();
+};
 function currentRef() {
-  const refEl = document.getElementById('refInput');
-  const v = (refEl && refEl.value.trim()) || storedRef || '';
+  const v = (document.getElementById('refInput').value || '').trim() || storedRef || '';
   return v ? v.toUpperCase().trim() : null;
 }
 
-// Google Sign-In: solo renderiza si hay GOOGLE_CLIENT_ID configurado
+// Decide a dónde ir después de crear la cuenta / entrar.
+function routeAfterAuth(user, isNew) {
+  // Ya suscripto (activo, gracia o mes gratis) → directo al panel.
+  if (['active','grace','trial'].includes(user.subscriptionStatus)) {
+    location.href = 'app.html';
+    return;
+  }
+  // Cuenta nueva o placeholder → paso 2: completar datos del negocio.
+  const needsData = isNew || !user.restaurantName || user.restaurantName === 'Mi restaurante';
+  location.href = needsData ? 'onboarding.html' : 'checkout.html';
+}
+
+// ---- Google Sign-In ----
 function initGoogleSignIn() {
   if (!window.GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return;
   window.google.accounts.id.initialize({
@@ -154,7 +161,7 @@ function initGoogleSignIn() {
   });
   window.google.accounts.id.renderButton(document.getElementById('gBtn'), {
     type: 'standard', theme: 'outline', size: 'large', text: 'signup_with',
-    shape: 'rectangular', logo_alignment: 'center', width: 380
+    shape: 'rectangular', logo_alignment: 'center', width: 360
   });
   document.getElementById('gDivider').style.display = '';
 }
@@ -166,15 +173,10 @@ async function handleGoogleSignIn(response) {
       body: JSON.stringify({ credential: response.credential, ref: currentRef() || undefined })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de registro'));
+    if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google no está configurado en el backend' : (data.error || 'Error al crear la cuenta'));
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
-      location.href = 'app.html';
-    } else {
-      // Nuevo o sin tarjeta → debe dejar la tarjeta para empezar el mes gratis
-      location.href = 'checkout.html';
-    }
+    routeAfterAuth(data.user, data.isNew);
   } catch(e) {
     errEl.textContent = e.message;
     errEl.classList.add('on');
@@ -189,6 +191,7 @@ window.addEventListener('load', () => {
   }, 200);
 });
 
+// ---- Registro con email ----
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   errEl.classList.remove('on');
@@ -198,9 +201,6 @@ form.addEventListener('submit', async (e) => {
   const payload = {
     email: document.getElementById('email').value.trim(),
     password: document.getElementById('password').value,
-    restaurantName: document.getElementById('restaurantName').value.trim(),
-    ownerName: document.getElementById('ownerName').value.trim(),
-    phone: document.getElementById('phone').value.trim(),
     plan: selectedPlan,
     ref: currentRef() || undefined,
   };
@@ -212,28 +212,22 @@ form.addEventListener('submit', async (e) => {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(translate(data.error) || 'Error al registrar');
-
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
-    // Activo, en gracia o en prueba gratis → directo al panel
-    if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
-      location.href = 'app.html';
-    } else {
-      location.href = 'checkout.html';
-    }
+    routeAfterAuth(data.user, true);
   } catch (e) {
     errEl.textContent = e.message;
     errEl.classList.add('on');
     btn.disabled = false;
-    btn.textContent = 'Crear cuenta y continuar';
+    btn.textContent = 'Crear cuenta →';
   }
 });
 
 function translate(code) {
   const map = {
-    'email_taken': 'Ese email ya está registrado',
+    'email_taken': 'Ese email ya está registrado. ¿Querés iniciar sesión?',
     'password_too_short': 'La contraseña debe tener al menos 6 caracteres',
-    'missing_fields': 'Faltan campos obligatorios',
+    'missing_fields': 'Completá tu email y contraseña',
   };
   return map[code] || code;
 }

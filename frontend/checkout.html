@@ -16,8 +16,8 @@
   body::after{content:'';position:absolute;bottom:-200px;left:-200px;width:600px;height:600px;background:radial-gradient(circle, rgba(249,115,22,.08), transparent 70%);border-radius:50%;pointer-events:none;}
   .wrap{max-width:560px;width:100%;position:relative;z-index:1;}
   .brand{display:flex;align-items:center;gap:10px;margin-bottom:24px;text-decoration:none;color:inherit;justify-content:center}
-  .brand-logo{width:40px;height:40px;border-radius:11px;background:#fff;display:grid;place-items:center;color:white;box-shadow:0 6px 16px rgba(15,23,42,.08);overflow:hidden}
-  .brand-logo img{width:38px;height:38px;object-fit:contain;display:block}
+  .brand-logo{width:40px;height:40px;overflow:hidden}
+  .brand-logo img{width:40px;height:40px;object-fit:contain;display:block}
   .brand-name{font-family:var(--ff-display);font-weight:800;font-size:20px;color:var(--or)}
   .card{background:white;border-radius:24px;padding:36px;box-shadow:var(--sh-md);text-align:center}
   h1{font-family:var(--ff-display);font-size:26px;margin:0 0 8px;letter-spacing:-0.02em}
@@ -48,6 +48,13 @@
   .plan-switch button:hover{border-color:var(--or);color:var(--or-dk)}
   .plan-switch button.active{background:linear-gradient(135deg,var(--or),var(--or-dk));border-color:transparent;color:#fff;box-shadow:0 4px 10px rgba(249,115,22,.3)}
   .plan-label{font-size:13px;font-weight:600;color:var(--tx-mid);margin-bottom:8px;text-align:center}
+  .steps{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:22px;font-size:12px;color:var(--tx-lt);font-weight:600}
+  .steps .st{display:flex;align-items:center;gap:7px}
+  .steps .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--border);color:var(--tx-mid);font-size:12px}
+  .steps .st.on .num{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff}
+  .steps .st.done .num{background:var(--or-lt);color:var(--or-dk)}
+  .steps .st.on,.steps .st.done{color:var(--tx-dark)}
+  .steps .sep{width:18px;height:1px;background:var(--border)}
 </style>
 </head>
 <body>
@@ -154,6 +161,13 @@ function renderCheckout(status) {
   // pending = registrado pero todavía sin tarjeta → debe dejarla para empezar el mes gratis
   const planInfo = PLANS_INFO[currentPlan];
   card.innerHTML = `
+    <div class="steps">
+      <div class="st done"><span class="num">✓</span> Cuenta</div>
+      <div class="sep"></div>
+      <div class="st done"><span class="num">✓</span> Tu negocio</div>
+      <div class="sep"></div>
+      <div class="st on"><span class="num">3</span> Plan</div>
+    </div>
     <div class="alert info">Dejá tu tarjeta para activar tu <strong>mes gratis</strong>. No se te cobra nada durante los primeros 30 días.</div>
     <h1>Empezá tu mes gratis</h1>
     <p class="sub">Hola <strong>${user.restaurantName}</strong>, elegí tu plan y activá Gestiva. El primer cobro es recién dentro de 30 días y podés cancelar cuando quieras.</p>

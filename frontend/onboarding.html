@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tu negocio · Gestiva</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed;
+    --tx-dark: #0f172a; --tx-mid: #475569; --tx-lt: #94a3b8;
+    --bg: #f8fafc; --border: #e2e8f0; --red: #ef4444;
+    --sh-md: 0 12px 40px rgba(15,23,42,.10);
+    --ff-display: 'Outfit','Inter',sans-serif; --ff-body: 'Inter',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--ff-body); background: linear-gradient(135deg, #fff7ed 0%, #fafafa 50%, #fff7ed 100%); min-height: 100vh; color: var(--tx-dark); -webkit-font-smoothing: antialiased; display:flex; align-items:center; justify-content:center; padding: 24px; position: relative; overflow-x: hidden; }
+  body::before { content:''; position:absolute; top:-200px; right:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.12), transparent 70%); border-radius:50%; pointer-events:none; }
+  body::after { content:''; position:absolute; bottom:-200px; left:-200px; width:600px; height:600px; background:radial-gradient(circle, rgba(249,115,22,.08), transparent 70%); border-radius:50%; pointer-events:none; }
+  .wrap { max-width: 460px; width:100%; position: relative; z-index: 1; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; text-decoration:none; color:inherit; justify-content:center; }
+  .brand-logo { width:40px; height:40px; overflow:hidden; }
+  .brand-logo img { width:40px; height:40px; object-fit:contain; display:block; }
+  .brand-name { font-family:var(--ff-display); font-weight:800; font-size:20px; color:var(--or); }
+  .card { background:white; border-radius:24px; padding:36px; box-shadow:var(--sh-md); }
+
+  .steps { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:26px; font-size:12px; color:var(--tx-lt); font-weight:600; }
+  .steps .st { display:flex; align-items:center; gap:7px; }
+  .steps .num { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; background:var(--border); color:var(--tx-mid); font-size:12px; }
+  .steps .st.on .num { background:linear-gradient(135deg,var(--or),var(--or-dk)); color:#fff; }
+  .steps .st.done .num { background:var(--or-lt); color:var(--or-dk); }
+  .steps .st.on, .steps .st.done { color:var(--tx-dark); }
+  .steps .sep { width:18px; height:1px; background:var(--border); }
+
+  h1 { font-family:var(--ff-display); font-size:25px; margin:0 0 6px; letter-spacing:-0.02em; text-align:center; }
+  .sub { color:var(--tx-mid); margin-bottom:22px; font-size:14px; text-align:center; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; font-weight:600; color:var(--tx-mid); margin-bottom:6px; }
+  .field .hint { font-weight:400; color:var(--tx-lt); }
+  .field input { width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border); font-size:14px; font-family:inherit; transition: border-color .15s, box-shadow .15s; }
+  .field input:focus { outline:none; border-color:var(--or); box-shadow:0 0 0 3px rgba(249,115,22,.15); }
+  .btn { width:100%; padding:13px 16px; border:none; border-radius:12px; font-weight:600; font-size:15px; font-family:inherit; cursor:pointer; transition: transform .15s, box-shadow .15s; background: linear-gradient(135deg, var(--or), var(--or-dk)); color:white; box-shadow:0 6px 16px rgba(249,115,22,.3); margin-top:6px; }
+  .btn:hover { transform:translateY(-1px); box-shadow:0 8px 22px rgba(249,115,22,.4); }
+  .btn:disabled { opacity:.6; cursor:not-allowed; }
+  .err { background:#fee2e2; color:#b91c1c; padding:10px 12px; border-radius:8px; font-size:13px; margin-bottom:14px; display:none; }
+  .err.on { display:block; }
+  .logout { text-align:center; margin-top:18px; font-size:12px; color:var(--tx-lt); }
+  .logout a { color:var(--tx-mid); text-decoration:underline; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="landing.html" class="brand">
+    <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+    <div class="brand-name">Gestiva</div>
+  </a>
+
+  <div class="card">
+    <div class="steps">
+      <div class="st done"><span class="num">✓</span> Cuenta</div>
+      <div class="sep"></div>
+      <div class="st on"><span class="num">2</span> Tu negocio</div>
+      <div class="sep"></div>
+      <div class="st"><span class="num">3</span> Plan</div>
+    </div>
+
+    <h1>Contanos de tu negocio</h1>
+    <p class="sub">Con estos datos armamos tu panel. Los podés cambiar cuando quieras desde Ajustes.</p>
+
+    <div class="err" id="err"></div>
+
+    <form id="onbForm">
+      <div class="field">
+        <label>Nombre del restaurante / bar</label>
+        <input id="restaurantName" required placeholder="Ej: Bar Don Pedro" autofocus />
+      </div>
+      <div class="field">
+        <label>Tu nombre <span class="hint">(opcional)</span></label>
+        <input id="ownerName" placeholder="Juan Pérez" />
+      </div>
+      <div class="field">
+        <label>Teléfono / WhatsApp <span class="hint">(opcional)</span></label>
+        <input id="phone" type="tel" placeholder="3884-XXXXXXX" />
+      </div>
+      <button type="submit" class="btn" id="submitBtn">Continuar →</button>
+    </form>
+
+    <div class="logout"><a id="logout">Salir</a></div>
+  </div>
+</div>
+
+<script src="gestiva-config.js"></script>
+<script>
+const token = localStorage.getItem('gestiva_token');
+let user = JSON.parse(localStorage.getItem('gestiva_user') || 'null');
+// Sin cuenta creada → volver al paso 1.
+if (!token || !user) location.href = 'signup.html';
+
+const form = document.getElementById('onbForm');
+const errEl = document.getElementById('err');
+const btn = document.getElementById('submitBtn');
+
+// Si ya tenía datos (por ejemplo si vuelve atrás), los prellenamos.
+if (user) {
+  if (user.restaurantName && user.restaurantName !== 'Mi restaurante')
+    document.getElementById('restaurantName').value = user.restaurantName;
+  if (user.ownerName) document.getElementById('ownerName').value = user.ownerName;
+  if (user.phone) document.getElementById('phone').value = user.phone;
+}
+
+document.getElementById('logout').onclick = () => {
+  localStorage.removeItem('gestiva_token');
+  localStorage.removeItem('gestiva_user');
+  location.href = 'landing.html';
+};
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errEl.classList.remove('on');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  const payload = {
+    restaurantName: document.getElementById('restaurantName').value.trim(),
+    ownerName: document.getElementById('ownerName').value.trim(),
+    phone: document.getElementById('phone').value.trim(),
+  };
+
+  try {
+    const r = await fetch(window.API_URL + '/auth/onboarding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify(payload)
+    });
+    if (r.status === 401) { location.href = 'signup.html'; return; }
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'missing_fields' ? 'Poné el nombre de tu negocio' : (data.error || 'No se pudo guardar'));
+    if (data.user) {
+      user = data.user;
+      localStorage.setItem('gestiva_user', JSON.stringify(user));
+    }
+    // Paso 3: elegir plan y activar el mes gratis.
+    location.href = 'checkout.html';
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.classList.add('on');
+    btn.disabled = false;
+    btn.textContent = 'Continuar →';
+  }
+});
+</script>
+</body>
+</html>
