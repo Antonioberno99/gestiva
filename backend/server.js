@@ -452,9 +452,12 @@ function requireAdminAuth(req, res, next) {
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password, restaurantName, ownerName, phone, plan, ref } = req.body || {};
-    if (!email || !password || !restaurantName)
+    // El registro (paso 1) solo pide email + contraseña. El nombre del restaurante
+    // se completa en el paso 2 (onboarding), por eso acá es opcional.
+    if (!email || !password)
       return res.status(400).json({ error: 'missing_fields' });
     if (password.length < 6) return res.status(400).json({ error: 'password_too_short' });
+    const rName = (restaurantName && restaurantName.trim()) || 'Mi restaurante';
 
     const exists = await q('SELECT id FROM tenants WHERE email=$1', [email.toLowerCase().trim()]);
     if (exists.rows[0]) return res.status(409).json({ error: 'email_taken' });
@@ -490,7 +493,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
       `INSERT INTO tenants (email, password_hash, restaurant_name, owner_name, phone,
                             subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, plan, vendor_id, access_code)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [email.toLowerCase().trim(), hash, restaurantName.trim(), ownerName || null, phone || null,
+      [email.toLowerCase().trim(), hash, rName, ownerName || null, phone || null,
        initialStatus, startedAt, endsAt, graceEndsAt, chosenPlan, vendorId, compCode]
     );
     const t = ins.rows[0];
@@ -534,6 +537,29 @@ app.post('/auth/login', authLimiter, async (req, res) => {
 
 app.get('/auth/me', requireAuth, async (req, res) => {
   res.json({ user: publicTenant(req.tenant) });
+});
+
+// Paso 2 del alta: el dueño completa los datos de su restaurante justo después de
+// crear la cuenta. En ese momento todavía está 'pending' (sin plan/tarjeta), por eso
+// este endpoint solo requiere estar logueado (requireAuth) y NO suscripción activa
+// — a diferencia de /api/settings, que sí exige suscripción.
+app.post('/auth/onboarding', requireAuth, async (req, res) => {
+  try {
+    const { restaurantName, ownerName, phone } = req.body || {};
+    if (!restaurantName || !restaurantName.trim())
+      return res.status(400).json({ error: 'missing_fields' });
+    const r = await q(`UPDATE tenants SET
+        restaurant_name = $1,
+        owner_name      = COALESCE($2, owner_name),
+        phone           = COALESCE($3, phone)
+        WHERE id=$4 RETURNING *`,
+      [restaurantName.trim(), (ownerName && ownerName.trim()) || null,
+       (phone && phone.trim()) || null, req.tenant.id]);
+    return res.json({ user: publicTenant(r.rows[0]) });
+  } catch (e) {
+    console.error('[onboarding]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // Login / Signup con Google Identity Services.
