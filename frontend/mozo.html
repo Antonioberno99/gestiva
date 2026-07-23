@@ -42,8 +42,8 @@
   .login { display:grid; place-items:center; padding:22px; background:linear-gradient(180deg,#fff7ed 0%,#fff 48%,#f8fafc 100%); }
   .login-card { width:100%; max-width:430px; background:#fff; border:1px solid var(--line); border-radius:26px; padding:28px; box-shadow:var(--shadow); }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
-  .brand-mark { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; background:#fff; box-shadow:0 10px 22px rgba(15,23,42,.08); overflow:hidden; flex:0 0 auto; }
-  .brand-mark img { width:42px; height:42px; object-fit:contain; display:block; }
+  .brand-mark { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; background:transparent; overflow:hidden; flex:0 0 auto; }
+  .brand-mark img { width:44px; height:44px; object-fit:contain; display:block; }
   .brand-name { font-family:var(--display); font-size:23px; font-weight:800; color:var(--or); letter-spacing:0; }
   h1 { font-family:var(--display); font-size:30px; line-height:1.02; margin:0 0 8px; letter-spacing:0; }
   .sub { color:var(--muted); margin:0 0 22px; line-height:1.5; font-size:15px; }
@@ -63,8 +63,8 @@
   .app { display:none; min-height:100dvh; padding-bottom:82px; background:linear-gradient(180deg,#fff 0%,#f8fafc 28%,#eef2f7 100%); }
   .topbar { position:sticky; top:0; z-index:20; background:rgba(255,255,255,.94); backdrop-filter:blur(18px); border-bottom:1px solid rgba(226,232,240,.82); padding:12px 14px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; }
   .who { min-width:0; max-width:100%; display:flex; align-items:center; gap:10px; }
-  .who-mark { width:38px; height:38px; border-radius:13px; background:#fff; display:grid; place-items:center; overflow:hidden; box-shadow:0 8px 18px rgba(15,23,42,.08); flex:0 0 auto; }
-  .who-mark img { width:36px; height:36px; object-fit:contain; display:block; }
+  .who-mark { width:38px; height:38px; border-radius:13px; background:transparent; display:grid; place-items:center; overflow:hidden; flex:0 0 auto; }
+  .who-mark img { width:38px; height:38px; object-fit:contain; display:block; }
   .who-copy { min-width:0; overflow:hidden; }
   .who strong { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:var(--display); font-size:16px; line-height:1.1; letter-spacing:0; }
   .who span { display:block; color:var(--muted); font-size:12px; margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -173,7 +173,7 @@
 <body>
 <section class="screen login" id="loginScreen">
   <form class="login-card" id="loginForm">
-    <div class="brand"><div class="brand-mark"><img src="assets/logo-gestiva-icon.png" alt=""></div><div class="brand-name">Gestiva</div></div>
+    <div class="brand"><div class="brand-mark"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div><div class="brand-name">Gestiva</div></div>
     <h1>App de mozos</h1>
     <p class="sub">Entrá con el email del restaurante y tu PIN para tomar pedidos desde el celular.</p>
     <div class="err" id="loginErr" aria-live="polite"></div>
@@ -193,7 +193,7 @@
 <section class="app" id="appScreen">
   <header class="topbar">
     <div class="who">
-      <div class="who-mark"><img src="assets/logo-gestiva-icon.png" alt=""></div>
+      <div class="who-mark"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div>
       <div class="who-copy">
         <strong id="restaurantName">Restaurante</strong>
         <span id="waiterName">Mozo</span>
@@ -885,7 +885,7 @@ if ('serviceWorker' in navigator) {
     reloadingForUpdate = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js?v=20260701-product-segments').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20260723-logo-g').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

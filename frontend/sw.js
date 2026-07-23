@@ -1,10 +1,10 @@
-const CACHE_NAME = 'gestiva-equipo-v7-product-segments';
+const CACHE_NAME = 'gestiva-equipo-v8-logo-g';
 const APP_SHELL = [
   './mozo.html',
   './gestiva-config.js',
   './manifest.json',
-  './assets/favicon.png',
-  './assets/logo-gestiva-icon.png'
+  './assets/favicon.png?v=2',
+  './assets/logo-gestiva-icon.png?v=2'
 ];
 
 self.addEventListener('install', (event) => {
