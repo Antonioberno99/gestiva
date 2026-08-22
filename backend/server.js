@@ -2294,7 +2294,10 @@ app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
   const r = await q(
     `SELECT t.id, t.restaurant_name, t.email, t.phone, t.subscription_status, t.plan,
             t.access_code, t.created_at, t.last_payment_at, t.last_payment_amount,
-            (t.mp_preapproval_id IS NOT NULL) AS has_card, v.name AS vendor_name
+            (t.mp_preapproval_id IS NOT NULL) AS has_card, v.name AS vendor_name,
+            -- Para ver de un vistazo a quién le falta cargar la facturación
+            (t.fiscal_cuit IS NOT NULL AND t.fiscal_cuit <> '') AS has_fiscal,
+            (t.fiscal_cert IS NOT NULL AND t.fiscal_key IS NOT NULL) AS has_cert
      FROM tenants t LEFT JOIN vendors v ON v.id=t.vendor_id
      ORDER BY t.created_at DESC LIMIT 500`
   );
