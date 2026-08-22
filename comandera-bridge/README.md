@@ -1,5 +1,11 @@
 # Gestiva Print Station
 
+> ⚠️ **Los archivos que descargan los clientes son los de `frontend/assets/comandera-bridge/`.**
+> Esta carpeta es solo una copia de referencia. Si tocás el agente, editá el de
+> `frontend/assets/comandera-bridge/` (es el que se publica en
+> `https://www.gestiva.site/assets/comandera-bridge/`) y despues copiá el cambio acá.
+> Las dos copias estuvieron desincronizadas hasta el 23/07/2026.
+
 Gestiva usa una estacion local para imprimir comandas de red/WiFi.
 
 Flujo profesional:

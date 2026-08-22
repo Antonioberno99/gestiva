@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.0.0'
+$AgentVersion = '3.3.0'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -103,6 +103,17 @@ function Get-LocalSubnets {
   return @($out)
 }
 
+# Nombre de la WiFi a la que esta conectada esta PC (para avisar si esta en la red equivocada)
+function Get-CurrentWifi {
+  try {
+    $out = netsh wlan show interfaces 2>$null
+    foreach ($line in $out) {
+      if ($line -match '^\s*SSID\s*:\s*(.+?)\s*$') { return $Matches[1].Trim() }
+    }
+  } catch {}
+  return ''
+}
+
 function Connect-Tcp($Ip, $Port, $TimeoutMs) {
   $client = New-Object System.Net.Sockets.TcpClient
   try {
@@ -133,30 +144,150 @@ function Test-Printer($Ip, $Port, $TimeoutMs) {
 function Scan-Printers($Port) {
   $subnets = @(Get-LocalSubnets)
   $printers = New-Object System.Collections.Generic.List[string]
+  $candidates = New-Object System.Collections.Generic.List[object]
+  $scanPorts = @($Port, 9100, 9101, 9102, 515, 631, 8008, 8043, 8080, 9080, 80, 443) | Select-Object -Unique
   foreach ($prefix in $subnets) {
     $items = New-Object System.Collections.Generic.List[object]
     for ($h = 1; $h -le 254; $h++) {
       $ip = "$prefix.$h"
-      $client = New-Object System.Net.Sockets.TcpClient
-      try {
-        $async = $client.BeginConnect($ip, $Port, $null, $null)
-        $items.Add([pscustomobject]@{ Ip = $ip; Client = $client; Async = $async })
-      } catch {
-        try { $client.Close() } catch {}
+      foreach ($sp in $scanPorts) {
+        $client = New-Object System.Net.Sockets.TcpClient
+        try {
+          $async = $client.BeginConnect($ip, $sp, $null, $null)
+          $items.Add([pscustomobject]@{ Ip = $ip; Port = $sp; Client = $client; Async = $async })
+        } catch {
+          try { $client.Close() } catch {}
+        }
       }
     }
-    Start-Sleep -Milliseconds 2200
+    Start-Sleep -Milliseconds 2600
+    $openByIp = @{}
     foreach ($item in $items) {
       try {
         if ($item.Async.AsyncWaitHandle.WaitOne(0, $false) -and $item.Client.Connected) {
           try { $item.Client.EndConnect($item.Async) } catch {}
-          $printers.Add($item.Ip)
+          if (-not $openByIp.ContainsKey($item.Ip)) {
+            $openByIp[$item.Ip] = @()
+          }
+          $openByIp[$item.Ip] = @($openByIp[$item.Ip]) + [int]$item.Port
         }
       } catch {}
       try { $item.Client.Close() } catch {}
     }
+    foreach ($ip in $openByIp.Keys) {
+      $ports = @(@($openByIp[$ip]) | Sort-Object -Unique)
+      $hasRaw = @($ports | Where-Object { $_ -eq $Port -or $_ -eq 9100 -or $_ -eq 9101 -or $_ -eq 9102 }).Count -gt 0
+      $hasPrinterLike = $hasRaw -or @($ports | Where-Object { $_ -eq 515 -or $_ -eq 631 -or $_ -eq 8008 -or $_ -eq 8043 }).Count -gt 0
+      if ($hasRaw -and -not $printers.Contains($ip)) { $printers.Add($ip) }
+      $candidates.Add([pscustomobject]@{
+        ip = $ip
+        ports = $ports
+        likelyPrinter = [bool]$hasPrinterLike
+      })
+    }
   }
-  return @{ subnets = $subnets; printers = @($printers) }
+  return @{ subnets = $subnets; printers = @($printers.ToArray()); candidates = @($candidates.ToArray()); scannedPorts = @($scanPorts) }
+}
+
+function Get-WindowsPrinters {
+  $out = New-Object System.Collections.Generic.List[object]
+  $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+  $addPrinter = {
+    param($Name, $Driver, $Port, $Default, $Network, $Local, $Status, $WorkOffline)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return }
+    if (-not $seen.Add([string]$Name)) { return }
+    $virtual = ($Name -match 'PDF|XPS|OneNote|Fax') -or ($Driver -match 'PDF|XPS|OneNote|Fax') -or ($Port -match 'PORTPROMPT|NUL')
+    $usb = ($Port -match 'USB|DOT4') -or ([bool]$Local -and -not [bool]$Network -and -not $virtual)
+    $likely = -not $virtual -and (($Name -match 'EPSON|TM-|TMT|POS|Receipt|Thermal|Comanda|Ticket') -or ($Driver -match 'EPSON|TM-|TMT|POS|Receipt|Thermal|Generic / Text') -or $usb)
+    $out.Add([pscustomobject]@{
+      name = [string]$Name
+      driver = [string]$Driver
+      port = [string]$Port
+      isDefault = [bool]$Default
+      isNetwork = [bool]$Network
+      isUsb = [bool]$usb
+      isVirtual = [bool]$virtual
+      likelyComandera = [bool]$likely
+      status = [string]$Status
+      workOffline = [bool]$WorkOffline
+    })
+  }
+  try {
+    Get-CimInstance Win32_Printer | ForEach-Object {
+      & $addPrinter $_.Name $_.DriverName $_.PortName $_.Default $_.Network $_.Local $_.PrinterStatus $_.WorkOffline
+    }
+  } catch {
+    Write-AgentLog "windows printers cim error: $($_.Exception.Message)"
+  }
+  try {
+    Get-Printer | ForEach-Object {
+      & $addPrinter $_.Name $_.DriverName $_.PortName $false $false $true $_.PrinterStatus $false
+    }
+  } catch {
+    Write-AgentLog "windows printers get-printer error: $($_.Exception.Message)"
+  }
+  try {
+    try { Add-Type -AssemblyName System.Drawing.Common -ErrorAction SilentlyContinue } catch {}
+    try { Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue } catch {}
+    [System.Drawing.Printing.PrinterSettings]::InstalledPrinters | ForEach-Object {
+      & $addPrinter ([string]$_) '' '' $false $false $true '' $false
+    }
+  } catch {
+    Write-AgentLog "windows printers dotnet error: $($_.Exception.Message)"
+  }
+  return @($out.ToArray())
+}
+
+function Get-SuggestedWindowsPrinter($Printers) {
+  $items = @($Printers)
+  $pick = @($items | Where-Object { $_.likelyComandera -and $_.isDefault } | Select-Object -First 1)
+  if ($pick.Count -gt 0) { return $pick[0] }
+  $pick = @($items | Where-Object { $_.likelyComandera -and $_.isUsb } | Select-Object -First 1)
+  if ($pick.Count -gt 0) { return $pick[0] }
+  $pick = @($items | Where-Object { $_.likelyComandera } | Select-Object -First 1)
+  if ($pick.Count -gt 0) { return $pick[0] }
+  $pick = @($items | Where-Object { -not $_.isVirtual } | Select-Object -First 1)
+  if ($pick.Count -gt 0) { return $pick[0] }
+  return $null
+}
+
+# Impresoras USB fisicamente conectadas pero SIN instalar como cola de Windows.
+# Truco: cada puerto USBnnn trae en su Description el modelo del equipo conectado.
+# Si ese puerto no lo usa ninguna impresora instalada, hay una USB lista para instalar.
+function Get-UsbPrinterInfo {
+  $installed = @(); try { $installed = @(Get-Printer -ErrorAction SilentlyContinue) } catch {}
+  $usedPorts = @($installed | ForEach-Object { $_.PortName })
+  $usbPorts = @(); try { $usbPorts = @(Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^USB\d+' }) } catch {}
+  $pending = New-Object System.Collections.Generic.List[object]
+  foreach ($p in $usbPorts) {
+    if ($usedPorts -notcontains $p.Name) {
+      $desc = [string]$p.Description
+      if ([string]::IsNullOrWhiteSpace($desc)) { $desc = 'Impresora USB' }
+      $pending.Add([pscustomobject]@{ port = $p.Name; device = $desc })
+    }
+  }
+  return @($pending.ToArray())
+}
+
+# Crea la cola de impresion para una USB conectada, con driver "Generic / Text Only"
+# (deja pasar el ESC/POS crudo tal cual). Devuelve el nombre de la impresora instalada.
+function Install-UsbPrinter($PortName) {
+  $usbPorts = @(Get-PrinterPort -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^USB\d+' })
+  $usedPorts = @(Get-Printer -ErrorAction SilentlyContinue | ForEach-Object { $_.PortName })
+  $target = $null
+  if ($PortName) { $target = @($usbPorts | Where-Object { $_.Name -eq $PortName })[0] }
+  if (-not $target) { $target = @($usbPorts | Where-Object { $usedPorts -notcontains $_.Name })[0] }
+  if (-not $target) { throw 'No hay ninguna impresora USB conectada sin instalar.' }
+  if (-not (Get-PrinterDriver -Name 'Generic / Text Only' -ErrorAction SilentlyContinue)) {
+    Add-PrinterDriver -Name 'Generic / Text Only'
+  }
+  $base = [string]$target.Description
+  if ([string]::IsNullOrWhiteSpace($base)) { $base = 'Comandera USB' }
+  $base = ($base -replace '^EPSON(?=TM)', 'EPSON ').Trim()
+  $name = $base; $n = 1
+  while (@(Get-Printer -Name $name -ErrorAction SilentlyContinue).Count -gt 0) { $n++; $name = "$base ($n)" }
+  Add-Printer -Name $name -DriverName 'Generic / Text Only' -PortName $target.Name
+  return $name
 }
 
 function Add-Bytes($List, [byte[]]$Bytes) {
@@ -234,7 +365,8 @@ function Convert-TicketToEscPos($Ticket, $Restaurant) {
   Add-Bold $list $false
   Add-TextLine $list ('-' * $width)
   Add-Center $list $true
-  Add-TextLine $list '-- COCINA --'
+  $area = if ($Ticket.area) { [string]$Ticket.area } else { 'COCINA' }
+  Add-TextLine $list ('-- ' + $area + ' --')
   Add-Center $list $false
   Add-Bytes $list ([byte[]](0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00))
   return $list.ToArray()
@@ -253,11 +385,179 @@ function Send-PrinterBytes($Ip, $Port, [byte[]]$Bytes) {
   }
 }
 
+function Ensure-RawPrinterApi {
+  if ('GestivaRawPrinter' -as [type]) { return }
+  Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class GestivaRawPrinter {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+
+  [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+
+  public static void SendBytes(string printerName, byte[] bytes) {
+    IntPtr hPrinter = IntPtr.Zero;
+    IntPtr pBytes = IntPtr.Zero;
+    bool docStarted = false;
+    bool pageStarted = false;
+    try {
+      if (!OpenPrinter(printerName, out hPrinter, IntPtr.Zero)) {
+        throw new Exception("OpenPrinter failed: " + Marshal.GetLastWin32Error());
+      }
+      DOCINFOA di = new DOCINFOA();
+      di.pDocName = "Gestiva Comanda";
+      di.pDataType = "RAW";
+      if (!StartDocPrinter(hPrinter, 1, di)) {
+        throw new Exception("StartDocPrinter failed: " + Marshal.GetLastWin32Error());
+      }
+      docStarted = true;
+      if (!StartPagePrinter(hPrinter)) {
+        throw new Exception("StartPagePrinter failed: " + Marshal.GetLastWin32Error());
+      }
+      pageStarted = true;
+      pBytes = Marshal.AllocCoTaskMem(bytes.Length);
+      Marshal.Copy(bytes, 0, pBytes, bytes.Length);
+      int written = 0;
+      if (!WritePrinter(hPrinter, pBytes, bytes.Length, out written) || written != bytes.Length) {
+        throw new Exception("WritePrinter failed: " + Marshal.GetLastWin32Error());
+      }
+    } finally {
+      if (pageStarted) { EndPagePrinter(hPrinter); }
+      if (docStarted) { EndDocPrinter(hPrinter); }
+      if (pBytes != IntPtr.Zero) { Marshal.FreeCoTaskMem(pBytes); }
+      if (hPrinter != IntPtr.Zero) { ClosePrinter(hPrinter); }
+    }
+  }
+}
+"@
+}
+
+function Send-WindowsPrinterBytes($PrinterName, [byte[]]$Bytes) {
+  if ([string]::IsNullOrWhiteSpace($PrinterName)) { throw 'Falta elegir la impresora USB de Windows.' }
+  $printers = @(Get-WindowsPrinters)
+  $exists = @($printers | Where-Object { $_.name -eq $PrinterName }).Count -gt 0
+  if (-not $exists) { throw "No encontre la impresora '$PrinterName' instalada en Windows." }
+  Ensure-RawPrinterApi
+  [GestivaRawPrinter]::SendBytes([string]$PrinterName, $Bytes)
+}
+
+function Get-PrinterMode($Config) {
+  if ($Config.printerMode) { return [string]$Config.printerMode }
+  if ($Config.printerName) { return 'windows' }
+  return 'network'
+}
+
+function Send-ConfiguredPrinterBytes($Config, [byte[]]$Bytes) {
+  $mode = Get-PrinterMode $Config
+  if ($mode -eq 'windows') {
+    Send-WindowsPrinterBytes ([string]$Config.printerName) $Bytes
+    return
+  }
+  if (-not $Config.printerIp) { throw 'Falta la IP de la comandera.' }
+  $port = if ($Config.printerPort) { [int]$Config.printerPort } else { 9100 }
+  Send-PrinterBytes ([string]$Config.printerIp) $port $Bytes
+}
+
+function Normalize-RouteText($Value) {
+  if ($null -eq $Value) { return '' }
+  return ([string]$Value).Trim().ToLowerInvariant()
+}
+
+function Get-BarCategories($Config) {
+  $raw = if ($Config.barCategories) { [string]$Config.barCategories } else { 'Bebidas,Tragos' }
+  $out = @()
+  foreach ($p in $raw.Split(',')) {
+    $v = Normalize-RouteText $p
+    if ($v) { $out += $v }
+  }
+  return @($out)
+}
+
+function Item-GoesToBar($Item, $Config) {
+  $cat = ''
+  foreach ($name in @('cat','category','type')) {
+    if ($Item -and $Item.PSObject.Properties[$name] -and $Item.$name) {
+      $cat = [string]$Item.$name
+      break
+    }
+  }
+  $cat = Normalize-RouteText $cat
+  if (-not $cat) { return $false }
+  return @(Get-BarCategories $Config) -contains $cat
+}
+
+function Copy-TicketWithItems($Ticket, $Items, $Area) {
+  $copy = [ordered]@{}
+  foreach ($p in $Ticket.PSObject.Properties) { $copy[$p.Name] = $p.Value }
+  $copy['items'] = @($Items)
+  $copy['area'] = $Area
+  return [pscustomobject]$copy
+}
+
+function Get-BarPrinterConfig($Config) {
+  return [pscustomobject]@{
+    printerMode = if ($Config.barPrinterMode) { [string]$Config.barPrinterMode } else { 'network' }
+    printerName = if ($Config.barPrinterName) { [string]$Config.barPrinterName } else { '' }
+    printerIp = if ($Config.barPrinterIp) { [string]$Config.barPrinterIp } else { '' }
+    printerPort = if ($Config.barPrinterPort) { [int]$Config.barPrinterPort } else { 9100 }
+  }
+}
+
+function Send-RoutedTicket($Ticket, $Config) {
+  if (-not $Config.routingMode -or ([string]$Config.routingMode) -ne 'split') {
+    $bytes = Convert-TicketToEscPos $Ticket $Config.restaurant
+    Send-ConfiguredPrinterBytes $Config $bytes
+    return
+  }
+
+  $items = @($Ticket.items)
+  $barItems = @($items | Where-Object { Item-GoesToBar $_ $Config })
+  $kitchenItems = @($items | Where-Object { -not (Item-GoesToBar $_ $Config) })
+
+  if ($kitchenItems.Count -gt 0) {
+    $kitchenTicket = Copy-TicketWithItems $Ticket $kitchenItems 'COCINA'
+    $bytes = Convert-TicketToEscPos $kitchenTicket $Config.restaurant
+    Send-ConfiguredPrinterBytes $Config $bytes
+  }
+  if ($barItems.Count -gt 0) {
+    $barCfg = Get-BarPrinterConfig $Config
+    $barTicket = Copy-TicketWithItems $Ticket $barItems 'BAR'
+    $bytes = Convert-TicketToEscPos $barTicket $Config.restaurant
+    Send-ConfiguredPrinterBytes $barCfg $bytes
+  }
+}
+
 function Invoke-CloudPoll {
   $cfg = Get-AgentConfig
-  if (-not $cfg.token -or -not $cfg.apiUrl -or -not $cfg.printerIp) { return }
+  $mode = Get-PrinterMode $cfg
+  $hasPrinter = (($mode -eq 'windows' -and $cfg.printerName) -or ($mode -ne 'windows' -and $cfg.printerIp))
+  if (-not $cfg.token -or -not $cfg.apiUrl -or -not $hasPrinter) { return }
   $api = ([string]$cfg.apiUrl).TrimEnd('/')
-  $port = if ($cfg.printerPort) { [int]$cfg.printerPort } else { 9100 }
   try {
     $headers = @{ Authorization = 'Bearer ' + [string]$cfg.token }
     $tickets = Invoke-RestMethod -Uri ($api + '/api/kitchen') -Headers $headers -TimeoutSec 12
@@ -276,8 +576,7 @@ function Invoke-CloudPoll {
       if (-not $t.id) { continue }
       $id = [string]$t.id
       if ($printed.Contains($id)) { continue }
-      $bytes = Convert-TicketToEscPos $t $cfg.restaurant
-      Send-PrinterBytes ([string]$cfg.printerIp) $port $bytes
+      Send-RoutedTicket $t $cfg
       [void]$printed.Add($id)
       $state.printed = @($printed)
       Save-AgentState $state
@@ -484,12 +783,36 @@ function Handle-Request($Stream, $Req) {
   if ($Req.Method -eq 'GET' -and ($path -eq '/' -or $path -eq '/setup')) { Send-Response $Stream 200 'text/html; charset=utf-8' (Get-SetupHtml); return }
   if ($Req.Method -eq 'GET' -and ($path -eq '/health' -or $path -eq '/status')) {
     $cfg = Get-AgentConfig
-    Send-Json $Stream 200 @{ ok = $true; bridge = 'gestiva-print-agent'; mode = 'station'; version = $AgentVersion; host = '127.0.0.1'; port = $Port; configured = [bool]($cfg.token -and $cfg.apiUrl); printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); subnets = @(Get-LocalSubnets) }
+    Send-Json $Stream 200 @{ ok = $true; bridge = 'gestiva-print-agent'; mode = 'station'; version = $AgentVersion; host = '127.0.0.1'; port = $Port; configured = [bool]($cfg.token -and $cfg.apiUrl); printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }); barCategories = $(if ($cfg.barCategories) { $cfg.barCategories } else { 'Bebidas,Tragos' }); barPrinterMode = $(if ($cfg.barPrinterMode) { $cfg.barPrinterMode } else { 'network' }); barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $(if ($cfg.barPrinterPort) { $cfg.barPrinterPort } else { 9100 }); subnets = @(Get-LocalSubnets) }
     return
   }
   if ($Req.Method -eq 'GET' -and $path -eq '/config') {
     $cfg = Get-AgentConfig
-    Send-Json $Stream 200 @{ ok = $true; configured = [bool]($cfg.token -and $cfg.apiUrl); restaurant = $cfg.restaurant; apiUrl = $cfg.apiUrl; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); pairedAt = $cfg.pairedAt }
+    Send-Json $Stream 200 @{ ok = $true; configured = [bool]($cfg.token -and $cfg.apiUrl); restaurant = $cfg.restaurant; apiUrl = $cfg.apiUrl; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $(if ($cfg.printerPort) { $cfg.printerPort } else { 9100 }); routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }); barCategories = $(if ($cfg.barCategories) { $cfg.barCategories } else { 'Bebidas,Tragos' }); barPrinterMode = $(if ($cfg.barPrinterMode) { $cfg.barPrinterMode } else { 'network' }); barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $(if ($cfg.barPrinterPort) { $cfg.barPrinterPort } else { 9100 }); pairedAt = $cfg.pairedAt }
+    return
+  }
+  if ($Req.Method -eq 'GET' -and $path -eq '/printers') {
+    $printers = @(Get-WindowsPrinters)
+    $suggested = Get-SuggestedWindowsPrinter $printers
+    Send-Json $Stream 200 @{ ok = $true; printers = $printers; suggested = $suggested }
+    return
+  }
+  if ($Req.Method -eq 'GET' -and $path -eq '/usb-detect') {
+    # Impresoras USB: las conectadas-sin-instalar (para ofrecer instalarlas de una)
+    $pending = @(Get-UsbPrinterInfo)
+    $installedUsb = @(Get-WindowsPrinters | Where-Object { $_.isUsb -and -not $_.isVirtual })
+    Send-Json $Stream 200 @{ ok = $true; pending = $pending; installed = $installedUsb }
+    return
+  }
+  if ($Req.Method -eq 'POST' -and $path -eq '/usb-install') {
+    try {
+      $body = if ($Req.Body) { $Req.Body | ConvertFrom-Json } else { $null }
+      $port = if ($body -and $body.port) { [string]$body.port } else { $null }
+      $name = Install-UsbPrinter $port
+      Send-Json $Stream 200 @{ ok = $true; printerName = $name }
+    } catch {
+      Send-Json $Stream 400 @{ ok = $false; error = $_.Exception.Message }
+    }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/pair') {
@@ -500,8 +823,16 @@ function Handle-Request($Stream, $Req) {
       token = [string]$body.token
       apiUrl = ([string]$body.apiUrl).TrimEnd('/')
       restaurant = if ($body.restaurant) { [string]$body.restaurant } else { $current.restaurant }
+      printerMode = if ($current.printerMode) { [string]$current.printerMode } elseif ($current.printerName) { 'windows' } else { 'network' }
+      printerName = $current.printerName
       printerIp = $current.printerIp
       printerPort = if ($current.printerPort) { [int]$current.printerPort } else { 9100 }
+      routingMode = if ($current.routingMode) { [string]$current.routingMode } else { 'single' }
+      barCategories = if ($current.barCategories) { [string]$current.barCategories } else { 'Bebidas,Tragos' }
+      barPrinterMode = if ($current.barPrinterMode) { [string]$current.barPrinterMode } else { 'network' }
+      barPrinterName = if ($current.barPrinterName) { [string]$current.barPrinterName } else { '' }
+      barPrinterIp = if ($current.barPrinterIp) { [string]$current.barPrinterIp } else { '' }
+      barPrinterPort = if ($current.barPrinterPort) { [int]$current.barPrinterPort } else { 9100 }
       pairedAt = (Get-Date).ToString('o')
     }
     Save-AgentConfig $cfg
@@ -511,12 +842,36 @@ function Handle-Request($Stream, $Req) {
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/config') {
     $body = $Req.Body | ConvertFrom-Json
-    if (-not $body.printerIp) { Send-Json $Stream 400 @{ ok = $false; error = 'Falta la IP de la comandera.' }; return }
     $cfg = Get-AgentConfig
-    $cfg | Add-Member -Force -NotePropertyName printerIp -NotePropertyValue ([string]$body.printerIp)
-    $cfg | Add-Member -Force -NotePropertyName printerPort -NotePropertyValue ($(if ($body.printerPort) { [int]$body.printerPort } else { 9100 }))
+    $printerMode = if ($body.printerMode) { [string]$body.printerMode } elseif ($body.printerName) { 'windows' } else { 'network' }
+    if ($printerMode -eq 'windows') {
+      if (-not $body.printerName) { Send-Json $Stream 400 @{ ok = $false; error = 'Falta elegir la impresora USB de Windows.' }; return }
+      $name = [string]$body.printerName
+      $exists = @((Get-WindowsPrinters) | Where-Object { $_.name -eq $name }).Count -gt 0
+      if (-not $exists) { Send-Json $Stream 400 @{ ok = $false; error = "No encontre la impresora '$name' instalada en Windows." }; return }
+      $cfg | Add-Member -Force -NotePropertyName printerMode -NotePropertyValue 'windows'
+      $cfg | Add-Member -Force -NotePropertyName printerName -NotePropertyValue $name
+      $cfg | Add-Member -Force -NotePropertyName printerIp -NotePropertyValue ''
+      $cfg | Add-Member -Force -NotePropertyName printerPort -NotePropertyValue 9100
+    } else {
+      if (-not $body.printerIp) { Send-Json $Stream 400 @{ ok = $false; error = 'Falta la IP de la comandera.' }; return }
+      $cfg | Add-Member -Force -NotePropertyName printerMode -NotePropertyValue 'network'
+      $cfg | Add-Member -Force -NotePropertyName printerName -NotePropertyValue ''
+      $cfg | Add-Member -Force -NotePropertyName printerIp -NotePropertyValue ([string]$body.printerIp)
+      $cfg | Add-Member -Force -NotePropertyName printerPort -NotePropertyValue ($(if ($body.printerPort) { [int]$body.printerPort } else { 9100 }))
+    }
+    $routingMode = if ($body.routingMode) { [string]$body.routingMode } elseif ($cfg.routingMode) { [string]$cfg.routingMode } else { 'single' }
+    if ($routingMode -ne 'split') { $routingMode = 'single' }
+    $barMode = if ($body.barPrinterMode) { [string]$body.barPrinterMode } elseif ($cfg.barPrinterMode) { [string]$cfg.barPrinterMode } else { 'network' }
+    if ($barMode -ne 'windows') { $barMode = 'network' }
+    $cfg | Add-Member -Force -NotePropertyName routingMode -NotePropertyValue $routingMode
+    $cfg | Add-Member -Force -NotePropertyName barCategories -NotePropertyValue ($(if ($body.barCategories) { [string]$body.barCategories } elseif ($cfg.barCategories) { [string]$cfg.barCategories } else { 'Bebidas,Tragos' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterMode -NotePropertyValue $barMode
+    $cfg | Add-Member -Force -NotePropertyName barPrinterName -NotePropertyValue ($(if ($body.barPrinterName) { [string]$body.barPrinterName } elseif ($cfg.barPrinterName) { [string]$cfg.barPrinterName } else { '' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterIp -NotePropertyValue ($(if ($body.barPrinterIp) { [string]$body.barPrinterIp } elseif ($cfg.barPrinterIp) { [string]$cfg.barPrinterIp } else { '' }))
+    $cfg | Add-Member -Force -NotePropertyName barPrinterPort -NotePropertyValue ($(if ($body.barPrinterPort) { [int]$body.barPrinterPort } elseif ($cfg.barPrinterPort) { [int]$cfg.barPrinterPort } else { 9100 }))
     Save-AgentConfig $cfg
-    Send-Json $Stream 200 @{ ok = $true; printerIp = $cfg.printerIp; printerPort = $cfg.printerPort }
+    Send-Json $Stream 200 @{ ok = $true; printerMode = (Get-PrinterMode $cfg); printerName = $cfg.printerName; printerIp = $cfg.printerIp; printerPort = $cfg.printerPort; routingMode = $cfg.routingMode; barCategories = $cfg.barCategories; barPrinterMode = $cfg.barPrinterMode; barPrinterName = $cfg.barPrinterName; barPrinterIp = $cfg.barPrinterIp; barPrinterPort = $cfg.barPrinterPort }
     return
   }
   if ($Req.Method -eq 'GET' -and $path -eq '/probe') {
@@ -529,25 +884,32 @@ function Handle-Request($Stream, $Req) {
   if ($Req.Method -eq 'GET' -and $path -eq '/scan') {
     $p = if ($query.ContainsKey('port')) { [int]$query['port'] } else { 9100 }
     $scan = Scan-Printers $p
-    Send-Json $Stream 200 @{ ok = $true; port = $p; subnets = $scan.subnets; printers = $scan.printers }
+    Send-Json $Stream 200 @{ ok = $true; port = $p; wifi = (Get-CurrentWifi); subnets = $scan.subnets; printers = $scan.printers; candidates = $scan.candidates; scannedPorts = $scan.scannedPorts }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/test') {
     $cfg = Get-AgentConfig
-    if (-not $cfg.printerIp) { Send-Json $Stream 400 @{ ok = $false; error = 'Primero elegi la IP de la comandera.' }; return }
-    $ticket = [pscustomobject]@{ id = 'TEST01'; table_num = '5'; waiter_name = 'Prueba'; created_at = (Get-Date).ToString('o'); items = @([pscustomobject]@{ qty = 2; name = 'Milanesa napolitana'; modifiers = @('sin papas'); notes = 'bien cocida' }, [pscustomobject]@{ qty = 1; name = 'Coca-Cola 500ml'; modifiers = @(); notes = '' }) }
-    $bytes = Convert-TicketToEscPos $ticket $cfg.restaurant
-    Send-PrinterBytes ([string]$cfg.printerIp) ($(if ($cfg.printerPort) { [int]$cfg.printerPort } else { 9100 })) $bytes
-    Send-Json $Stream 200 @{ ok = $true; bytes = $bytes.Length }
+    $mode = Get-PrinterMode $cfg
+    if ($mode -eq 'windows' -and -not $cfg.printerName) { Send-Json $Stream 400 @{ ok = $false; error = 'Primero elegi la impresora USB.' }; return }
+    if ($mode -ne 'windows' -and -not $cfg.printerIp) { Send-Json $Stream 400 @{ ok = $false; error = 'Primero elegi la IP de la comandera.' }; return }
+    $ticket = [pscustomobject]@{ id = 'TEST01'; table_num = '5'; waiter_name = 'Prueba'; created_at = (Get-Date).ToString('o'); items = @([pscustomobject]@{ qty = 2; name = 'Milanesa napolitana'; cat = 'Comida'; modifiers = @('sin papas'); notes = 'bien cocida' }, [pscustomobject]@{ qty = 1; name = 'Coca-Cola 500ml'; cat = 'Bebidas'; modifiers = @(); notes = '' }) }
+    Send-RoutedTicket $ticket $cfg
+    Send-Json $Stream 200 @{ ok = $true; mode = $mode; printerName = $cfg.printerName; printerIp = $cfg.printerIp; routingMode = $(if ($cfg.routingMode) { $cfg.routingMode } else { 'single' }) }
     return
   }
   if ($Req.Method -eq 'POST' -and $path -eq '/print') {
     $body = $Req.Body | ConvertFrom-Json
-    if (-not $body.ip -or -not $body.data) { Send-Json $Stream 400 @{ ok = $false; error = 'missing_ip_or_data' }; return }
-    $p = if ($body.port) { [int]$body.port } else { 9100 }
+    if (-not $body.data) { Send-Json $Stream 400 @{ ok = $false; error = 'missing_data' }; return }
     $bytes = [Convert]::FromBase64String([string]$body.data)
-    Send-PrinterBytes ([string]$body.ip) $p $bytes
-    Send-Json $Stream 200 @{ ok = $true; ip = [string]$body.ip; port = $p; bytes = $bytes.Length }
+    if ($body.printerName) {
+      Send-WindowsPrinterBytes ([string]$body.printerName) $bytes
+      Send-Json $Stream 200 @{ ok = $true; printerName = [string]$body.printerName; bytes = $bytes.Length }
+    } else {
+      if (-not $body.ip) { Send-Json $Stream 400 @{ ok = $false; error = 'missing_ip_or_printerName' }; return }
+      $p = if ($body.port) { [int]$body.port } else { 9100 }
+      Send-PrinterBytes ([string]$body.ip) $p $bytes
+      Send-Json $Stream 200 @{ ok = $true; ip = [string]$body.ip; port = $p; bytes = $bytes.Length }
+    }
     return
   }
   Send-Json $Stream 404 @{ ok = $false; error = 'not_found' }
@@ -569,7 +931,11 @@ while ($true) {
   try {
     if ($listener.Pending()) {
       $client = $listener.AcceptTcpClient()
+      $client.ReceiveTimeout = 2500
+      $client.SendTimeout = 5000
       $stream = $client.GetStream()
+      $stream.ReadTimeout = 2500
+      $stream.WriteTimeout = 5000
       $req = Read-HttpRequest $stream
       if ($req -eq $null) { Send-Json $stream 400 @{ ok = $false; error = 'bad_request' } }
       else { Handle-Request $stream $req }
