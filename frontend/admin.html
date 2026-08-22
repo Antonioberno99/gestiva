@@ -133,6 +133,41 @@
   /* Menú de tres líneas (drawer lateral) */
   .hamb{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:9px;width:38px;height:38px;display:grid;place-items:center;cursor:pointer;color:#fff;flex:none}
   .hamb svg{width:20px;height:20px}
+  /* FICHA DEL CLIENTE (soporte) */
+  .ficha-back{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:60;padding:24px;overflow-y:auto}
+  .ficha-back.open{display:block}
+  .ficha{max-width:760px;margin:24px auto;background:#fff;border-radius:18px;box-shadow:0 24px 70px rgba(15,23,42,.3);overflow:hidden}
+  .ficha-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:22px 26px;border-bottom:1px solid var(--border)}
+  .ficha-head h3{margin:0;font-family:var(--ff-display);font-size:21px}
+  .ficha-head .sub{color:var(--tx-mid);font-size:13px;margin-top:3px}
+  .ficha-x{background:none;border:none;font-size:24px;line-height:1;color:var(--tx-lt);cursor:pointer;padding:2px 6px;border-radius:8px;font-family:inherit}
+  .ficha-x:hover{background:#f1f5f9;color:var(--tx-dark)}
+  .ficha-body{padding:22px 26px 26px;display:flex;flex-direction:column;gap:22px}
+  .ficha-sec h4{margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--tx-lt)}
+  .ficha-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px 22px}
+  .ficha-kv > div{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-bottom:1px solid #f1f5f9}
+  .ficha-kv span{color:var(--tx-mid)}
+  .ficha-kv b{font-weight:600;text-align:right}
+  .uso-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px}
+  .uso-c{background:#f8fafc;border-radius:11px;padding:12px;text-align:center}
+  .uso-c .n{font-family:var(--ff-display);font-size:21px;font-weight:800;color:var(--or-dk)}
+  .uso-c .l{font-size:11px;color:var(--tx-mid);margin-top:1px}
+  .ficha-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .ficha-form .full{grid-column:1/-1}
+  .ficha-form label{display:block;font-size:12px;font-weight:600;color:var(--tx-mid);margin-bottom:5px}
+  .ficha-form input,.ficha-form select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;background:#fff;color:var(--tx-dark)}
+  .ficha-form input:focus,.ficha-form select:focus{outline:none;border-color:var(--or);box-shadow:0 0 0 3px rgba(249,115,22,.14)}
+  .ficha-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ficha-save{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none;padding:11px 22px;border-radius:10px;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer}
+  .ficha-save:disabled{opacity:.6;cursor:not-allowed}
+  .ficha-msg{font-size:13px;font-weight:600}
+  .ficha-msg.ok{color:var(--green)}
+  .ficha-msg.bad{color:var(--red)}
+  .cert-pill{display:inline-block;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px}
+  .cert-pill.si{background:var(--green-lt);color:#047857}
+  .cert-pill.no{background:#f1f5f9;color:var(--tx-mid)}
+  @media (max-width:640px){ .ficha-form{grid-template-columns:1fr} .ficha{margin:0} }
+
   .drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
   .drawer-backdrop.open{opacity:1;pointer-events:auto}
   .drawer{position:fixed;top:0;left:0;height:100vh;width:280px;max-width:84vw;background:#fff;box-shadow:0 20px 60px rgba(0,0,0,.3);transform:translateX(-100%);transition:transform .25s ease;z-index:50;display:flex;flex-direction:column;padding:18px 14px;overflow-y:auto}
@@ -335,6 +370,11 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- Ficha del cliente: todo lo que necesitás para ayudarlo, en un solo lugar -->
+<div class="ficha-back" id="fichaBack" onclick="if(event.target===this)cerrarFicha()">
+  <div class="ficha" id="fichaBox"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -634,7 +674,7 @@ async function loadRestaurantes(){
         <td style="text-align:center">${u.card==='Sí'?'<span style="color:var(--green);font-weight:700">Sí ✓</span>':(u.card==='No'?'<span style="color:var(--tx-lt)">No</span>':u.card)}</td>
         <td>${t.vendor_name||'<span style="color:var(--tx-lt)">directo</span>'}</td>
         <td style="text-align:right;color:var(--tx-mid)">${dt(t.created_at)}</td>
-        <td style="white-space:nowrap">${accionCortesia} <button class="btn-act btn-del" onclick="deleteTenant('${t.id}','${(t.restaurant_name||'').replace(/'/g,"\\'")}')">Borrar</button></td>
+        <td style="white-space:nowrap"><button class="btn-act btn-ghost" onclick="abrirFicha('${t.id}')">Ficha</button> ${accionCortesia} <button class="btn-act btn-del" onclick="deleteTenant('${t.id}','${(t.restaurant_name||'').replace(/'/g,"\\'")}')">Borrar</button></td>
       </tr>`;
     }).join('')}
   </tbody></table>`;
@@ -865,6 +905,166 @@ async function loadMarketing() {
       <div class="an-funnel-pct">${pct}%</div>
     </div>`;
   }).join('');
+}
+
+// ============================================================
+//   FICHA DEL CLIENTE — ver todo y cargarle los datos de facturación
+// ============================================================
+const esc = (v) => String(v == null ? '' : v).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const CONDICIONES = [
+  ['', '— sin definir —'],
+  ['monotributo', 'Monotributo'],
+  ['responsable_inscripto', 'Responsable Inscripto'],
+  ['exento', 'Exento'],
+];
+
+function cerrarFicha(){ document.getElementById('fichaBack').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarFicha(); });
+
+async function abrirFicha(id){
+  const back = document.getElementById('fichaBack');
+  const box  = document.getElementById('fichaBox');
+  box.innerHTML = `<div style="padding:44px;text-align:center;color:var(--tx-mid)">Cargando ficha…</div>`;
+  back.classList.add('open');
+
+  const d = await api('/admin/tenants/' + id);
+  if (!d || d.error){ box.innerHTML = `<div style="padding:44px;text-align:center;color:var(--red)">No se pudo cargar la ficha.</div>`; return; }
+
+  const t = d.tenant, f = d.fiscal, u = d.uso || {};
+  const estado = ['active','grace','trial'].includes(t.subscriptionStatus);
+  const kv = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+
+  box.innerHTML = `
+    <div class="ficha-head">
+      <div>
+        <h3>${esc(t.restaurantName)}</h3>
+        <div class="sub">${esc(t.email)}${t.ownerName ? ' · ' + esc(t.ownerName) : ''}</div>
+      </div>
+      <button class="ficha-x" onclick="cerrarFicha()" aria-label="Cerrar">&times;</button>
+    </div>
+    <div class="ficha-body">
+
+      <div class="ficha-sec">
+        <h4>Cuenta</h4>
+        <div class="ficha-kv">
+          ${kv('Estado', `<span style="color:${estado?'var(--green)':'var(--tx-lt)'}">${esc(t.subscriptionStatus)}</span>`)}
+          ${kv('Plan', esc(t.plan || 'pro'))}
+          ${kv('Tarjeta cargada', t.hasCard ? '<span style="color:var(--green)">Sí</span>' : 'No')}
+          ${kv('Correo verificado', t.emailVerified ? '<span style="color:var(--green)">Sí</span>' : 'No')}
+          ${kv('Teléfono', esc(t.phone || '—'))}
+          ${kv('Alta', dt(t.createdAt))}
+          ${kv('Vendedor', esc(t.vendorName || 'directo'))}
+          ${kv('Último pago', t.lastPaymentAt ? dt(t.lastPaymentAt) + ' · ' + fmt(t.lastPaymentAmount) : '—')}
+        </div>
+      </div>
+
+      <div class="ficha-sec">
+        <h4>Uso del sistema</h4>
+        <div class="uso-grid">
+          <div class="uso-c"><div class="n">${u.productos ?? 0}</div><div class="l">Productos</div></div>
+          <div class="uso-c"><div class="n">${u.mesas ?? 0}</div><div class="l">Mesas</div></div>
+          <div class="uso-c"><div class="n">${u.mozos ?? 0}</div><div class="l">Mozos</div></div>
+          <div class="uso-c"><div class="n">${u.ventas ?? 0}</div><div class="l">Ventas</div></div>
+          <div class="uso-c"><div class="n">${u.facturas ?? 0}</div><div class="l">Facturas</div></div>
+        </div>
+      </div>
+
+      <div class="ficha-sec">
+        <h4>Datos para facturar
+          <span class="cert-pill ${f.hasCert ? 'si' : 'no'}">${f.hasCert ? 'Certificado ARCA cargado' : 'Sin certificado ARCA'}</span>
+        </h4>
+        <div class="ficha-form">
+          <div>
+            <label>Condición frente al IVA</label>
+            <select id="fCondicion">
+              ${CONDICIONES.map(([v, l]) => `<option value="${v}" ${f.fiscalCondition === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label>CUIT (11 dígitos)</label>
+            <input id="fCuit" value="${esc(f.fiscalCuit)}" placeholder="20123456789" inputmode="numeric">
+          </div>
+          <div class="full">
+            <label>Razón social</label>
+            <input id="fRazon" value="${esc(f.fiscalRazonSocial)}" placeholder="Nombre legal del negocio">
+          </div>
+          <div class="full">
+            <label>Domicilio fiscal</label>
+            <input id="fDomicilio" value="${esc(f.fiscalDomicilio)}" placeholder="Calle 123, Ciudad, Provincia">
+          </div>
+          <div>
+            <label>Punto de venta</label>
+            <input id="fPtoVta" value="${f.fiscalPtoVta ?? ''}" placeholder="1" inputmode="numeric">
+          </div>
+          <div>
+            <label>Ingresos brutos</label>
+            <input id="fIIBB" value="${esc(f.fiscalIngresosBrutos)}" placeholder="Opcional">
+          </div>
+          <div class="full">
+            <label>Inicio de actividades</label>
+            <input id="fInicio" type="date" value="${f.fiscalInicioActividades ? String(f.fiscalInicioActividades).slice(0,10) : ''}">
+          </div>
+        </div>
+        <div class="ficha-actions" style="margin-top:14px">
+          <button class="ficha-save" id="fSave" onclick="guardarFiscal('${t.id}')">Guardar datos fiscales</button>
+          <span class="ficha-msg" id="fMsg"></span>
+        </div>
+        <p style="color:var(--tx-lt);font-size:12px;margin:12px 0 0;line-height:1.5">
+          El certificado y la clave fiscal los carga el cliente desde su panel (son sus credenciales de ARCA y no se muestran acá).
+        </p>
+      </div>
+
+      <div class="ficha-sec">
+        <h4>Corregir datos de contacto</h4>
+        <div class="ficha-form">
+          <div><label>Nombre del negocio</label><input id="cNombre" value="${esc(t.restaurantName)}"></div>
+          <div><label>Nombre del dueño</label><input id="cDueno" value="${esc(t.ownerName || '')}"></div>
+          <div class="full"><label>Teléfono / WhatsApp</label><input id="cTel" value="${esc(t.phone || '')}"></div>
+        </div>
+        <div class="ficha-actions" style="margin-top:14px">
+          <button class="ficha-save" id="cSave" onclick="guardarContacto('${t.id}')">Guardar contacto</button>
+          <span class="ficha-msg" id="cMsg"></span>
+        </div>
+      </div>
+
+    </div>`;
+}
+
+async function guardarFiscal(id){
+  const btn = document.getElementById('fSave'), msg = document.getElementById('fMsg');
+  btn.disabled = true; msg.className = 'ficha-msg'; msg.textContent = 'Guardando…';
+  const body = {
+    fiscalCondition: document.getElementById('fCondicion').value,
+    fiscalCuit: document.getElementById('fCuit').value.trim(),
+    fiscalRazonSocial: document.getElementById('fRazon').value.trim(),
+    fiscalDomicilio: document.getElementById('fDomicilio').value.trim(),
+    fiscalPtoVta: document.getElementById('fPtoVta').value.trim(),
+    fiscalIngresosBrutos: document.getElementById('fIIBB').value.trim(),
+    fiscalInicioActividades: document.getElementById('fInicio').value || null,
+  };
+  const r = await api('/admin/tenants/' + id + '/fiscal', { method:'PUT', body: JSON.stringify(body) });
+  btn.disabled = false;
+  if (r && r.ok){ msg.className = 'ficha-msg ok'; msg.textContent = '✓ Guardado'; }
+  else {
+    msg.className = 'ficha-msg bad';
+    msg.textContent = r && r.error === 'cuit_invalido' ? 'El CUIT debe tener 11 dígitos'
+      : r && r.error === 'pto_vta_invalido' ? 'Punto de venta inválido'
+      : 'No se pudo guardar';
+  }
+}
+
+async function guardarContacto(id){
+  const btn = document.getElementById('cSave'), msg = document.getElementById('cMsg');
+  btn.disabled = true; msg.className = 'ficha-msg'; msg.textContent = 'Guardando…';
+  const body = {
+    restaurantName: document.getElementById('cNombre').value.trim(),
+    ownerName: document.getElementById('cDueno').value.trim(),
+    phone: document.getElementById('cTel').value.trim(),
+  };
+  const r = await api('/admin/tenants/' + id + '/contacto', { method:'PUT', body: JSON.stringify(body) });
+  btn.disabled = false;
+  if (r && r.ok){ msg.className = 'ficha-msg ok'; msg.textContent = '✓ Guardado'; loadRestaurantes(); }
+  else { msg.className = 'ficha-msg bad'; msg.textContent = 'No se pudo guardar'; }
 }
 </script>
 </body>
