@@ -722,28 +722,53 @@ function refreshSubPill() {
     <div class="status"><div class="dot"></div>${label}</div>
   `;
 }
+// Aviso de correo sin verificar (verificación suave: no bloquea el uso).
+function verifyBannerHtml() {
+  if (!USER || USER.emailVerified) return '';
+  return `<div class="grace-banner" id="verifyBanner" style="background:linear-gradient(135deg,#fff7ed,#fff);border-color:#fed7aa;color:#9a3412;">
+    <div><b>Verificá tu correo</b> · Te mandamos un mail a <b>${USER.email || ''}</b>. Confirmalo para asegurar tu cuenta.</div>
+    <a href="#" id="resendVerifyBtn">Reenviar mail</a>
+  </div>`;
+}
+function bindResendVerify() {
+  const b = document.getElementById('resendVerifyBtn');
+  if (!b) return;
+  b.onclick = async (e) => {
+    e.preventDefault();
+    b.textContent = 'Enviando...';
+    try {
+      const r = await fetch(window.API_URL + '/auth/verify-email/resend', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('gestiva_token') }
+      });
+      const d = await r.json().catch(() => ({}));
+      b.textContent = (r.ok && d.sent !== false) ? '¡Enviado! Revisá tu correo' : 'No se pudo enviar';
+    } catch { b.textContent = 'No se pudo enviar'; }
+  };
+}
 function refreshGraceBanner() {
   const el = $('#graceBanner');
+  const verify = verifyBannerHtml();
+  const done = (html) => { el.innerHTML = verify + html; bindResendVerify(); };
   if (USER.subscriptionStatus === 'trial') {
     const days = USER.daysLeft != null ? USER.daysLeft : Math.max(0, Math.ceil((new Date(USER.trialEndsAt || USER.subscriptionEndsAt) - new Date()) / 86400000));
     const chargeDate = USER.subscriptionEndsAt ? new Date(USER.subscriptionEndsAt).toLocaleDateString('es-AR', {day:'numeric',month:'long'}) : '';
     if (USER.cancelAtPeriodEnd) {
-      el.innerHTML = `<div class="grace-banner" style="background:linear-gradient(135deg,#f1f5f9,#fff);border-color:#cbd5e1;color:#475569;">
+      done(`<div class="grace-banner" style="background:linear-gradient(135deg,#f1f5f9,#fff);border-color:#cbd5e1;color:#475569;">
         <div><b>Suscripción cancelada</b> · Mantenés el acceso hasta el <b>${chargeDate}</b>. No se te cobrará.</div>
         <a href="checkout.html">Reactivar</a>
-      </div>`;
+      </div>`);
     } else {
-      el.innerHTML = `<div class="grace-banner" style="background:linear-gradient(135deg,#d1fae5,#fff);border-color:#6ee7b7;color:#047857;">
+      done(`<div class="grace-banner" style="background:linear-gradient(135deg,#d1fae5,#fff);border-color:#6ee7b7;color:#047857;">
         <div><b>Mes gratis activo</b> · Acceso completo. Te quedan <b>${days} día${days===1?'':'s'}</b>. Primer cobro el <b>${chargeDate}</b>: <b>${USER.planName || 'Pro'}</b> ($${(USER.planPrice||20000).toLocaleString('es-AR')}/mes).</div>
-      </div>`;
+      </div>`);
     }
   } else if (USER.subscriptionStatus === 'grace') {
     const days = Math.max(0, Math.ceil((new Date(USER.graceEndsAt) - new Date()) / 86400000));
-    el.innerHTML = `<div class="grace-banner">
+    done(`<div class="grace-banner">
       <div><b>Tu suscripción venció.</b> Te quedan <b>${days} día${days===1?'':'s'}</b> para renovar antes que se bloquee la cuenta.</div>
       <a href="checkout.html">Renovar ahora</a>
-    </div>`;
-  } else el.innerHTML = '';
+    </div>`);
+  } else done('');
 }
 let CASH_CACHE = null;
 async function refreshCashPill() {

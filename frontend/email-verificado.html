@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Correo verificado · Gestiva</title>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --or:#f97316; --or-dk:#ea580c; --or-lt:#fff7ed;
+    --tx-dark:#0f172a; --tx-mid:#475569; --tx-lt:#94a3b8;
+    --border:#e2e8f0; --green:#10b981; --green-lt:#d1fae5; --red:#ef4444;
+    --sh-md:0 12px 40px rgba(15,23,42,.10);
+    --ff-display:'Outfit','Inter',sans-serif; --ff-body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--ff-body);background:linear-gradient(135deg,#fff7ed 0%,#fafafa 50%,#fff7ed 100%);min-height:100vh;color:var(--tx-dark);-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow-x:hidden}
+  body::before{content:'';position:absolute;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(249,115,22,.12),transparent 70%);border-radius:50%;pointer-events:none}
+  .wrap{max-width:460px;width:100%;position:relative;z-index:1}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:24px;text-decoration:none;color:inherit;justify-content:center}
+  .brand-logo{width:40px;height:40px;overflow:hidden}
+  .brand-logo img{width:40px;height:40px;object-fit:contain;display:block}
+  .brand-name{font-family:var(--ff-display);font-weight:800;font-size:20px;color:var(--or)}
+  .card{background:#fff;border-radius:24px;padding:40px 36px;box-shadow:var(--sh-md);text-align:center}
+  .icon{width:72px;height:72px;border-radius:50%;display:grid;place-items:center;margin:0 auto 20px}
+  .icon.ok{background:var(--green-lt);color:#047857}
+  .icon.bad{background:#fee2e2;color:#b91c1c}
+  h1{font-family:var(--ff-display);font-size:24px;margin:0 0 10px;letter-spacing:-0.02em}
+  .sub{color:var(--tx-mid);font-size:14px;line-height:1.6;margin:0 0 26px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;width:100%;padding:13px 18px;border:none;border-radius:12px;font-weight:600;font-size:15px;font-family:inherit;cursor:pointer;text-decoration:none;background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;box-shadow:0 6px 16px rgba(249,115,22,.3);transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(249,115,22,.4)}
+  .alt{margin-top:18px;font-size:13px;color:var(--tx-mid)}
+  .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="landing.html" class="brand">
+    <div class="brand-logo"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div>
+    <div class="brand-name">Gestiva</div>
+  </a>
+  <div class="card" id="card"></div>
+</div>
+<script>
+const ok = new URLSearchParams(location.search).get('ok') === '1';
+document.getElementById('card').innerHTML = ok ? `
+  <div class="icon ok">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+  </div>
+  <h1>¡Correo verificado!</h1>
+  <p class="sub">Listo, tu cuenta de Gestiva ya está confirmada. Podés seguir trabajando con normalidad.</p>
+  <a href="app.html" class="btn">Ir a mi panel →</a>
+` : `
+  <div class="icon bad">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16.5v.01"/></svg>
+  </div>
+  <h1>No pudimos verificar el correo</h1>
+  <p class="sub">El link puede haber vencido (duran 7 días) o ya fue usado. Entrá a tu panel y pedí que te lo enviemos de nuevo.</p>
+  <a href="app.html" class="btn">Ir a mi panel →</a>
+  <div class="alt">¿Necesitás ayuda? <a href="mailto:somosgestiva@gmail.com?subject=Verificaci%C3%B3n%20de%20correo">Escribinos</a></div>
+`;
+</script>
+</body>
+</html>
