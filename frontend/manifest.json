@@ -1,6 +1,7 @@
 {
+  "id": "/mozo",
   "name": "Gestiva Equipo",
-  "short_name": "Gestiva",
+  "short_name": "Gestiva Equipo",
   "description": "App de equipo para mozos, bartenders y personal del restaurante.",
   "start_url": "/mozo",
   "scope": "./",

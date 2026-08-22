@@ -7,6 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2">
   <link rel="icon" type="image/png" href="assets/favicon.png?v=2">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+  <!-- Manifest de la app: habilita el botón "Instalar Gestiva" de esta página -->
+  <link rel="manifest" href="manifest-app.json">
+  <meta name="theme-color" content="#f97316">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
@@ -419,6 +422,25 @@
     .team-metric span { display:block; color:var(--tx-mid); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
     .team-metric b { display:block; font-size:20px; margin-top:4px; }
 
+    /* ── DESCARGAR / INSTALAR ── */
+    .s-download { padding: 96px 0; background: linear-gradient(180deg, #fff 0%, #fff7ed 100%); }
+    .s-download .sec-head { text-align: center; margin-bottom: 34px; }
+    .s-download .sec-title { font-size: 42px; }
+    .s-download .sec-sub { font-size: 17px; color: var(--tx-mid); max-width: 640px; margin: 14px auto 0; }
+    .dl-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .dl-actions .btn { padding: 15px 32px; font-size: 15px; border-radius: 12px; }
+    .dl-hint { text-align: center; color: var(--tx-mid); font-size: 13px; margin: 14px 0 0; }
+    .dl-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px; margin-top: 48px; }
+    .dl-card { background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 30px 26px; transition: transform .25s, box-shadow .25s, border-color .25s; }
+    .dl-card:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(15,23,42,.08); border-color: var(--or); }
+    .dl-ic { width: 46px; height: 46px; border-radius: 13px; background: var(--or-lt); color: var(--or-dk); display: grid; place-items: center; margin-bottom: 16px; }
+    .dl-ic svg { width: 24px; height: 24px; }
+    .dl-card h4 { font-family: var(--ff-display); font-size: 19px; margin: 0 0 8px; }
+    .dl-card p { color: var(--tx-mid); font-size: 14px; line-height: 1.6; margin: 0; }
+    .dl-card b { color: var(--tx-dark); }
+    .dl-foot { text-align: center; color: var(--tx-mid); font-size: 14px; margin: 34px 0 0; }
+    .dl-foot a { color: var(--or-dk); font-weight: 600; }
+
     /* ── PRICING / PLANS ── */
     .s-pricing { padding: 96px 0; background: linear-gradient(180deg, #fff 0%, #fff7ed 100%); }
     .s-pricing .sec-head { text-align: center; margin-bottom: 56px; }
@@ -505,6 +527,10 @@
       .pricing-grid { grid-template-columns: minmax(0,1fr); gap: 28px; }
       .plan-card.featured { transform: none; }
       .s-pricing .sec-title { font-size: 32px; }
+      .dl-grid { grid-template-columns: minmax(0,1fr); gap: 18px; }
+      .s-download .sec-title { font-size: 32px; }
+      .dl-actions { flex-direction: column; }
+      .dl-actions .btn { width: 100%; justify-content: center; }
       .browser { transform: none; }
       .sol-visual { padding: 0; }
       .fc1, .fc2 { display: none; }
@@ -563,6 +589,7 @@
     <li><a href="#problema"  onclick="toggleMenu()">El problema</a></li>
     <li><a href="#funciones" onclick="toggleMenu()">Funciones</a></li>
     <li><a href="#app-equipo" onclick="toggleMenu()">App para el equipo</a></li>
+    <li><a href="#descargar" onclick="toggleMenu()">Descargar</a></li>
     <li><a href="#negocios"  onclick="toggleMenu()">Para tu negocio</a></li>
     <li><a href="#beneficios" onclick="toggleMenu()">Beneficios</a></li>
     <li><a href="#precios" onclick="toggleMenu()">Precios</a></li>
@@ -585,6 +612,7 @@
         <li><a href="#problema">El problema</a></li>
         <li><a href="#funciones">Funciones</a></li>
         <li><a href="#app-equipo">App equipo</a></li>
+        <li><a href="#descargar">Descargar</a></li>
         <li><a href="#beneficios">Beneficios</a></li>
         <li><a href="#precios">Precios</a></li>
       </ul>
@@ -1208,6 +1236,46 @@
   </div>
 </section>
 
+<!-- DESCARGAR / INSTALAR -->
+<section class="s-download" id="descargar">
+  <div class="container">
+    <div class="sec-head fade">
+      <div class="tag" style="margin:0 auto 14px;">Descargar</div>
+      <h2 class="sec-title">Instalá Gestiva en tu compu y en tu celular</h2>
+      <p class="sec-sub">Gestiva funciona en el navegador, pero también podés instalarlo como aplicación: queda el ícono en tu escritorio, abre en su propia ventana y sigue andando aunque se corte internet.</p>
+    </div>
+    <div class="dl-actions fade">
+      <button class="btn btn-primary" id="dlInstallBtn">Instalar Gestiva</button>
+      <a href="signup.html" class="btn btn-outline">Probar gratis primero</a>
+    </div>
+    <p class="dl-hint fade" id="dlHint">Se instala en segundos. Sin tiendas de apps y se actualiza solo.</p>
+    <div class="dl-grid fade">
+      <div class="dl-card">
+        <div class="dl-ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <h4>Windows y Mac</h4>
+        <p>Abrí Gestiva en Chrome o Edge y tocá <b>Instalar</b> (también aparece el ícono ⊕ en la barra de direcciones). Queda como programa de escritorio.</p>
+      </div>
+      <div class="dl-card">
+        <div class="dl-ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+        </div>
+        <h4>Android</h4>
+        <p>Desde Chrome tocá <b>Instalar</b> o el menú ⋮ → <b>Agregar a pantalla principal</b>. Se ve y funciona como cualquier app.</p>
+      </div>
+      <div class="dl-card">
+        <div class="dl-ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        </div>
+        <h4>iPhone y iPad</h4>
+        <p>Desde Safari tocá el botón <b>Compartir</b> y elegí <b>Agregar a inicio</b>. El ícono de Gestiva queda en tu pantalla.</p>
+      </div>
+    </div>
+    <p class="dl-foot fade">¿Tus mozos toman pedidos desde el celular? Instalá también la <a href="/mozo">app del equipo</a>, que es aparte y entra con PIN.</p>
+  </div>
+</section>
+
 <!-- PRICING -->
 <section class="s-pricing" id="precios">
   <div class="container">
@@ -1368,6 +1436,7 @@
 </footer>
 
 <script src="gestiva-config.js"></script>
+<script src="install-app.js"></script>
 <script>
   // ── tracking de visitas: cuántas personas exploran la web (anónimo, sin datos personales) ──
   (function trackVisit(){
@@ -1390,17 +1459,40 @@
     document.body.style.overflow = open ? 'hidden' : '';
   }
 
-  async function downloadTeamApk() {
-    const apk = 'assets/gestiva-equipo.apk';
-    try {
-      const r = await fetch(apk, { method: 'HEAD' });
-      if (!r.ok) throw new Error('missing');
-      location.href = apk;
-    } catch (e) {
-      alert('Todavia no hay APK real publicado. Te abro la app instalable para agregarla a la pantalla de inicio.');
-      location.href = '/mozo';
-    }
+  // La app del equipo se instala desde su propia página (/mozo), donde el
+  // navegador ofrece el diálogo de instalación.
+  function downloadTeamApk() {
+    location.href = '/mozo';
   }
+
+  // ── Instalar Gestiva (PWA) desde la landing ──
+  (function () {
+    const btn = document.getElementById('dlInstallBtn');
+    const hint = document.getElementById('dlHint');
+    if (!btn || !window.GestivaInstall) return;
+
+    GestivaInstall.onChange((s) => {
+      if (s.installed) {
+        btn.textContent = 'Abrir Gestiva';
+        hint.textContent = 'Ya tenés Gestiva instalado en este dispositivo.';
+      } else if (s.ios) {
+        btn.textContent = 'Cómo instalarlo en iPhone';
+      }
+    });
+
+    btn.onclick = async () => {
+      if (GestivaInstall.installed) { location.href = '/app'; return; }
+      const r = await GestivaInstall.prompt();
+      if (r === 'ios') {
+        alert('Para instalar Gestiva en iPhone o iPad:\n\n1. Tocá el botón Compartir (el cuadrado con la flecha)\n2. Elegí "Agregar a inicio"\n3. Confirmá con "Agregar"\n\nVa a quedar el ícono de Gestiva en tu pantalla.');
+      } else if (r === 'unavailable') {
+        // Todavía no se puede instalar desde acá (o el navegador no lo soporta):
+        // el alta es el camino natural, y desde el panel se ofrece instalar.
+        hint.textContent = 'Tu navegador no ofrece la instalación acá. Creá tu cuenta y instalalo desde el panel, o usá Chrome/Edge.';
+        location.href = 'signup.html';
+      }
+    };
+  })();
 
   // ── scroll: nav shadow + progress bar ──
   const pgbar = document.getElementById('pgbar');
@@ -1450,6 +1542,13 @@
       el.addEventListener('click', () => track('click_probar'));
     });
   })();
+
+  // Service worker: necesario para que el navegador ofrezca instalar la app.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js?v=20260723-app-instalable')
+      .then((reg) => { reg.update().catch(() => {}); })
+      .catch((e) => console.warn('[sw]', e.message));
+  }
 </script>
 </body>
 </html>

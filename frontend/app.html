@@ -7,6 +7,13 @@
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=2">
 <link rel="icon" type="image/png" href="assets/favicon.png?v=2">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<!-- App instalable (PWA): se puede "descargar" al escritorio o al celular -->
+<link rel="manifest" href="manifest-app.json">
+<meta name="theme-color" content="#f97316">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Gestiva">
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
@@ -65,6 +72,10 @@
   .sub-pill.other .dot { background:var(--red); }
   .logout-btn { color:var(--tx-mid); font-size:12px; padding:6px 12px; border-radius:8px; text-align:left; }
   .logout-btn:hover { background:var(--bg); color:var(--red); }
+  .install-btn { display:flex; align-items:center; gap:8px; width:100%; border:1px solid var(--or-200); background:var(--or-lt); color:var(--or-dk); font-family:inherit; font-size:12px; font-weight:600; padding:9px 12px; border-radius:9px; cursor:pointer; text-align:left; transition:background .15s, border-color .15s; }
+  .install-btn:hover { background:var(--or-100); border-color:var(--or); }
+  .install-btn svg { width:15px; height:15px; flex-shrink:0; }
+  .install-btn[hidden] { display:none; }
 
   .cash-pill { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; background:var(--bg); border-radius:var(--r-md); font-size:12px; }
   .cash-pill .dot { width:8px; height:8px; border-radius:50%; }
@@ -297,6 +308,10 @@
         </div>
         <div id="cashAmount" style="font-weight:700;color:var(--or-dk);"></div>
       </div>
+      <button class="install-btn" id="installBtn" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="installBtnText">Instalar Gestiva</span>
+      </button>
       <button class="logout-btn" onclick="logout()">Cerrar sesión</button>
     </div>
   </aside>
@@ -312,6 +327,7 @@
 <div class="toast-wrap" id="toastWrap"></div>
 
 <script src="gestiva-config.js"></script>
+<script src="install-app.js"></script>
 <script src="comandera.js?v=20260702-multi-comanderas"></script>
 <script>
 // ============================================================
@@ -724,7 +740,9 @@ function refreshSubPill() {
 }
 // Aviso de correo sin verificar (verificación suave: no bloquea el uso).
 function verifyBannerHtml() {
-  if (!USER || USER.emailVerified) return '';
+  // Solo si el backend dice explícitamente que NO está verificado. Si el campo
+  // no viene (backend viejo), no mostramos nada.
+  if (!USER || USER.emailVerified !== false) return '';
   return `<div class="grace-banner" id="verifyBanner" style="background:linear-gradient(135deg,#fff7ed,#fff);border-color:#fed7aa;color:#9a3412;">
     <div><b>Verificá tu correo</b> · Te mandamos un mail a <b>${USER.email || ''}</b>. Confirmalo para asegurar tu cuenta.</div>
     <a href="#" id="resendVerifyBtn">Reenviar mail</a>
@@ -3099,6 +3117,38 @@ window.addEventListener('focus', kitchenStationTick);
     console.error(e);
     if (e.message === 'unauthorized') return;
     $('#view').innerHTML = `<div class="empty"><h3>Error de conexión</h3><p>${e.message}</p></div>`;
+  }
+})();
+
+// ============================================================
+//  App instalable (PWA): botón "Instalar Gestiva" + service worker
+// ============================================================
+(function () {
+  const btn = document.getElementById('installBtn');
+  const txt = document.getElementById('installBtnText');
+  if (btn && window.GestivaInstall) {
+    GestivaInstall.onChange((s) => {
+      // Se muestra solo si se puede instalar y todavía no está instalada.
+      btn.hidden = !GestivaInstall.canOffer();
+      if (s.ios) txt.textContent = 'Agregar a inicio';
+    });
+    btn.onclick = async () => {
+      const r = await GestivaInstall.prompt();
+      if (r === 'ios') {
+        alert('Para instalar Gestiva en iPhone o iPad:\n\n1. Tocá el botón Compartir (el cuadrado con la flecha)\n2. Elegí "Agregar a inicio"\n3. Confirmá con "Agregar"\n\nVa a quedar el ícono de Gestiva en tu pantalla.');
+      } else if (r === 'accepted') {
+        btn.hidden = true;
+      }
+    };
+  }
+  // Service worker: permite instalar la app y que abra sin internet.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js?v=20260723-app-instalable')
+      .then((reg) => {
+        reg.update().catch(() => {});
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      })
+      .catch((e) => console.warn('[sw]', e.message));
   }
 })();
 </script>
