@@ -72,6 +72,35 @@
   .sub-pill.other .dot { background:var(--red); }
   .logout-btn { color:var(--tx-mid); font-size:12px; padding:6px 12px; border-radius:8px; text-align:left; }
   .logout-btn:hover { background:var(--bg); color:var(--red); }
+  /* ASISTENTE IA */
+  .ia-fab{position:fixed;right:20px;bottom:20px;z-index:70;display:flex;align-items:center;gap:9px;background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none;border-radius:999px;padding:13px 20px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 10px 26px rgba(249,115,22,.4)}
+  .ia-fab:hover{transform:translateY(-1px)}
+  .ia-fab svg{width:18px;height:18px}
+  .ia-fab[hidden]{display:none}
+  .ia-panel{position:fixed;right:20px;bottom:20px;z-index:71;width:400px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 40px);background:#fff;border-radius:18px;box-shadow:0 24px 70px rgba(15,23,42,.3);display:none;flex-direction:column;overflow:hidden}
+  .ia-panel.open{display:flex}
+  .ia-head{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .ia-head b{font-family:var(--ff-display);font-size:16px}
+  .ia-head .s{font-size:11.5px;opacity:.9}
+  .ia-x{background:rgba(255,255,255,.18);border:none;color:#fff;width:28px;height:28px;border-radius:8px;font-size:17px;line-height:1;cursor:pointer;font-family:inherit}
+  .ia-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:11px;background:var(--bg)}
+  .ia-m{max-width:88%;padding:10px 13px;border-radius:14px;font-size:13.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+  .ia-m.user{align-self:flex-end;background:var(--or-dk);color:#fff;border-bottom-right-radius:5px}
+  .ia-m.bot{align-self:flex-start;background:#fff;border:1px solid var(--border);border-bottom-left-radius:5px}
+  .ia-m.err{align-self:center;background:var(--red-lt);color:#b91c1c;font-size:12.5px;text-align:center;max-width:100%}
+  .ia-tips{display:flex;flex-wrap:wrap;gap:7px;padding:0 16px 12px;background:var(--bg)}
+  .ia-tip{background:#fff;border:1px solid var(--border);border-radius:999px;padding:7px 12px;font-size:12px;color:var(--tx-mid);cursor:pointer;font-family:inherit}
+  .ia-tip:hover{border-color:var(--or);color:var(--or-dk)}
+  .ia-form{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:#fff}
+  .ia-form input{flex:1;padding:11px 13px;border:1px solid var(--border);border-radius:11px;font-size:13.5px;font-family:inherit;color:var(--tx-dark)}
+  .ia-form input:focus{outline:none;border-color:var(--or)}
+  .ia-form button{background:linear-gradient(135deg,var(--or),var(--or-dk));color:#fff;border:none;border-radius:11px;padding:0 17px;font-weight:700;cursor:pointer;font-family:inherit;font-size:14px}
+  .ia-form button:disabled{opacity:.5;cursor:not-allowed}
+  .ia-dots span{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:var(--tx-lt);animation:iad 1.2s infinite}
+  .ia-dots span:nth-child(2){animation-delay:.2s} .ia-dots span:nth-child(3){animation-delay:.4s}
+  @keyframes iad{0%,60%,100%{opacity:.3}30%{opacity:1}}
+  @media (max-width:520px){ .ia-panel{right:10px;left:10px;width:auto;bottom:10px;height:calc(100vh - 20px)} .ia-fab{right:14px;bottom:14px} }
+
   .install-btn { display:flex; align-items:center; gap:8px; width:100%; border:1px solid var(--or-200); background:var(--or-lt); color:var(--or-dk); font-family:inherit; font-size:12px; font-weight:600; padding:9px 12px; border-radius:9px; cursor:pointer; text-align:left; transition:background .15s, border-color .15s; }
   .install-btn:hover { background:var(--or-100); border-color:var(--or); }
   .install-btn svg { width:15px; height:15px; flex-shrink:0; }
@@ -325,6 +354,24 @@
 
 <div id="modalRoot"></div>
 <div class="toast-wrap" id="toastWrap"></div>
+
+<!-- Asistente con IA: responde dudas del dueño sobre Gestiva y sobre su negocio -->
+<button class="ia-fab" id="iaFab" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+  Preguntale a Gestiva
+</button>
+<div class="ia-panel" id="iaPanel">
+  <div class="ia-head">
+    <div><b>Asistente de Gestiva</b><div class="s">Conoce el sistema y los datos de tu local</div></div>
+    <button class="ia-x" onclick="iaToggle(false)" aria-label="Cerrar">&times;</button>
+  </div>
+  <div class="ia-msgs" id="iaMsgs"></div>
+  <div class="ia-tips" id="iaTips"></div>
+  <form class="ia-form" id="iaForm">
+    <input id="iaInput" placeholder="Escribí tu pregunta..." autocomplete="off" maxlength="500">
+    <button type="submit" id="iaSend">Enviar</button>
+  </form>
+</div>
 
 <script src="gestiva-config.js"></script>
 <script src="install-app.js"></script>
@@ -3141,6 +3188,96 @@ window.addEventListener('focus', kitchenStationTick);
       }
     };
   }
+  // ---------- Asistente con IA ----------
+  const iaHist = [];   // historial de la charla (se manda al backend para dar contexto)
+  const SUGERENCIAS = [
+    '¿Cómo cargo un producto?',
+    '¿Cómo conecto la comandera?',
+    '¿Qué me conviene mejorar según mis ventas?',
+    '¿Cómo doy de alta un mozo?',
+  ];
+
+  function iaAdd(texto, clase){
+    const box = document.getElementById('iaMsgs');
+    const d = document.createElement('div');
+    d.className = 'ia-m ' + clase;
+    d.textContent = texto;
+    box.appendChild(d);
+    box.scrollTop = box.scrollHeight;
+    return d;
+  }
+  function iaToggle(abrir){
+    const p = document.getElementById('iaPanel'), f = document.getElementById('iaFab');
+    p.classList.toggle('open', abrir);
+    f.hidden = abrir;
+    if (abrir) {
+      if (!iaHist.length) {
+        iaAdd(`Hola${USER && USER.ownerName ? ' ' + USER.ownerName.split(' ')[0] : ''}. Puedo explicarte cómo usar Gestiva y darte una mano con los números de tu local. ¿Qué necesitás?`, 'bot');
+        const tips = document.getElementById('iaTips');
+        tips.innerHTML = SUGERENCIAS.map(s => `<button type="button" class="ia-tip">${s}</button>`).join('');
+        tips.querySelectorAll('.ia-tip').forEach(b => b.onclick = () => {
+          document.getElementById('iaInput').value = b.textContent;
+          document.getElementById('iaForm').requestSubmit();
+        });
+      }
+      setTimeout(() => document.getElementById('iaInput').focus(), 80);
+    }
+  }
+  window.iaToggle = iaToggle;
+
+  document.getElementById('iaFab').onclick = () => iaToggle(true);
+  document.getElementById('iaForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('iaInput');
+    const btn = document.getElementById('iaSend');
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    document.getElementById('iaTips').innerHTML = '';
+    iaAdd(texto, 'user');
+    iaHist.push({ role: 'user', content: texto });
+    input.value = ''; input.disabled = true; btn.disabled = true;
+
+    const pensando = iaAdd('', 'bot');
+    pensando.innerHTML = '<span class="ia-dots"><span></span><span></span><span></span></span>';
+
+    try {
+      const r = await fetch(window.API_URL + '/api/asistente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + localStorage.getItem('gestiva_token') },
+        body: JSON.stringify({ mensajes: iaHist })
+      });
+      const d = await r.json().catch(() => ({}));
+      pensando.remove();
+      if (r.ok && d.texto) {
+        iaAdd(d.texto, 'bot');
+        iaHist.push({ role: 'assistant', content: d.texto });
+      } else if (d.error === 'limite_diario') {
+        iaAdd('Llegaste al límite de consultas por hoy. Mañana se renueva.', 'err');
+      } else if (d.error === 'asistente_no_configurado' || r.status === 503) {
+        iaAdd('El asistente todavía no está activado en el servidor.', 'err');
+      } else {
+        iaAdd('No pude responder ahora. Probá de nuevo en un momento.', 'err');
+      }
+    } catch {
+      pensando.remove();
+      iaAdd('Sin conexión con el servidor. Revisá tu internet.', 'err');
+    } finally {
+      input.disabled = false; btn.disabled = false; input.focus();
+    }
+  };
+
+  // El botón aparece solo si el servidor tiene el asistente activado.
+  (async () => {
+    try {
+      const r = await fetch(window.API_URL + '/api/asistente/estado', {
+        headers: { Authorization: 'Bearer ' + localStorage.getItem('gestiva_token') }
+      });
+      const d = await r.json();
+      if (d && d.disponible) document.getElementById('iaFab').hidden = false;
+    } catch {}
+  })();
+
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js?v=20260723-app-instalable')

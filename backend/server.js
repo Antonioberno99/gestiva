@@ -20,6 +20,7 @@ const { v4: uuid } = require('uuid');
 const { MercadoPagoConfig, PreApproval, Payment } = require('mercadopago');
 const crypto = require('crypto');
 const mailer = require('./mailer');
+const asistente = require('./asistente');
 
 // ---------- Config ----------
 const PORT = process.env.PORT || 3100;
@@ -1809,6 +1810,38 @@ app.put('/api/settings', async (req, res) => {
       WHERE id=$5 RETURNING *`,
     [restaurantName || null, currency || null, ownerName || null, phone || null, req.tenant.id]);
   res.json(publicTenant(r.rows[0]));
+});
+
+// ----- ASISTENTE CON IA -----
+// Responde dudas del dueño sobre cómo usar Gestiva y sobre su propio negocio.
+// Límite simple por restaurante para que una pestaña colgada no dispare el costo.
+const asistenteUso = new Map();   // tenantId -> { dia, n }
+const ASISTENTE_LIMITE_DIA = parseInt(process.env.ASSISTANT_DAILY_LIMIT || '60', 10);
+
+app.get('/api/asistente/estado', async (req, res) => {
+  res.json({ disponible: asistente.enabled() });
+});
+
+app.post('/api/asistente', async (req, res) => {
+  try {
+    if (!asistente.enabled()) return res.status(503).json({ error: 'asistente_no_configurado' });
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    const uso = asistenteUso.get(req.tenant.id);
+    const n = (uso && uso.dia === hoy) ? uso.n : 0;
+    if (n >= ASISTENTE_LIMITE_DIA) return res.status(429).json({ error: 'limite_diario' });
+    asistenteUso.set(req.tenant.id, { dia: hoy, n: n + 1 });
+
+    const { mensajes } = req.body || {};
+    if (!Array.isArray(mensajes) || !mensajes.length) return res.status(400).json({ error: 'sin_pregunta' });
+
+    const r = await asistente.preguntar({ q, tenant: req.tenant, mensajes });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+    return res.json({ texto: r.texto });
+  } catch (e) {
+    console.error('[asistente]', e.message);
+    return res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ----- DATOS FISCALES DEL RESTAURANTE (facturación) -----
