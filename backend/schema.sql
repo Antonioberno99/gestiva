@@ -474,3 +474,41 @@ ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_doc_tipo INT;
 ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_doc_nro TEXT;
 ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_fiscal_name TEXT;
 ALTER TABLE IF EXISTS orders ADD COLUMN IF NOT EXISTS customer_cond_iva TEXT;
+
+-- ============================================================
+-- EMAILS TRANSACCIONALES: verificación de correo + dispositivos conocidos
+-- ============================================================
+-- Verificación "suave": el dueño puede usar Gestiva sin verificar, pero le
+-- mostramos un aviso hasta que confirme el correo.
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+-- Las cuentas creadas con Google llegan con el correo ya verificado por Google.
+UPDATE tenants SET email_verified = true, email_verified_at = COALESCE(email_verified_at, now())
+  WHERE google_id IS NOT NULL AND email_verified IS NOT TRUE;
+
+-- Tokens de un solo uso (verificación de email). Se guarda solo el HASH del token.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id   UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL,              -- 'email_verify'
+  token_hash  TEXT NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  used_at     TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_hash ON auth_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_tenant ON auth_tokens(tenant_id, kind);
+
+-- Dispositivos desde los que ya inició sesión el dueño. Si aparece uno nuevo,
+-- le avisamos por email (no bloquea el ingreso).
+CREATE TABLE IF NOT EXISTS known_devices (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  device_hash  TEXT NOT NULL,
+  label        TEXT,                      -- ej: 'Chrome en Windows'
+  last_ip      TEXT,
+  last_seen_at TIMESTAMPTZ DEFAULT now(),
+  created_at   TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (tenant_id, device_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_known_devices_tenant ON known_devices(tenant_id);

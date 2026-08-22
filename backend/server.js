@@ -18,6 +18,7 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const { v4: uuid } = require('uuid');
 const { MercadoPagoConfig, PreApproval, Payment } = require('mercadopago');
+const crypto = require('crypto');
 const mailer = require('./mailer');
 
 // ---------- Config ----------
@@ -239,6 +240,7 @@ function publicTenant(t) {
     currency: t.currency,
     googlePicture: t.google_picture || null,
     hasGoogle: !!t.google_id,
+    emailVerified: !!t.email_verified,
     subscriptionStatus: t.subscription_status,
     subscriptionEndsAt: t.subscription_ends_at,
     graceEndsAt: t.grace_ends_at,
@@ -449,6 +451,103 @@ function requireAdminAuth(req, res, next) {
 //                       AUTH
 // ============================================================
 
+// ----- Verificación de email y dispositivos conocidos -----
+// Los tokens se guardan HASHEADOS: si alguien lee la base, no puede usarlos.
+const sha256 = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+const VERIFY_TOKEN_DAYS = 7;
+
+// Genera un token de verificación y devuelve la URL para el email.
+async function issueVerifyUrl(tenantId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + VERIFY_TOKEN_DAYS * 86400000);
+  // Invalidamos los anteriores para que solo valga el último link enviado.
+  await q(`UPDATE auth_tokens SET used_at=now()
+           WHERE tenant_id=$1 AND kind='email_verify' AND used_at IS NULL`, [tenantId]);
+  await q(`INSERT INTO auth_tokens (tenant_id, kind, token_hash, expires_at)
+           VALUES ($1,'email_verify',$2,$3)`, [tenantId, sha256(token), expires]);
+  return `${BACKEND_URL}/auth/verify-email?token=${token}`;
+}
+
+// Manda la bienvenida (no interrumpe el alta si falla). Si el correo ya está
+// verificado (alta con Google), va sin el bloque de verificación.
+async function sendWelcome(tenant) {
+  try {
+    const url = tenant.email_verified ? null : await issueVerifyUrl(tenant.id);
+    await mailer.sendWelcomeVerify(tenant, url);
+  } catch (e) {
+    console.error('[mail] bienvenida:', e.message);
+  }
+}
+
+// Identidad aproximada del dispositivo: navegador + sistema operativo + IP.
+// No es infalible (ni pretende serlo): sirve para avisar de ingresos nuevos.
+function deviceInfoFrom(req) {
+  const ua = String(req.headers['user-agent'] || '');
+  const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari' : /Firefox\//.test(ua) ? 'Firefox' : 'Navegador';
+  const os = /Windows/.test(ua) ? 'Windows' : /iPhone|iPad|iOS/.test(ua) ? 'iPhone/iPad'
+    : /Android/.test(ua) ? 'Android' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'otro sistema';
+  return { ua, ip, label: `${browser} en ${os}`, hash: sha256(`${browser}|${os}|${ip.split('.').slice(0, 2).join('.')}`) };
+}
+
+// Registra el dispositivo y, si es nuevo (y no es el primero de la cuenta),
+// avisa por email. Nunca bloquea el ingreso.
+async function trackDevice(tenant, req) {
+  try {
+    const d = deviceInfoFrom(req);
+    const prev = await q('SELECT id FROM known_devices WHERE tenant_id=$1 AND device_hash=$2', [tenant.id, d.hash]);
+    if (prev.rows[0]) {
+      await q('UPDATE known_devices SET last_seen_at=now(), last_ip=$1 WHERE id=$2', [d.ip || null, prev.rows[0].id]);
+      return;
+    }
+    const count = await q('SELECT COUNT(*)::int AS n FROM known_devices WHERE tenant_id=$1', [tenant.id]);
+    await q(`INSERT INTO known_devices (tenant_id, device_hash, label, last_ip)
+             VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id, device_hash) DO NOTHING`,
+      [tenant.id, d.hash, d.label, d.ip || null]);
+    // El primer dispositivo es el del alta: no tiene sentido avisar de "algo nuevo".
+    if (count.rows[0].n > 0) {
+      mailer.sendNewDeviceAlert(tenant, { label: d.label, ip: d.ip, date: new Date() })
+        .catch(e => console.error('[mail] device:', e.message));
+    }
+  } catch (e) {
+    console.error('[device]', e.message);
+  }
+}
+
+// Confirma el correo desde el link del email y redirige al frontend.
+app.get('/auth/verify-email', async (req, res) => {
+  const back = (ok) => res.redirect(`${APP_URL}/email-verificado.html?ok=${ok}`);
+  try {
+    const token = String(req.query.token || '');
+    if (!token) return back(0);
+    const r = await q(`SELECT * FROM auth_tokens
+                       WHERE token_hash=$1 AND kind='email_verify'
+                         AND used_at IS NULL AND expires_at > now() LIMIT 1`, [sha256(token)]);
+    const row = r.rows[0];
+    if (!row) return back(0);
+    await q('UPDATE auth_tokens SET used_at=now() WHERE id=$1', [row.id]);
+    await q(`UPDATE tenants SET email_verified=true, email_verified_at=now() WHERE id=$1`, [row.tenant_id]);
+    return back(1);
+  } catch (e) {
+    console.error('[verify-email]', e);
+    return back(0);
+  }
+});
+
+// Reenvía el link de verificación desde el panel.
+app.post('/auth/verify-email/resend', requireAuth, async (req, res) => {
+  try {
+    if (req.tenant.email_verified) return res.json({ ok: true, already: true });
+    const url = await issueVerifyUrl(req.tenant.id);
+    const r = await mailer.sendVerifyEmail(req.tenant, url);
+    return res.json({ ok: true, sent: r.sent !== false });
+  } catch (e) {
+    console.error('[verify-resend]', e);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
+
 app.post('/auth/register', authLimiter, async (req, res) => {
   try {
     const { email, password, restaurantName, ownerName, phone, plan, ref } = req.body || {};
@@ -508,6 +607,10 @@ app.post('/auth/register', authLimiter, async (req, res) => {
     await seedDefaultProducts(t.id);
 
     const token = signToken(t);
+    // Bienvenida + link de verificación. En segundo plano: si el correo falla,
+    // el alta igual se completa.
+    sendWelcome(t);
+    trackDevice(t, req);
     return res.json({ token, user: publicTenant(t) });
   } catch (e) {
     console.error('[register]', e);
@@ -528,6 +631,8 @@ app.post('/auth/login', authLimiter, async (req, res) => {
     await refreshSubscriptionStatus(t.id);
     const fresh = await q('SELECT * FROM tenants WHERE id=$1', [t.id]);
     const token = signToken(fresh.rows[0]);
+    // Si entra desde un dispositivo que no vimos antes, le avisamos por email.
+    trackDevice(fresh.rows[0], req);
     return res.json({ token, user: publicTenant(fresh.rows[0]) });
   } catch (e) {
     console.error('[login]', e);
@@ -630,10 +735,13 @@ app.post('/auth/google', authLimiter, async (req, res) => {
         endsAt = null;
         graceEndsAt = null;
       }
+      // Google ya verificó el correo (lo chequeamos en verifyGoogleCredential),
+      // así que la cuenta nace con email_verified = true.
       const ins = await q(
         `INSERT INTO tenants (email, google_id, google_picture, restaurant_name, owner_name,
-                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id, access_code)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                              subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id, access_code,
+                              email_verified, email_verified_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,now()) RETURNING *`,
         [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt, vendorId, compCode]
       );
       t = ins.rows[0];
@@ -648,6 +756,8 @@ app.post('/auth/google', authLimiter, async (req, res) => {
     }
 
     const token = signToken(t);
+    if (isNew) sendWelcome(t);          // bienvenida (sin verificación: Google ya la validó)
+    else trackDevice(t, req);           // login normal → aviso si el dispositivo es nuevo
     return res.json({ token, user: publicTenant(t), isNew });
   } catch (e) {
     console.error('[auth-google]', e);
@@ -751,6 +861,15 @@ app.post('/billing/webhook', async (req, res) => {
           [data.id, now, ends, grace, tenantId]);
         await q(`INSERT INTO subscription_payments (tenant_id, mp_preapproval_id, amount, status, raw)
                  VALUES ($1,$2,$3,$4,$5)`, [tenantId, data.id, 0, 'trial_authorized', info]);
+        // Email informativo: arrancó el mes gratis.
+        try {
+          const tr = await q('SELECT * FROM tenants WHERE id=$1', [tenantId]);
+          if (tr.rows[0]) {
+            const pl = planFor(tr.rows[0].plan || 'pro');
+            mailer.sendTrialStarted(tr.rows[0], { endsAt: ends, planName: pl.name, amount: pl.price })
+              .catch(e => console.error('[mail] trial:', e.message));
+          }
+        } catch (e) { console.error('[mail] trial lookup:', e.message); }
       } else if (info.status === 'cancelled' || info.status === 'paused') {
         // Cancelación desde MP: mantenemos acceso hasta fin del período ya pagado/de prueba.
         await q(`UPDATE tenants SET cancel_at_period_end=true WHERE id=$1`, [tenantId]);
@@ -776,6 +895,20 @@ app.post('/billing/webhook', async (req, res) => {
                  VALUES ($1,$2,$3,$4,$5)`,
           [tenantId, data.id, info.transaction_amount || SUB_PRICE, 'approved', info]);
         await creditVendorCommission(tenantId, info.transaction_amount || SUB_PRICE);
+        // Comprobante de pago al dueño del restaurante.
+        try {
+          const tr = await q('SELECT * FROM tenants WHERE id=$1', [tenantId]);
+          if (tr.rows[0]) {
+            const pl = planFor(tr.rows[0].plan || 'pro');
+            mailer.sendPaymentReceipt(tr.rows[0], {
+              amount: info.transaction_amount || SUB_PRICE,
+              planName: pl.name,
+              date: now,
+              paymentId: data.id,
+              nextDate: ends
+            }).catch(e => console.error('[mail] receipt:', e.message));
+          }
+        } catch (e) { console.error('[mail] receipt lookup:', e.message); }
       }
     }
 
