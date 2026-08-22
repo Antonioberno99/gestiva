@@ -2301,6 +2301,116 @@ app.get('/admin/tenants', requireAdminAuth, async (req, res) => {
   res.json({ tenants: r.rows });
 });
 
+// ----- FICHA DE UN RESTAURANTE (soporte) -----
+// Vista completa de un cliente para poder ayudarlo: datos de contacto, estado de
+// la suscripción, uso del sistema y datos fiscales.
+// El certificado y la clave fiscal NUNCA se devuelven (son credenciales del
+// cliente): solo informamos si están cargados.
+app.get('/admin/tenants/:id', requireAdminAuth, async (req, res) => {
+  try {
+    const r = await q(
+      `SELECT t.*, v.name AS vendor_name
+       FROM tenants t LEFT JOIN vendors v ON v.id=t.vendor_id
+       WHERE t.id=$1`, [req.params.id]);
+    const t = r.rows[0];
+    if (!t) return res.status(404).json({ error: 'not_found' });
+
+    // Cuánto usa el sistema: ayuda a entender si está enganchado o necesita apoyo.
+    const counts = await q(
+      `SELECT
+         (SELECT count(*)::int FROM products WHERE tenant_id=$1) AS productos,
+         (SELECT count(*)::int FROM tables   WHERE tenant_id=$1) AS mesas,
+         (SELECT count(*)::int FROM waiters  WHERE tenant_id=$1) AS mozos,
+         (SELECT count(*)::int FROM orders   WHERE tenant_id=$1) AS ventas,
+         (SELECT count(*)::int FROM invoices WHERE tenant_id=$1) AS facturas`,
+      [t.id]);
+
+    res.json({
+      tenant: {
+        id: t.id,
+        restaurantName: t.restaurant_name,
+        ownerName: t.owner_name,
+        email: t.email,
+        phone: t.phone,
+        emailVerified: !!t.email_verified,
+        hasGoogle: !!t.google_id,
+        createdAt: t.created_at,
+        vendorName: t.vendor_name,
+        accessCode: t.access_code,
+        subscriptionStatus: t.subscription_status,
+        plan: t.plan,
+        hasCard: !!t.mp_preapproval_id,
+        subscriptionEndsAt: t.subscription_ends_at,
+        graceEndsAt: t.grace_ends_at,
+        lastPaymentAt: t.last_payment_at,
+        lastPaymentAmount: t.last_payment_amount
+      },
+      uso: counts.rows[0],
+      fiscal: {
+        fiscalEnabled: !!t.fiscal_enabled,
+        fiscalCuit: t.fiscal_cuit || '',
+        fiscalCondition: t.fiscal_condition || '',
+        fiscalRazonSocial: t.fiscal_razon_social || '',
+        fiscalDomicilio: t.fiscal_domicilio || '',
+        fiscalPtoVta: t.fiscal_pto_vta || null,
+        fiscalIngresosBrutos: t.fiscal_ingresos_brutos || '',
+        fiscalInicioActividades: t.fiscal_inicio_actividades || null,
+        fiscalEnv: t.fiscal_env || 'homologacion',
+        hasCert: !!(t.fiscal_cert && t.fiscal_key)   // nunca devolvemos el contenido
+      }
+    });
+  } catch (e) {
+    console.error('[admin-tenant]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Cargar/corregir los datos de facturación de un cliente desde el panel de soporte.
+// Mismos campos que el cliente ve en Ajustes → Datos fiscales.
+app.put('/admin/tenants/:id/fiscal', requireAdminAuth, async (req, res) => {
+  try {
+    const { fiscalCondition, fiscalCuit, fiscalRazonSocial, fiscalDomicilio,
+            fiscalPtoVta, fiscalIngresosBrutos, fiscalInicioActividades } = req.body || {};
+    const cuit = (fiscalCuit || '').replace(/[^0-9]/g, '');
+    if (cuit && cuit.length !== 11) return res.status(400).json({ error: 'cuit_invalido' });
+    const pv = fiscalPtoVta === '' || fiscalPtoVta == null ? null : parseInt(fiscalPtoVta, 10);
+    if (pv != null && (isNaN(pv) || pv < 1)) return res.status(400).json({ error: 'pto_vta_invalido' });
+
+    const r = await q(`UPDATE tenants SET
+        fiscal_condition = $1, fiscal_cuit = $2, fiscal_razon_social = $3,
+        fiscal_domicilio = $4, fiscal_pto_vta = $5, fiscal_ingresos_brutos = $6,
+        fiscal_inicio_actividades = $7
+        WHERE id=$8 RETURNING id`,
+      [fiscalCondition || null, cuit || null, fiscalRazonSocial || null,
+       fiscalDomicilio || null, pv, fiscalIngresosBrutos || null,
+       fiscalInicioActividades || null, req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+    console.log('[admin] datos fiscales actualizados para tenant', req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[admin-fiscal]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// Corregir datos de contacto del cliente (typos de teléfono, nombre del local, etc.)
+app.put('/admin/tenants/:id/contacto', requireAdminAuth, async (req, res) => {
+  try {
+    const { restaurantName, ownerName, phone } = req.body || {};
+    const r = await q(`UPDATE tenants SET
+        restaurant_name = COALESCE(NULLIF($1,''), restaurant_name),
+        owner_name      = COALESCE(NULLIF($2,''), owner_name),
+        phone           = COALESCE(NULLIF($3,''), phone)
+        WHERE id=$4 RETURNING id`,
+      [restaurantName || '', ownerName || '', phone || '', req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[admin-contacto]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
 // ----- CÓDIGOS DE ACCESO GRATIS (cuentas de cortesía) -----
 // Un código que el dueño reparte; quien lo usa al registrarse entra con acceso
 // completo, gratis y sin tarjeta. Se ingresa en el mismo campo "ref" del signup.
