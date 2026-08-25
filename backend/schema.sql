@@ -512,3 +512,12 @@ CREATE TABLE IF NOT EXISTS known_devices (
   UNIQUE (tenant_id, device_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_known_devices_tenant ON known_devices(tenant_id);
+
+-- ============================================================
+-- ESTACIONES DE COMANDA (cocina / barra) — para MOSTRAR el destino
+-- ============================================================
+-- La impresión sigue manejándose en la PC del local (config local del agente).
+-- Esto es la referencia compartida para que la app del mozo y el panel central
+-- muestren a dónde va cada producto.
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS has_bar_station BOOLEAN DEFAULT false;
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS bar_categories TEXT DEFAULT 'Bebidas,Tragos';

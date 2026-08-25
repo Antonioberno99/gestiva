@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-v9-app-instalable';
+const CACHE_NAME = 'gestiva-v10-avisos-mozo';
 
 // Shells que guardamos para que la app abra aunque no haya internet.
 // /mozo  → app del equipo (mozos)

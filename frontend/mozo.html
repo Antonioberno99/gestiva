@@ -42,6 +42,25 @@
   .login { display:grid; place-items:center; padding:22px; background:linear-gradient(180deg,#fff7ed 0%,#fff 48%,#f8fafc 100%); }
   .login-card { width:100%; max-width:430px; background:#fff; border:1px solid var(--line); border-radius:26px; padding:28px; box-shadow:var(--shadow); }
   .brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
+  /* Etiqueta de destino (a qué comandera va el producto) */
+  .product .prow{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:auto}
+  .est{font-size:10px;font-weight:800;padding:3px 7px;border-radius:999px;letter-spacing:.02em;white-space:nowrap}
+  .est.cocina{background:var(--or-100,#ffedd5);color:#c2410c}
+  .est.barra{background:#dbeafe;color:#1d4ed8}
+
+  /* Avisos flotantes: confirman cada acción del mozo */
+  .toast-wrap{position:fixed;left:0;right:0;bottom:96px;z-index:200;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 14px}
+  .toast{display:flex;align-items:center;gap:9px;background:#0f172a;color:#fff;padding:12px 17px;border-radius:14px;font-size:14.5px;font-weight:700;box-shadow:0 12px 30px rgba(15,23,42,.32);max-width:100%;animation:tin .22s ease-out}
+  .toast.ok{background:#047857}
+  .toast.del{background:#b91c1c}
+  .toast.info{background:#0f172a}
+  .toast .ic{width:20px;height:20px;flex:none}
+  .toast .sub{display:block;font-weight:500;font-size:12.5px;opacity:.9;margin-top:1px}
+  .toast.out{animation:tout .2s ease-in forwards}
+  @keyframes tin{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+  @keyframes tout{to{opacity:0;transform:translateY(10px) scale(.97)}}
+  @media (prefers-reduced-motion:reduce){ .toast,.toast.out{animation:none} }
+
   .brand-mark { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; background:transparent; overflow:hidden; flex:0 0 auto; }
   .brand-mark img { width:44px; height:44px; object-fit:contain; display:block; }
   .brand-name { font-family:var(--display); font-size:23px; font-weight:800; color:var(--or); letter-spacing:0; }
@@ -258,8 +277,48 @@
   </nav>
 </section>
 
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
 <script src="gestiva-config.js"></script>
 <script>
+// ---- Avisos flotantes ----
+// El mozo tiene que ver que su toque hizo algo, sin frenar lo que está haciendo.
+const TOAST_ICONS = {
+  ok:  '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  del: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+  info:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8v.01"/></svg>'
+};
+// ---- A qué comandera va cada producto ----
+// El local decide en el panel si tiene comandera en la barra y qué categorías
+// van ahí. Si no tiene barra, todo va a cocina y no mostramos nada (no confundir
+// al mozo con información que no le sirve).
+function estacionDe(prod) {
+  const r = state.restaurant;
+  if (!prod || !r || !r.hasBarStation) return null;
+  const bar = String(r.barCategories || 'Bebidas,Tragos')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const cat = String(prod.cat || '').trim().toLowerCase();
+  return cat && bar.includes(cat) ? 'Barra' : 'Cocina';
+}
+
+let _toastT = null;
+function toast(texto, tipo, sub) {
+  const wrap = document.getElementById('toastWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';                       // uno por vez: el mozo carga rápido
+  const t = document.createElement('div');
+  t.className = 'toast ' + (tipo || 'info');
+  t.innerHTML = (TOAST_ICONS[tipo] || TOAST_ICONS.info) +
+    `<div>${texto}${sub ? `<span class="sub">${sub}</span>` : ''}</div>`;
+  wrap.appendChild(t);
+  if (navigator.vibrate) { try { navigator.vibrate(tipo === 'del' ? 30 : 15); } catch {} }
+  clearTimeout(_toastT);
+  _toastT = setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 220);
+  }, 1900);
+}
+
 let token = localStorage.getItem('gestiva_waiter_token');
 let WAITER_DEMO = false; // demo desactivado para producción
 let state = { restaurant:null, waiter:null, tables:[], openTables:[], products:[], activeShift:null, recentShifts:[], table:null, items:[], cat:'todos', tableRoom:'todos', noteIndex:null };
@@ -685,12 +744,14 @@ function renderOrder() {
   const filtered = state.products.filter(p => state.cat === 'todos' || p.cat === state.cat);
   $('#productGrid').innerHTML = groupProductsBySegment(filtered, state.cat).map(group => `
     <div class="prod-section-title">${h(group.label)}</div>
-    ${group.items.map(p => `<button class="product" onclick="addItem('${p.id}')">
+    ${group.items.map(p => {
+      const est = estacionDe(p);
+      return `<button class="product" onclick="addItem('${p.id}')">
       ${pVisual(p)}
       <span class="name">${h(p.name)}</span>
       <span class="meta">${h(p.cat || '')}${p.segment ? ' / ' + h(p.segment) : ''}</span>
-      <span class="price">${money(p.price)}</span>
-    </button>`).join('')}
+      <span class="prow"><span class="price">${money(p.price)}</span>${est ? `<span class="est ${est === 'Barra' ? 'barra' : 'cocina'}">${est}</span>` : ''}</span>
+    </button>`; }).join('')}
   `).join('');
   renderCart();
 }
@@ -725,6 +786,14 @@ async function addItem(productId) {
   if (existing) existing.qty += 1;
   else state.items.push({ productId, qty:1, sentToKitchen:false, notes:'' });
   renderCart();
+  // Aviso inmediato: el mozo está mirando el menú, no el pedido.
+  const p = state.products.find(x => x.id === productId);
+  const cant = existing ? existing.qty : 1;
+  toast(
+    `${cant > 1 ? cant + '× ' : ''}${p?.name || 'Producto'} cargado`,
+    'ok',
+    estacionDe(p) ? 'Va a ' + estacionDe(p) : null
+  );
   try {
     await persistCurrentItems();
     renderTables();
@@ -743,11 +812,16 @@ async function changeQty(index, delta) {
   if (it.sentToKitchen && delta < 0) {
     if (!confirm('Este item ya fue enviado a cocina. ¿Cancelarlo igual?')) return;
   }
+  const prod = state.products.find(x => x.id === it.productId);
+  const nombre = prod?.name || 'Producto';
   it.qty += delta;
   if (it.qty <= 0) {
     state.items.splice(index, 1);
     if (state.noteIndex === index) state.noteIndex = null;
     else if (state.noteIndex > index) state.noteIndex -= 1;
+    toast(`${nombre} eliminado`, 'del');
+  } else {
+    toast(`${nombre}: ${it.qty}`, delta > 0 ? 'ok' : 'info');
   }
   renderCart();
   try { await persistCurrentItems(); renderTables(); }
@@ -756,8 +830,10 @@ async function changeQty(index, delta) {
 
 async function clearCart() {
   if (!state.items.length || confirm('Vaciar este pedido?')) {
+    const habia = state.items.length;
     state.items = [];
     state.noteIndex = null;
+    if (habia) toast('Pedido vaciado', 'del');
     renderCart();
     try { await persistCurrentItems({ create:false }); renderTables(); }
     catch (e) { alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa esta asignada a otro mozo.' : e.message); }
@@ -864,7 +940,17 @@ async function saveOrder() {
     renderTables();
     // El pedido queda en cocina y la PC principal lo imprime en la comandera.
     // El celular no imprime ni abre PDF.
-    alert('Pedido enviado a cocina (' + newItems.length + ' items)');
+    // Si el local tiene barra, mostramos cuántos van a cada comandera.
+    const prodMapT = new Map(state.products.map(p => [p.id, p]));
+    let aBarra = 0, aCocina = 0;
+    newItems.forEach(it => {
+      const est = estacionDe(prodMapT.get(it.productId));
+      if (est === 'Barra') aBarra += it.qty; else aCocina += it.qty;
+    });
+    const total = aBarra + aCocina;
+    const detalle = (aBarra && aCocina) ? `${aCocina} a Cocina · ${aBarra} a Barra`
+                  : aBarra ? `${aBarra} a Barra` : null;
+    toast(`Pedido enviado · ${total} ${total === 1 ? 'ítem' : 'ítems'}`, 'ok', detalle);
   } catch (e) {
     alert(e.message === 'table_assigned_to_other_waiter' ? 'La mesa está asignada a otro mozo.' : e.message);
   }
@@ -885,7 +971,7 @@ if ('serviceWorker' in navigator) {
     reloadingForUpdate = true;
     location.reload();
   });
-  navigator.serviceWorker.register('sw.js?v=20260723-logo-g').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20260824-avisos-mozo').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

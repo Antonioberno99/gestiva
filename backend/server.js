@@ -242,6 +242,10 @@ function publicTenant(t) {
     googlePicture: t.google_picture || null,
     hasGoogle: !!t.google_id,
     emailVerified: !!t.email_verified,
+    // Estaciones de comanda: sirve para MOSTRAR el destino en la app del mozo y
+    // en el panel. La impresión la sigue resolviendo el agente en la PC del local.
+    hasBarStation: !!t.has_bar_station,
+    barCategories: t.bar_categories == null ? 'Bebidas,Tragos' : t.bar_categories,
     subscriptionStatus: t.subscription_status,
     subscriptionEndsAt: t.subscription_ends_at,
     graceEndsAt: t.grace_ends_at,
@@ -1801,14 +1805,19 @@ app.get('/api/dashboard', async (req, res) => {
 
 // ----- SETTINGS -----
 app.put('/api/settings', async (req, res) => {
-  const { restaurantName, currency, ownerName, phone } = req.body || {};
+  const { restaurantName, currency, ownerName, phone, hasBarStation, barCategories } = req.body || {};
   const r = await q(`UPDATE tenants SET
       restaurant_name = COALESCE($1, restaurant_name),
       currency        = COALESCE($2, currency),
       owner_name      = COALESCE($3, owner_name),
-      phone           = COALESCE($4, phone)
-      WHERE id=$5 RETURNING *`,
-    [restaurantName || null, currency || null, ownerName || null, phone || null, req.tenant.id]);
+      phone           = COALESCE($4, phone),
+      has_bar_station = COALESCE($5, has_bar_station),
+      bar_categories  = COALESCE($6, bar_categories)
+      WHERE id=$7 RETURNING *`,
+    [restaurantName || null, currency || null, ownerName || null, phone || null,
+     typeof hasBarStation === 'boolean' ? hasBarStation : null,
+     typeof barCategories === 'string' ? barCategories.trim() : null,
+     req.tenant.id]);
   res.json(publicTenant(r.rows[0]));
 });
 

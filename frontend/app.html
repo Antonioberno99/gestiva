@@ -2698,6 +2698,31 @@ route('ajustes', async () => {
         <button class="btn btn-primary btn-block" onclick="saveSettings()">Guardar cambios</button>
       </div>
       <div class="card">
+        <h3 style="margin-bottom:8px;">Comanderas: cocina y barra</h3>
+        <p style="font-size:13px;color:var(--tx-mid);line-height:1.55;margin-bottom:14px;">
+          Definí acá si tu local separa los pedidos entre cocina y barra. Los mozos van a
+          ver en la app a dónde va cada producto, y el pedido se muestra separado.
+        </p>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:11px;cursor:pointer;margin-bottom:12px;">
+          <input type="checkbox" id="setHasBar" ${USER.hasBarStation ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--or);"
+                 onchange="document.getElementById('barCatsField').style.display = this.checked ? '' : 'none'">
+          <span><b style="font-size:14px;">Tengo comandera en la barra</b>
+            <span style="display:block;font-size:12px;color:var(--tx-mid);margin-top:2px;">Si no la tildás, todo va a cocina.</span></span>
+        </label>
+        <div class="field" id="barCatsField" style="${USER.hasBarStation ? '' : 'display:none;'}">
+          <label>Categorías que van a la barra</label>
+          <input id="setBarCats" value="${(USER.barCategories||'Bebidas,Tragos').replace(/"/g,'&quot;')}" placeholder="Bebidas,Tragos"/>
+          <p style="font-size:12px;color:var(--tx-lt);margin:6px 0 0;line-height:1.5;">
+            Separadas por coma, tal cual las escribiste en Productos. El resto va a cocina.
+          </p>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="saveStations()">Guardar comanderas</button>
+        <p style="font-size:12px;color:var(--tx-lt);margin:12px 0 0;line-height:1.5;">
+          Esto no cambia la conexión de tus impresoras: eso se configura en
+          <a href="#/comandera" style="color:var(--or-dk);font-weight:600;">Comandera</a>.
+        </p>
+      </div>
+      <div class="card">
         <h3 style="margin-bottom:16px;">Suscripción</h3>
         <div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
           <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Estado</div>
@@ -2798,6 +2823,17 @@ async function saveSettings() {
     });
     USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
     refreshSubPill(); toast('Cambios guardados','success');
+  } catch(e) { toast(e.message,'error'); }
+}
+// Estaciones de comanda: solo define a dónde va cada producto (lo que ven los
+// mozos). La conexión de las impresoras se sigue configurando en Comandera.
+async function saveStations() {
+  try {
+    const hasBar = $('#setHasBar').checked;
+    const cats = ($('#setBarCats') && $('#setBarCats').value.trim()) || 'Bebidas,Tragos';
+    const u = await API.settings({ hasBarStation: hasBar, barCategories: cats });
+    USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
+    toast(hasBar ? 'Listo: las bebidas van a la barra' : 'Listo: todo va a cocina', 'success');
   } catch(e) { toast(e.message,'error'); }
 }
 async function saveFiscal() {
@@ -3280,7 +3316,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260723-app-instalable')
+    navigator.serviceWorker.register('sw.js?v=20260824-avisos-mozo')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
