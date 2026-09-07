@@ -63,8 +63,13 @@ function Save-AgentConfig($Config) {
 }
 
 function Get-AgentState {
-  $state = Read-JsonFile $StateFile ([pscustomobject]@{ seededAt = $null; printed = @() })
+  $state = Read-JsonFile $StateFile ([pscustomobject]@{ seededAt = $null; printed = @(); queueMode = $null })
   if ($null -eq $state.printed) { $state | Add-Member -Force -NotePropertyName printed -NotePropertyValue @() }
+  # queueMode marca que esta estacion ya usa la cola de impresion del servidor.
+  # Un agente viejo no lo tiene: por eso se vuelve a sembrar al actualizar.
+  if (-not ($state.PSObject.Properties.Name -contains 'queueMode')) {
+    $state | Add-Member -Force -NotePropertyName queueMode -NotePropertyValue $null
+  }
   return $state
 }
 
@@ -567,9 +572,15 @@ function Invoke-CloudPoll {
     $headers = @{ Authorization = 'Bearer ' + [string]$cfg.token }
     $state = Get-AgentState
 
-    # Primera vez que se vincula esta estacion: damos por impreso lo que ya
-    # habia, para no escupir el historial del dia al instalarla.
-    if (-not $state.seededAt) {
+    # Sembrado: marcamos como impreso lo que ya habia, para no escupir de golpe
+    # comandas viejas. Se hace en DOS casos:
+    #   1) instalacion nueva (nunca se sembro)
+    #   2) actualizacion desde un agente anterior a la cola de impresion. Ese
+    #      agente llevaba la cuenta en un archivo local y nunca confirmaba al
+    #      servidor, asi que para la base todas sus comandas figuran sin
+    #      imprimir. Sin este paso, al actualizar reimprimia todo el rato
+    #      anterior de una sentada.
+    if (-not $state.seededAt -or $state.queueMode -ne 'print-queue') {
       $viejas = Invoke-RestMethod -Uri ($api + '/api/print-queue?maxAgeMin=720') -Headers $headers -TimeoutSec 12
       $ids = @(@($viejas) | ForEach-Object { [string]$_.id } | Where-Object { $_ })
       if ($ids.Count -gt 0) {
@@ -577,6 +588,7 @@ function Invoke-CloudPoll {
         Invoke-RestMethod -Uri ($api + '/api/print-queue/ack') -Headers $headers -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 12 | Out-Null
       }
       $state.seededAt = (Get-Date).ToString('o')
+      $state | Add-Member -Force -NotePropertyName queueMode -NotePropertyValue 'print-queue'
       Save-AgentState $state
       Write-AgentLog "cloud station seeded ($($ids.Count) comandas previas marcadas)"
       return
