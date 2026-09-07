@@ -26,6 +26,12 @@
     margin:0; font-family: var(--ff-body); background: var(--bg-dark); color: var(--text);
     min-height: 100vh; -webkit-font-smoothing: antialiased;
   }
+  /* Aviso de red: la cocina tiene que saber si esta viendo datos viejos. */
+  .kdsnet{display:none;align-items:center;gap:10px;background:#b91c1c;color:#fff;padding:10px 18px;font-size:15px;font-weight:700;letter-spacing:.01em}
+  .kdsnet.show{display:flex}
+  .kdsnet .dot{width:10px;height:10px;border-radius:50%;background:#fff;animation:kpulse 1s ease-in-out infinite}
+  @keyframes kpulse{0%,100%{opacity:.3}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){ .kdsnet .dot{animation:none} }
   .topbar {
     background: #020617; padding: 14px 24px; display:flex; justify-content:space-between;
     align-items:center; border-bottom: 1px solid #334155;
@@ -142,6 +148,9 @@
 </div>
 
 <div id="appView" style="display:none;">
+  <div class="kdsnet" id="kdsNet" role="status" aria-live="polite">
+    <span class="dot"></span><span id="kdsNetText">Sin conexión con el servidor · los pedidos nuevos no se están viendo</span>
+  </div>
   <div class="topbar">
     <div class="brand"><img src="assets/logo-gestiva-icon.png" alt=""/> Cocina <span style="color:var(--text-mid);font-size:14px;font-weight:500;" id="restoName"></span></div>
     <div class="stats">
@@ -208,15 +217,66 @@ function timerClass(ms) {
   return min < 10 ? 'fresh' : min < 20 ? 'warn' : 'urgent';
 }
 
+// Aviso sonoro: en una cocina nadie mira la pantalla fijo. Un pedido nuevo
+// tiene que escucharse. Se genera con WebAudio, sin archivos externos.
+let _audioCtx = null;
+function beepNuevoPedido() {
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const t0 = _audioCtx.currentTime;
+    [880, 1180].forEach((freq, i) => {
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.32, t0 + i * 0.18 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.18 + 0.16);
+      osc.connect(gain); gain.connect(_audioCtx.destination);
+      osc.start(t0 + i * 0.18); osc.stop(t0 + i * 0.18 + 0.18);
+    });
+  } catch (e) {}
+}
+
+let _ticketsVistos = new Set();
+let _kdsArrancado = false;
+let _fallosSeguidos = 0;
+
+function setKdsNet(offline, texto) {
+  const bar = document.getElementById('kdsNet');
+  const txt = document.getElementById('kdsNetText');
+  if (!bar) return;
+  bar.classList.toggle('show', !!offline);
+  if (offline && txt && texto) txt.textContent = texto;
+}
+
 async function loadKitchen() {
   try {
     const tickets = await api('/api/kitchen');
+    _fallosSeguidos = 0;
+    setKdsNet(false);
+
+    // Sonar solo por comandas realmente nuevas (no en la primera carga).
+    const nuevos = tickets.filter(t => !_ticketsVistos.has(t.id));
+    if (_kdsArrancado && nuevos.length) beepNuevoPedido();
+    _ticketsVistos = new Set(tickets.map(t => t.id));
+    _kdsArrancado = true;
+
     renderBoard(tickets);
     updateStats(tickets);
   } catch(e) {
     console.error('[kitchen]', e);
     if (e.message === 'unauthorized') return;
-    $('#board').innerHTML = `<div class="empty"><h2>Error de conexión</h2><p>${e.message}</p></div>`;
+    // No borramos el tablero: la cocina necesita seguir viendo lo que está
+    // cocinando. Solo avisamos que los datos pueden estar desactualizados.
+    _fallosSeguidos++;
+    setKdsNet(true, _kdsArrancado
+      ? `Sin conexión (${_fallosSeguidos}) · el tablero puede estar desactualizado, reintentando...`
+      : 'Sin conexión con el servidor · reintentando...');
+    if (!_kdsArrancado) {
+      $('#board').innerHTML = `<div class="empty"><h2>Sin conexión</h2><p>Reintentando cada 5 segundos...</p></div>`;
+    }
   }
 }
 
@@ -278,6 +338,11 @@ function tickClock() {
 async function showApp() {
   $('#loginView').style.display = 'none';
   $('#appView').style.display = '';
+  // El navegador bloquea el audio hasta que el usuario toca la pantalla.
+  document.addEventListener('click', () => {
+    try { (_audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)()).resume(); } catch (e) {}
+  }, { once: true });
+  window.addEventListener('online', loadKitchen);
   try {
     const me = await api('/auth/me');
     $('#restoName').textContent = '· ' + me.user.restaurantName;

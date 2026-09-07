@@ -49,6 +49,19 @@
   .est.barra{background:#dbeafe;color:#1d4ed8}
 
   /* Avisos flotantes: confirman cada acción del mozo */
+  /* Barra de estado de red: el mozo tiene que VER si un pedido quedo en espera. */
+  .netbar{position:sticky;top:0;z-index:60;display:none;align-items:center;gap:9px;padding:9px 14px;font-size:13.5px;font-weight:700;color:#fff;letter-spacing:.01em}
+  .netbar.show{display:flex}
+  .netbar.offline{background:#b91c1c}
+  .netbar.syncing{background:#b45309}
+  .netbar.okflash{background:#047857}
+  .netbar .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none;opacity:.95}
+  .netbar.syncing .dot{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+  .netbar button{margin-left:auto;background:rgba(255,255,255,.2);border:0;color:#fff;font-weight:700;font-size:12.5px;padding:5px 11px;border-radius:999px}
+  @media (prefers-reduced-motion:reduce){ .netbar.syncing .dot{animation:none} }
+  /* Estados del item en el carrito */
+  .badge-queued{font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:.04em;text-transform:uppercase}
   .toast-wrap{position:fixed;left:0;right:0;bottom:96px;z-index:200;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 14px}
   .toast{display:flex;align-items:center;gap:9px;background:#0f172a;color:#fff;padding:12px 17px;border-radius:14px;font-size:14.5px;font-weight:700;box-shadow:0 12px 30px rgba(15,23,42,.32);max-width:100%;animation:tin .22s ease-out}
   .toast.ok{background:#047857}
@@ -210,6 +223,10 @@
 </section>
 
 <section class="app" id="appScreen">
+  <div class="netbar" id="netBar" role="status" aria-live="polite">
+    <span class="dot"></span><span id="netBarText">Sin conexión</span>
+    <button type="button" id="netBarBtn" onclick="flushOutbox(true)">Reintentar</button>
+  </div>
   <header class="topbar">
     <div class="who">
       <div class="who-mark"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div>
@@ -374,6 +391,7 @@ function hasActiveTextSelection() {
 (function installSelectionGuard() {
   let down = null;
   let selectingText = false;
+  let arrastro = false;
   let suppressClickUntil = 0;
   document.addEventListener('pointerdown', (e) => {
     down = { x: e.clientX, y: e.clientY, target: e.target };
@@ -382,12 +400,20 @@ function hasActiveTextSelection() {
   document.addEventListener('pointermove', (e) => {
     if (!down) return;
     const moved = Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) > 7;
-    if (moved && (isEditableTarget(down.target) || isEditableTarget(e.target))) selectingText = true;
+    if (!moved) return;
+    arrastro = true;
+    if (isEditableTarget(down.target) || isEditableTarget(e.target)) selectingText = true;
   }, true);
   document.addEventListener('pointerup', () => {
-    if (selectingText || hasActiveTextSelection()) suppressClickUntil = Date.now() + 220;
+    // Bloqueamos el click solo si el dedo ARRASTRO y eso dejó texto seleccionado.
+    // Antes alcanzaba con que hubiera una selección en cualquier parte de la
+    // pantalla: si al mozo le quedaba texto marcado de un toque largo previo,
+    // el siguiente toque en "Enviar a cocina" se cancelaba sin aviso y el
+    // pedido no salía. El mozo lo vivía como "la app se traba".
+    if (selectingText || (arrastro && hasActiveTextSelection())) suppressClickUntil = Date.now() + 220;
     down = null;
     selectingText = false;
+    arrastro = false;
   }, true);
   document.addEventListener('click', (e) => {
     if (Date.now() > suppressClickUntil) return;
@@ -516,27 +542,248 @@ async function waiterDemoApi(path, opts = {}) {
   throw new Error('demo_not_supported');
 }
 
+// Un error de RED (wifi caido, servidor sin responder) se reintenta.
+// Un error del SERVIDOR (4xx) no: el pedido esta mal armado y reintentar no ayuda.
+class NetworkError extends Error {
+  constructor(msg) { super(msg || 'sin_conexion'); this.name = 'NetworkError'; this.isNetwork = true; }
+}
+class ApiError extends Error {
+  constructor(msg, status, data) { super(msg); this.name = 'ApiError'; this.status = status; this.data = data || {}; }
+}
+
 async function api(path, opts = {}) {
   if (WAITER_DEMO) return waiterDemoApi(path, opts);
-  const r = await fetch(window.API_URL + path, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: 'Bearer ' + token } : {}),
-      ...(opts.headers || {})
-    }
-  });
+
+  // Timeout propio: sin esto, un wifi "conectado pero sin internet" deja el
+  // fetch colgado para siempre y el mozo no sabe si el pedido salio.
+  const ctrl = new AbortController();
+  const timeoutMs = opts.timeoutMs || 15000;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+
+  let r;
+  try {
+    r = await fetch(window.API_URL + path, {
+      ...opts,
+      signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        ...(opts.headers || {})
+      }
+    });
+  } catch (e) {
+    throw new NetworkError(e.name === 'AbortError' ? 'El servidor tardó demasiado' : 'Sin conexión');
+  } finally {
+    clearTimeout(timer);
+  }
+
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401) {
+  // Un 401 en el login significa "PIN incorrecto", no "sesión vencida":
+  // no hay sesión que cerrar y el mozo tiene que ver el motivo real.
+  if (r.status === 401 && path !== '/waiter/login') {
     localStorage.removeItem('gestiva_waiter_token');
     localStorage.removeItem('gestiva_waiter_demo');
     WAITER_DEMO = false;
     showLogin();
-    throw new Error('Sesión vencida');
+    throw new ApiError('Sesión vencida', 401, data);
   }
-  if (!r.ok) throw new Error(data.error || 'Error');
+  // 5xx / 429: el servidor esta caido o saturado, no es culpa del pedido -> reintentable.
+  if (r.status >= 500 || r.status === 429) throw new NetworkError('El servidor no responde');
+  if (!r.ok) throw new ApiError(data.error || 'Error', r.status, data);
   return data;
 }
+
+// ============================================================
+//   COLA DE ENVIOS (outbox) — que ningun pedido se pierda
+// ============================================================
+// El wifi de un restaurante se corta. Antes, si se cortaba justo al tocar
+// "Enviar a cocina", el pedido se perdia y nadie se enteraba. Ahora todo envio
+// critico se guarda primero en el celular y se reintenta hasta confirmarlo.
+const OUTBOX_KEY = 'gestiva_waiter_outbox';
+let _outbox = [];
+let _flushing = false;
+let _flushTimer = null;
+let _backoff = 0;
+let _inFlightId = null;   // envio que esta viajando ahora mismo
+
+const OUTBOX_MAX_AGE_MS = 12 * 60 * 60 * 1000;   // medio dia
+
+function outboxLoad() {
+  try { _outbox = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); }
+  catch (e) { _outbox = []; }
+  if (!Array.isArray(_outbox)) _outbox = [];
+
+  // Un pedido de hace más de 12 horas es de otro servicio: si el celular se
+  // quedó sin señal al cierre, no queremos que la cocina lo reciba al otro día.
+  const ahora = Date.now();
+  const vencidos = _outbox.filter(j => j.createdAt && ahora - j.createdAt > OUTBOX_MAX_AGE_MS);
+  if (vencidos.length) {
+    _outbox = _outbox.filter(j => !j.createdAt || ahora - j.createdAt <= OUTBOX_MAX_AGE_MS);
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox)); } catch (e) {}
+    const comandas = vencidos.filter(j => j.kind === 'kitchen').length;
+    if (comandas) {
+      setTimeout(() => toast(
+        `${comandas} ${comandas === 1 ? 'pedido viejo descartado' : 'pedidos viejos descartados'}`,
+        'del',
+        'Quedaron de un servicio anterior sin señal'
+      ), 800);
+    }
+  }
+}
+function outboxSave() {
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox)); } catch (e) {}
+  renderNetBar();
+}
+function newId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'w-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+function pendingOrders() { return _outbox.filter(j => j.kind === 'kitchen').length; }
+
+// Encola un envio. Los guardados de mesa se fusionan (solo importa el ultimo
+// estado); las comandas NO se fusionan nunca: cada una es un pedido distinto.
+function outboxPush(job) {
+  job.id = job.id || newId();
+  job.tries = 0;
+  job.createdAt = Date.now();
+  if (job.coalesceKey) {
+    // Nunca fusionamos con el envio que ya salio hacia el servidor: al
+    // confirmarse se elimina de la cola y se llevaria puestos los cambios
+    // nuevos. Ese caso genera un envio aparte.
+    const i = _outbox.findIndex(j => j.coalesceKey === job.coalesceKey && j.id !== _inFlightId);
+    if (i >= 0) { _outbox[i] = { ..._outbox[i], ...job, id: _outbox[i].id }; outboxSave(); scheduleFlush(0); return job; }
+  }
+  _outbox.push(job);
+  _netFlashPending = true;   // al vaciarse la cola, confirmamos al mozo
+  outboxSave();
+  scheduleFlush(0);
+  return job;
+}
+
+function scheduleFlush(delayMs) {
+  clearTimeout(_flushTimer);
+  _flushTimer = setTimeout(() => flushOutbox(), delayMs == null ? 1500 : delayMs);
+}
+
+async function flushOutbox(manual) {
+  if (_flushing || !_outbox.length || !token || WAITER_DEMO) { renderNetBar(); return; }
+  if (!navigator.onLine && !manual) { renderNetBar(); scheduleFlush(4000); return; }
+  _flushing = true;
+  renderNetBar();
+  try {
+    // FIFO estricto: las comandas tienen que llegar a cocina en el orden en que
+    // el mozo las mando. Si una falla por red, paramos y reintentamos despues.
+    while (_outbox.length) {
+      const job = _outbox[0];
+      _inFlightId = job.id;
+      try {
+        const res = await api(job.path, { method: job.method, body: JSON.stringify(job.body) });
+        // Quitamos por id: si mientras viajaba se reordeno la cola, sacamos el
+        // que corresponde y no el que quedo primero.
+        _outbox = _outbox.filter(j => j.id !== job.id);
+        outboxSave();
+        _backoff = 0;
+        if (job.kind === 'kitchen') onKitchenJobSent(job, res);
+      } catch (e) {
+        if (e.isNetwork) throw e;                       // corta el bucle, reintenta luego
+        if (e.status === 401) { _flushing = false; renderNetBar(); return; }
+        if (e.data && e.data.error === 'rev_conflict') {
+          // La mesa cambió mientras no había señal. Fusionamos (lo que ya está
+          // en cocina manda, lo que el mozo cargó se conserva) y reintentamos.
+          job.conflicts = (job.conflicts || 0) + 1;
+          const current = e.data.current;
+          if (job.kind === 'table' && current && job.conflicts <= 3) {
+            job.body = { items: mergeItems(current.items, job.body.items), rev: current.rev };
+            outboxSave();
+            continue;
+          }
+          _outbox = _outbox.filter(j => j.id !== job.id); outboxSave();
+          await softRefresh(true);
+          continue;
+        }
+        // Error real del servidor: sacamos el envio para no trabar la cola,
+        // pero avisamos, porque puede ser un pedido que no llego.
+        _outbox = _outbox.filter(j => j.id !== job.id);
+        outboxSave();
+        if (job.kind === 'kitchen') {
+          toast('Un pedido no se pudo enviar', 'del', e.message || 'Revisalo y volvé a mandarlo');
+        }
+      }
+    }
+    _backoff = 0;
+    flashNetOk();
+  } catch (e) {
+    _backoff = Math.min(_backoff ? _backoff * 2 : 3000, 30000);
+    _outbox.forEach(j => { j.tries = (j.tries || 0) + 1; });
+    outboxSave();
+    scheduleFlush(_backoff);
+  } finally {
+    _inFlightId = null;
+    _flushing = false;
+    renderNetBar();
+  }
+}
+
+// Cuando la comanda encolada finalmente llega, marcamos sus items como "en cocina".
+function onKitchenJobSent(job, res) {
+  const tid = job.body && job.body.tableId;
+  const ot = state.openTables.find(o => o.table_id === tid);
+  const markSent = (arr) => (arr || []).map(it => it.queuedTicketId === job.body.clientTicketId
+    ? { ...it, queuedTicketId: null, sentToKitchen: true }
+    : it);
+  if (ot) ot.items = markSent(ot.items);
+  if (state.table && state.table.id === tid) { state.items = markSent(state.items); renderCart(); }
+  renderTables();
+  if (res && res.duplicate) return;   // ya estaba: no avisamos dos veces
+  toast('Pedido confirmado en cocina', 'ok', 'Mesa ' + (state.tables.find(t => t.id === tid)?.num ?? ''));
+}
+
+let _netFlashT = null;
+function renderNetBar() {
+  const bar = document.getElementById('netBar');
+  const txt = document.getElementById('netBarText');
+  const btn = document.getElementById('netBarBtn');
+  if (!bar || !txt) return;
+  const pend = pendingOrders();
+  const total = _outbox.length;
+  bar.classList.remove('offline', 'syncing', 'okflash');
+
+  if (!navigator.onLine) {
+    bar.classList.add('show', 'offline');
+    txt.textContent = pend
+      ? `Sin conexión · ${pend} ${pend === 1 ? 'pedido guardado' : 'pedidos guardados'}, se envían solos`
+      : 'Sin conexión · lo que cargues se guarda igual';
+    btn.style.display = 'none';
+    return;
+  }
+  if (total) {
+    bar.classList.add('show', 'syncing');
+    txt.textContent = _flushing
+      ? `Enviando ${pend || total}...`
+      : `${pend || total} ${(pend || total) === 1 ? 'envío pendiente' : 'envíos pendientes'}`;
+    btn.style.display = _flushing ? 'none' : '';
+    return;
+  }
+  bar.classList.remove('show');
+}
+
+function flashNetOk() {
+  const bar = document.getElementById('netBar');
+  const txt = document.getElementById('netBarText');
+  const btn = document.getElementById('netBarBtn');
+  if (!bar || !_netFlashPending) return;
+  _netFlashPending = false;
+  bar.classList.remove('offline', 'syncing');
+  bar.classList.add('show', 'okflash');
+  txt.textContent = 'Todo enviado';
+  if (btn) btn.style.display = 'none';
+  clearTimeout(_netFlashT);
+  _netFlashT = setTimeout(() => { bar.classList.remove('show', 'okflash'); renderNetBar(); }, 1800);
+}
+let _netFlashPending = false;
+
+window.addEventListener('online', () => { _netFlashPending = true; renderNetBar(); flushOutbox(true).then(() => softRefresh(true)); });
+window.addEventListener('offline', renderNetBar);
 
 function showLogin() {
   $('#loginScreen').style.display = 'grid';
@@ -585,6 +832,8 @@ $('#loginForm').addEventListener('submit', async (e) => {
     localStorage.setItem('gestiva_waiter_token', token);
     await loadData();
     showApp();
+    startAutoRefresh();
+    flushOutbox();
   } catch (e) {
     err.textContent = e.message === 'invalid_credentials' ? 'Email o PIN incorrectos' : e.message;
     err.classList.add('on');
@@ -603,6 +852,55 @@ async function loadData() {
   $('#clockBtn').className = data.activeShift ? 'btn btn-danger clock-btn' : 'btn btn-secondary clock-btn';
   renderTables();
 }
+
+// ============================================================
+//   REFRESCO AUTOMATICO
+// ============================================================
+// Antes los datos se cargaban solo al iniciar sesion: el mozo bloqueaba el
+// celular, volvia media hora despues y veia mesas, precios y productos viejos.
+let _refreshTimer = null;
+let _refreshing = false;
+
+async function softRefresh(force) {
+  if (_refreshing || !token || WAITER_DEMO) return;
+  // Con envios en cola, el servidor todavia no sabe lo ultimo: refrescar ahora
+  // pisaria el pedido que el mozo tiene en la mano.
+  if (_outbox.length && !force) return;
+  if (document.hidden && !force) return;
+  _refreshing = true;
+  try {
+    const data = await api('/waiter/bootstrap', { timeoutMs: 10000 });
+    const openTableActual = state.table
+      ? (data.openTables || []).find(o => o.table_id === state.table.id)
+      : null;
+
+    state = { ...state, ...data };
+
+    // La mesa abierta en pantalla conserva lo que el mozo cargó y todavía no envió.
+    if (state.table) {
+      state.items = mergeItems(openTableActual ? openTableActual.items : [], state.items);
+      renderCart();
+    }
+    $('#clockBtn').textContent = data.activeShift ? 'Marcar salida' : 'Marcar ingreso';
+    $('#clockBtn').className = data.activeShift ? 'btn btn-danger clock-btn' : 'btn btn-secondary clock-btn';
+    renderTables();
+  } catch (e) {
+    // Sin conexion no es un error para mostrar: la barra de red ya lo indica.
+  } finally {
+    _refreshing = false;
+  }
+}
+
+function startAutoRefresh() {
+  clearInterval(_refreshTimer);
+  _refreshTimer = setInterval(softRefresh, 20000);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  // Al volver del bloqueo de pantalla: primero mandamos lo pendiente, despues refrescamos.
+  flushOutbox().then(() => softRefresh());
+});
 
 function tableItemQty(open) {
   return (open?.items || []).reduce((sum, it) => sum + (Number(it.qty) || 0), 0);
@@ -771,14 +1069,60 @@ async function ensureCurrentTableOpen() {
   return open;
 }
 
+// Combina lo que hay en el servidor con lo que el mozo tiene en la mano.
+// Regla: lo que YA esta en cocina manda (es un pedido real, no se puede perder);
+// lo que el mozo todavia no envio, se conserva. Asi dos celulares en la misma
+// mesa suman en vez de pisarse.
+function mergeItems(serverItems, localItems) {
+  const enCocina = (serverItems || []).filter(it => it.sentToKitchen);
+  const sinEnviar = (localItems || []).filter(it => !it.sentToKitchen);
+  return [...enCocina, ...sinEnviar];
+}
+
 async function persistCurrentItems(opts = {}) {
   if (!state.table) return;
   const shouldCreate = opts.create !== false;
-  let open = state.openTables.find(o => o.table_id === state.table.id);
+  const tableId = state.table.id;
+  let open = state.openTables.find(o => o.table_id === tableId);
   if (!open && !shouldCreate) return;
   if (!open) open = await ensureCurrentTableOpen();
-  const saved = await api('/waiter/open-tables/' + state.table.id, { method:'PUT', body: JSON.stringify({ items: state.items }) });
-  upsertOpenTable(saved || { ...open, items: state.items });
+
+  const body = { items: state.items, rev: Number.isInteger(open.rev) ? open.rev : undefined };
+  try {
+    const saved = await api('/waiter/open-tables/' + tableId, { method:'PUT', body: JSON.stringify(body) });
+    upsertOpenTable(saved || { ...open, items: state.items });
+  } catch (e) {
+    if (e.isNetwork) {
+      // Sin señal: guardamos el estado local y lo mandamos cuando vuelva.
+      // Se fusiona por mesa porque solo importa el ultimo estado del pedido.
+      upsertOpenTable({ ...open, items: state.items });
+      outboxPush({
+        kind: 'table',
+        coalesceKey: 'table:' + tableId,
+        path: '/waiter/open-tables/' + tableId,
+        method: 'PUT',
+        // Viaja con rev: si el panel tocó la mesa mientras no había señal,
+        // el servidor avisa y fusionamos en vez de pisar.
+        body: { items: state.items, rev: Number.isInteger(open.rev) ? open.rev : undefined }
+      });
+      return;
+    }
+    if (e.status === 409 && e.data && e.data.error === 'rev_conflict') {
+      // Otro mozo (u otro dispositivo) guardo primero. Fusionamos y reintentamos.
+      const current = e.data.current;
+      const merged = mergeItems(current && current.items, state.items);
+      state.items = merged;
+      const retry = await api('/waiter/open-tables/' + tableId, {
+        method: 'PUT',
+        body: JSON.stringify({ items: merged, rev: current ? current.rev : undefined })
+      });
+      upsertOpenTable(retry);
+      renderCart();
+      toast('Pedido actualizado', 'info', 'Otro dispositivo tocó esta mesa');
+      return;
+    }
+    throw e;
+  }
 }
 
 async function addItem(productId) {
@@ -805,6 +1149,10 @@ async function addItem(productId) {
 async function changeQty(index, delta) {
   const it = state.items[index];
   // Si el item ya fue enviado a cocina, no se puede cambiar cantidad - solo crear uno nuevo
+  if (it.queuedTicketId) {
+    alert('Este ítem ya fue enviado y espera señal. Agregalo de nuevo desde el menú si querés más.');
+    return;
+  }
   if (it.sentToKitchen && delta > 0) {
     alert('Este item ya está en cocina. Agregalo de nuevo desde el menú para una nueva comanda.');
     return;
@@ -879,8 +1227,11 @@ function renderCart() {
   $('#cartList').innerHTML = state.items.map((it, i) => {
     const p = prodMap.get(it.productId);
     if (p) total += Number(p.price) * it.qty;
+    // Tres estados reales, sin mentirle al mozo: nuevo / esperando señal / confirmado en cocina.
     const sentBadge = it.sentToKitchen
       ? '<span style="font-size:10px;background:var(--green-lt);color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">en cocina</span>'
+      : it.queuedTicketId
+      ? '<span class="badge-queued">por enviar</span>'
       : '<span style="font-size:10px;background:#fff7ed;color:#9a3412;padding:2px 8px;border-radius:999px;font-weight:700;margin-left:6px;letter-spacing:0.04em;text-transform:uppercase;">nuevo</span>';
     const note = (it.notes || '').trim();
     const editingNote = state.noteIndex === i && !it.sentToKitchen;
@@ -910,9 +1261,14 @@ function renderCart() {
 
 async function saveOrder() {
   if (!state.table) return;
-  const newItems = state.items.filter(it => !it.sentToKitchen);
+  // Un item con queuedTicketId ya fue mandado y espera señal: no se reenvia,
+  // porque saldria una comanda duplicada cuando vuelva la conexion.
+  const newItems = state.items.filter(it => !it.sentToKitchen && !it.queuedTicketId);
   if (newItems.length === 0) {
-    alert('No hay items nuevos para enviar. Todo ya está en cocina.');
+    const esperando = state.items.some(it => it.queuedTicketId);
+    alert(esperando
+      ? 'El pedido ya está guardado y se envía apenas vuelva la señal.'
+      : 'No hay items nuevos para enviar. Todo ya está en cocina.');
     return;
   }
   const prodMap = new Map(state.products.map(p => [p.id, p]));
@@ -928,16 +1284,39 @@ async function saveOrder() {
       notes: it.notes || ''
     };
   });
+  // Id propio de esta comanda. Si la red falla y reintentamos, el servidor
+  // reconoce el id y devuelve el ticket original en vez de crear otro:
+  // reintentar nunca duplica un plato.
+  const clientTicketId = newId();
+  const tableId = state.table.id;
+  const kitchenBody = { tableId, items: itemsForKitchen, clientTicketId };
+  let queued = false;
+
   try {
     // 1) Crear ticket de cocina (KDS)
-    const ticket = await api('/waiter/kitchen', { method:'POST', body: JSON.stringify({ tableId: state.table.id, items: itemsForKitchen }) });
-    // 2) Marcar items como enviados
-    state.items = state.items.map(it => ({ ...it, sentToKitchen: true }));
+    try {
+      await api('/waiter/kitchen', { method:'POST', body: JSON.stringify(kitchenBody) });
+    } catch (e) {
+      if (!e.isNetwork) throw e;
+      // Sin señal: el pedido queda guardado en el celular y sale solo al volver.
+      outboxPush({ kind:'kitchen', path:'/waiter/kitchen', method:'POST', body: kitchenBody });
+      queued = true;
+    }
+    // 2) Marcar items: confirmados en cocina, o en espera de envio.
+    state.items = state.items.map(it => it.sentToKitchen
+      ? it
+      : (queued ? { ...it, queuedTicketId: clientTicketId } : { ...it, sentToKitchen: true }));
     // 3) Persistir en open_tables
     await persistCurrentItems();
     state.noteIndex = null;
     renderCart();
     renderTables();
+
+    if (queued) {
+      toast('Pedido guardado', 'info', 'Sin señal: se envía apenas vuelva');
+      renderNetBar();
+      return;
+    }
     // El pedido queda en cocina y la PC principal lo imprime en la comandera.
     // El celular no imprime ni abre PDF.
     // Si el local tiene barra, mostramos cuántos van a cada comandera.
@@ -957,6 +1336,8 @@ async function saveOrder() {
 }
 
 function logout() {
+  const pend = pendingOrders();
+  if (pend && !confirm(`Hay ${pend} ${pend === 1 ? 'pedido' : 'pedidos'} sin enviar a cocina.\n\nSi cerrás sesión ahora se pierden. ¿Salir igual?`)) return;
   localStorage.removeItem('gestiva_waiter_token');
   localStorage.removeItem('gestiva_waiter_demo');
   token = null;
@@ -964,14 +1345,38 @@ function logout() {
   showLogin();
 }
 
+// ¿Se puede recargar la app sin arruinarle el trabajo al mozo?
+// Solo si no está con una mesa abierta, no tiene ítems sin enviar y no hay
+// nada esperando en la cola. Antes se recargaba de golpe al actualizarse el
+// service worker: si el mozo estaba cargando un pedido, lo perdía.
+function seguroParaRecargar() {
+  if (typeof _outbox !== 'undefined' && _outbox.length) return false;
+  if (state && state.table) return false;
+  if (state && (state.items || []).some(it => !it.sentToKitchen)) return false;
+  const login = document.getElementById('loginScreen');
+  if (login && login.style.display !== 'none') {
+    // No lo recargamos si está escribiendo el email o el PIN.
+    if (($('#email')?.value || '').trim() || ($('#pin')?.value || '').trim()) return false;
+  }
+  return true;
+}
+
 if ('serviceWorker' in navigator) {
   let reloadingForUpdate = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  let esperandoRecarga = null;
+  const recargarCuandoSeSeguro = () => {
     if (reloadingForUpdate) return;
-    reloadingForUpdate = true;
-    location.reload();
-  });
-  navigator.serviceWorker.register('sw.js?v=20260824-avisos-mozo').then((reg) => {
+    if (seguroParaRecargar()) {
+      reloadingForUpdate = true;
+      clearInterval(esperandoRecarga);
+      location.reload();
+      return;
+    }
+    // Todavía está trabajando: reintentamos cada 15s hasta que quede libre.
+    if (!esperandoRecarga) esperandoRecarga = setInterval(recargarCuandoSeSeguro, 15000);
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', recargarCuandoSeSeguro);
+  navigator.serviceWorker.register('sw.js?v=20260907-circuito-confiable').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {
@@ -987,11 +1392,24 @@ if ('serviceWorker' in navigator) {
 }
 
 (async () => {
+  outboxLoad();
+  renderNetBar();
   if (!token) return showLogin();
   try {
     await loadData();
     showApp();
+    startAutoRefresh();
+    flushOutbox();          // pedidos que quedaron del servicio anterior
   } catch (e) {
+    // Si no hay red, no echamos al mozo: si tiene token, entra con lo ultimo
+    // que sabe y la barra le avisa que esta sin conexion.
+    if (e && e.isNetwork) {
+      showApp();
+      startAutoRefresh();
+      renderNetBar();
+      softRefresh();
+      return;
+    }
     showLogin();
   }
 })();
