@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-v10-avisos-mozo';
+const CACHE_NAME = 'gestiva-v11-circuito-confiable';
 
 // Shells que guardamos para que la app abra aunque no haya internet.
 // /mozo  → app del equipo (mozos)
@@ -49,6 +49,14 @@ function shellFor(url) {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // Las llamadas al backend NO pasan por el cache: la app del mozo tiene su
+  // propia cola de envios y necesita saber de verdad si hay conexion. Un
+  // cache intermedio le haria creer que el pedido salio cuando no salio.
+  let url;
+  try { url = new URL(req.url); } catch (e) { return; }
+  if (url.origin !== self.location.origin) return;
+  if (/^\/(api|waiter|auth|billing|admin|vendor|public)\//.test(url.pathname)) return;
 
   // Navegaciones: siempre intentamos red primero (para tomar la última versión)
   // y si no hay internet servimos el shell cacheado que corresponda.

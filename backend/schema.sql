@@ -521,3 +521,26 @@ CREATE INDEX IF NOT EXISTS idx_known_devices_tenant ON known_devices(tenant_id);
 -- muestren a dónde va cada producto.
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS has_bar_station BOOLEAN DEFAULT false;
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS bar_categories TEXT DEFAULT 'Bebidas,Tragos';
+
+-- ============================================================
+-- FASE 4 — Circuito a prueba de fallos: mozo → cocina → comandera
+-- ============================================================
+
+-- Idempotencia: el celular manda un id propio por comanda. Si la red falla y
+-- reintenta, el backend devuelve el ticket que ya existe en vez de crear otro.
+ALTER TABLE IF EXISTS kitchen_tickets ADD COLUMN IF NOT EXISTS client_ticket_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kitchen_client_ticket
+  ON kitchen_tickets(tenant_id, client_ticket_id)
+  WHERE client_ticket_id IS NOT NULL;
+
+-- Estado de impresión en la base (antes vivía solo en el localStorage de una PC).
+-- Si la estación se reinicia, retoma lo que quedó sin imprimir en vez de tragárselo.
+ALTER TABLE IF EXISTS kitchen_tickets ADD COLUMN IF NOT EXISTS printed_at TIMESTAMPTZ;
+ALTER TABLE IF EXISTS kitchen_tickets ADD COLUMN IF NOT EXISTS print_count INT DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_kitchen_print_queue
+  ON kitchen_tickets(tenant_id, created_at)
+  WHERE printed_at IS NULL;
+
+-- Control de versión de la mesa abierta: evita que dos celulares se pisen los ítems.
+ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS rev INT DEFAULT 0;
+ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();

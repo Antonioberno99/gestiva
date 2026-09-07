@@ -137,6 +137,18 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 240 });
 const trackLimiter = rateLimit({ windowMs: 60 * 1000, max: 300 });
 
+// Login: en un restaurante TODO el equipo sale por la misma IP. Con un tope
+// plano de 30 cada 15 minutos, ocho mozos fichando al inicio del turno dejaban
+// al local entero afuera. Contamos solo los intentos FALLIDOS: los logins
+// correctos no gastan cupo, y un ataque de fuerza bruta (todo fallido) se corta
+// igual a los 20 intentos.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  skipSuccessfulRequests: true,
+  message: { error: 'too_many_attempts' }
+});
+
 // ---------- Helpers ----------
 function signToken(tenant) {
   return jwt.sign(
@@ -147,10 +159,13 @@ function signToken(tenant) {
 }
 
 function signWaiterToken(tenant, waiter) {
+  // 30 dias: el mozo no puede quedar afuera a mitad de un servicio por un token
+  // vencido. La baja real de un mozo se hace borrandolo (requireWaiterAuth lo
+  // revalida contra la base en cada request).
   return jwt.sign(
     { role: 'waiter', tenantId: tenant.id, waiterId: waiter.id, name: waiter.name },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: '30d' }
   );
 }
 
@@ -623,7 +638,7 @@ app.post('/auth/register', authLimiter, async (req, res) => {
   }
 });
 
-app.post('/auth/login', authLimiter, async (req, res) => {
+app.post('/auth/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'missing_fields' });
@@ -1039,7 +1054,63 @@ app.post('/billing/plan', requireAuth, async (req, res) => {
 //                       WAITER APP
 // ============================================================
 
-app.post('/waiter/login', authLimiter, async (req, res) => {
+// ============================================================
+//   COMANDAS — creacion idempotente
+// ============================================================
+// El celular del mozo genera un id propio (clientTicketId) por cada envio a
+// cocina. Si la red se corta despues de que el pedido llego al servidor, el
+// celular reintenta con el MISMO id y aca devolvemos el ticket que ya existe.
+// Sin esto, una reconexion = dos platos en la cocina.
+async function createKitchenTicket({ tenantId, tableId, waiterId, items, notes, clientTicketId }) {
+  const table = tableId
+    ? (await q('SELECT num FROM tables WHERE id=$1 AND tenant_id=$2', [tableId, tenantId])).rows[0]
+    : null;
+
+  let resolvedWaiterId = waiterId || null;
+  let waiterName = null;
+  if (!resolvedWaiterId && tableId) {
+    const ot = (await q('SELECT waiter_id FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, tenantId])).rows[0];
+    resolvedWaiterId = ot?.waiter_id || null;
+  }
+  if (resolvedWaiterId) {
+    const w = (await q('SELECT name FROM waiters WHERE id=$1 AND tenant_id=$2', [resolvedWaiterId, tenantId])).rows[0];
+    waiterName = w?.name || null;
+  }
+
+  const cid = clientTicketId ? String(clientTicketId).slice(0, 120) : null;
+
+  if (cid) {
+    // ON CONFLICT sobre el indice unico (tenant_id, client_ticket_id): si el
+    // ticket ya estaba, no inserta y devolvemos el original -> sin duplicados.
+    const r = await q(
+      `INSERT INTO kitchen_tickets
+         (tenant_id, table_id, table_num, waiter_id, waiter_name, items, notes, status, client_ticket_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8)
+       ON CONFLICT (tenant_id, client_ticket_id) WHERE client_ticket_id IS NOT NULL
+       DO NOTHING
+       RETURNING *`,
+      [tenantId, tableId || null, table?.num || null, resolvedWaiterId, waiterName,
+       JSON.stringify(items), notes || null, cid]
+    );
+    if (r.rows[0]) return { ticket: r.rows[0], duplicate: false };
+    const existing = (await q(
+      'SELECT * FROM kitchen_tickets WHERE tenant_id=$1 AND client_ticket_id=$2',
+      [tenantId, cid]
+    )).rows[0];
+    if (existing) return { ticket: existing, duplicate: true };
+  }
+
+  const r = await q(
+    `INSERT INTO kitchen_tickets
+       (tenant_id, table_id, table_num, waiter_id, waiter_name, items, notes, status, client_ticket_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',$8) RETURNING *`,
+    [tenantId, tableId || null, table?.num || null, resolvedWaiterId, waiterName,
+     JSON.stringify(items), notes || null, cid]
+  );
+  return { ticket: r.rows[0], duplicate: false };
+}
+
+app.post('/waiter/login', loginLimiter, async (req, res) => {
   try {
     const { email, pin } = req.body || {};
     if (!email || !pin) return res.status(400).json({ error: 'missing_fields' });
@@ -1144,26 +1215,50 @@ app.post('/waiter/open-tables', requireWaiterAuth, async (req, res) => {
   res.json(r.rows[0]);
 });
 
-// El mozo envía items pendientes a cocina
+// El mozo envía items pendientes a cocina (idempotente por clientTicketId)
 app.post('/waiter/kitchen', requireWaiterAuth, async (req, res) => {
-  const { tableId, items, notes } = req.body || {};
-  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'no_items' });
-  const table = tableId ? (await q('SELECT num FROM tables WHERE id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0] : null;
-  const r = await q(`INSERT INTO kitchen_tickets (tenant_id, table_id, table_num, waiter_id, waiter_name, items, notes, status)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING *`,
-    [req.tenant.id, tableId || null, table?.num || null, req.waiter.id, req.waiter.name,
-     JSON.stringify(items), notes || null]);
-  res.json(r.rows[0]);
+  try {
+    const { tableId, items, notes, clientTicketId } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'no_items' });
+    const { ticket, duplicate } = await createKitchenTicket({
+      tenantId: req.tenant.id,
+      tableId,
+      waiterId: req.waiter.id,
+      items,
+      notes,
+      clientTicketId
+    });
+    res.json({ ...ticket, duplicate });
+  } catch (e) {
+    console.error('[waiter-kitchen]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
+// Guarda los items de la mesa con control de version (rev).
+// Si otro celular/panel guardo primero, devolvemos 409 + la fila actual para que
+// el cliente combine en vez de pisar. Antes ganaba el ultimo en escribir y los
+// items del otro mozo se perdian sin aviso.
 app.put('/waiter/open-tables/:tid', requireWaiterAuth, async (req, res) => {
-  const { items } = req.body || {};
+  const { items, rev } = req.body || {};
   if (!Array.isArray(items)) return res.status(400).json({ error: 'invalid_items' });
   const ot = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.tid, req.tenant.id])).rows[0];
   if (!ot) return res.status(404).json({ error: 'table_not_open' });
   if (ot.waiter_id !== req.waiter.id && itemQty(ot.items) > 0) return res.status(403).json({ error: 'table_assigned_to_other_waiter' });
-  const r = await q(`UPDATE open_tables SET items=$1, waiter_id=$2 WHERE table_id=$3 AND tenant_id=$4 RETURNING *`,
-    [JSON.stringify(items), req.waiter.id, req.params.tid, req.tenant.id]);
+
+  const expected = Number.isInteger(rev) ? rev : null;
+  const r = await q(
+    `UPDATE open_tables
+        SET items=$1, waiter_id=$2, rev=COALESCE(rev,0)+1, updated_at=now()
+      WHERE table_id=$3 AND tenant_id=$4
+        AND ($5::int IS NULL OR COALESCE(rev,0) = $5::int)
+      RETURNING *`,
+    [JSON.stringify(items), req.waiter.id, req.params.tid, req.tenant.id, expected]
+  );
+  if (!r.rows[0]) {
+    const current = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [req.params.tid, req.tenant.id])).rows[0];
+    return res.status(409).json({ error: 'rev_conflict', current: current || null });
+  }
   res.json(r.rows[0]);
 });
 
@@ -1351,8 +1446,12 @@ app.post('/api/open-tables', async (req, res) => {
 });
 app.put('/api/open-tables/:tid', async (req, res) => {
   const { items, waiterId } = req.body || {};
-  const r = await q(`UPDATE open_tables SET items=COALESCE($1, items), waiter_id=COALESCE($2, waiter_id)
-                     WHERE table_id=$3 AND tenant_id=$4 RETURNING *`,
+  const r = await q(`UPDATE open_tables
+                        SET items=COALESCE($1, items),
+                            waiter_id=COALESCE($2, waiter_id),
+                            rev=COALESCE(rev,0)+1,
+                            updated_at=now()
+                      WHERE table_id=$3 AND tenant_id=$4 RETURNING *`,
     [items ? JSON.stringify(items) : null, waiterId || null, req.params.tid, req.tenant.id]);
   if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(r.rows[0]);
@@ -1556,18 +1655,66 @@ app.get('/api/kitchen', async (req, res) => {
   const r = await q(sql, [req.tenant.id]);
   res.json(r.rows);
 });
-// Crear ticket de cocina (mozo manda items a la cocina)
+// Crear ticket de cocina desde el panel (idempotente por clientTicketId)
 app.post('/api/kitchen', async (req, res) => {
-  const { tableId, items, notes } = req.body || {};
-  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'no_items' });
-  const table = tableId ? (await q('SELECT num FROM tables WHERE id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0] : null;
-  const ot = tableId ? (await q('SELECT waiter_id FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0] : null;
-  const waiter = ot?.waiter_id ? (await q('SELECT name FROM waiters WHERE id=$1', [ot.waiter_id])).rows[0] : null;
+  try {
+    const { tableId, items, notes, clientTicketId } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'no_items' });
+    const { ticket, duplicate } = await createKitchenTicket({
+      tenantId: req.tenant.id, tableId, waiterId: null, items, notes, clientTicketId
+    });
+    res.json({ ...ticket, duplicate });
+  } catch (e) {
+    console.error('[api-kitchen]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
 
-  const r = await q(`INSERT INTO kitchen_tickets (tenant_id, table_id, table_num, waiter_id, waiter_name, items, notes, status)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING *`,
-    [req.tenant.id, tableId || null, table?.num || null, ot?.waiter_id || null,
-     waiter?.name || null, JSON.stringify(items), notes || null]);
+// ----- COLA DE IMPRESION (comandera) -----
+// El estado "impreso" vive en la base, no en el localStorage de una PC.
+// Asi, si la estacion se reinicia a mitad del servicio, al volver retoma las
+// comandas que quedaron sin imprimir en vez de darlas por perdidas.
+app.get('/api/print-queue', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit || '30', 10) || 30, 100);
+  // maxAgeMin evita que, tras una caida larga, salgan 200 comandas viejas de golpe.
+  const maxAgeMin = Math.min(parseInt(req.query.maxAgeMin || '180', 10) || 180, 1440);
+  const r = await q(
+    `SELECT * FROM kitchen_tickets
+      WHERE tenant_id=$1
+        AND printed_at IS NULL
+        AND status <> 'delivered'
+        AND created_at > now() - ($2 || ' minutes')::interval
+      ORDER BY created_at ASC
+      LIMIT ${limit}`,
+    [req.tenant.id, String(maxAgeMin)]
+  );
+  res.json(r.rows);
+});
+
+// La estacion confirma que la comanda salio por la impresora.
+app.post('/api/print-queue/ack', async (req, res) => {
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'no_ids' });
+  const clean = ids.filter(id => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)).slice(0, 100);
+  if (!clean.length) return res.status(400).json({ error: 'no_ids' });
+  const r = await q(
+    `UPDATE kitchen_tickets
+        SET printed_at = COALESCE(printed_at, now()),
+            print_count = COALESCE(print_count, 0) + 1
+      WHERE tenant_id=$1 AND id = ANY($2::uuid[])
+      RETURNING id`,
+    [req.tenant.id, clean]
+  );
+  res.json({ ok: true, acked: r.rows.map(x => x.id) });
+});
+
+// Reimprimir a mano una comanda (la vuelve a poner en la cola).
+app.post('/api/print-queue/:id/reprint', async (req, res) => {
+  const r = await q(
+    'UPDATE kitchen_tickets SET printed_at=NULL WHERE id=$1 AND tenant_id=$2 RETURNING *',
+    [req.params.id, req.tenant.id]
+  );
+  if (!r.rows[0]) return res.status(404).json({ error: 'not_found' });
   res.json(r.rows[0]);
 });
 // Cambiar estado del ticket
@@ -2113,7 +2260,7 @@ app.get('/admin/configured', (req, res) => {
   res.json({ configured: !!(ADMIN_EMAIL && ADMIN_PASSWORD) });
 });
 
-app.post('/admin/login', authLimiter, async (req, res) => {
+app.post('/admin/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return res.status(503).json({ error: 'admin_not_configured' });

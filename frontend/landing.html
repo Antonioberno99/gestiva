@@ -1545,7 +1545,7 @@
 
   // Service worker: necesario para que el navegador ofrezca instalar la app.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260824-avisos-mozo')
+    navigator.serviceWorker.register('sw.js?v=20260907-circuito-confiable')
       .then((reg) => { reg.update().catch(() => {}); })
       .catch((e) => console.warn('[sw]', e.message));
   }

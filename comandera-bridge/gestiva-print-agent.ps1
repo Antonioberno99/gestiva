@@ -8,7 +8,7 @@ $ConfigFile = Join-Path $AppDir 'config.json'
 $StateFile = Join-Path $AppDir 'state.json'
 $LogFile = Join-Path $AppDir 'agent.log'
 $PollSeconds = 4
-$AgentVersion = '3.3.0'
+$AgentVersion = '3.4.0'
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
 function Write-AgentLog($Message) {
@@ -553,6 +553,11 @@ function Send-RoutedTicket($Ticket, $Config) {
 }
 
 function Invoke-CloudPoll {
+  # Lee la COLA DE IMPRESION del servidor (comandas con printed_at NULL) y
+  # confirma cada una recien despues de que salio por la impresora.
+  # Antes se leia /api/kitchen y, al arrancar, se marcaba todo lo pendiente como
+  # impreso: si la PC se reiniciaba a mitad del servicio, esas comandas no
+  # salian nunca. Ahora el estado vive en la base y el reinicio las recupera.
   $cfg = Get-AgentConfig
   $mode = Get-PrinterMode $cfg
   $hasPrinter = (($mode -eq 'windows' -and $cfg.printerName) -or ($mode -ne 'windows' -and $cfg.printerIp))
@@ -560,26 +565,34 @@ function Invoke-CloudPoll {
   $api = ([string]$cfg.apiUrl).TrimEnd('/')
   try {
     $headers = @{ Authorization = 'Bearer ' + [string]$cfg.token }
-    $tickets = Invoke-RestMethod -Uri ($api + '/api/kitchen') -Headers $headers -TimeoutSec 12
     $state = Get-AgentState
-    $printed = New-Object 'System.Collections.Generic.HashSet[string]'
-    foreach ($id in @($state.printed)) { if ($id) { [void]$printed.Add([string]$id) } }
+
+    # Primera vez que se vincula esta estacion: damos por impreso lo que ya
+    # habia, para no escupir el historial del dia al instalarla.
     if (-not $state.seededAt) {
-      foreach ($t in @($tickets)) { if ($t.id) { [void]$printed.Add([string]$t.id) } }
+      $viejas = Invoke-RestMethod -Uri ($api + '/api/print-queue?maxAgeMin=720') -Headers $headers -TimeoutSec 12
+      $ids = @(@($viejas) | ForEach-Object { [string]$_.id } | Where-Object { $_ })
+      if ($ids.Count -gt 0) {
+        $body = @{ ids = $ids } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri ($api + '/api/print-queue/ack') -Headers $headers -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 12 | Out-Null
+      }
       $state.seededAt = (Get-Date).ToString('o')
-      $state.printed = @($printed)
       Save-AgentState $state
-      Write-AgentLog 'cloud station seeded existing kitchen tickets'
+      Write-AgentLog "cloud station seeded ($($ids.Count) comandas previas marcadas)"
       return
     }
+
+    # Ventana de 30 min: si la PC estuvo apagada un rato, recupera el servicio
+    # en curso sin imprimir de golpe comandas de hace horas.
+    $tickets = Invoke-RestMethod -Uri ($api + '/api/print-queue?maxAgeMin=30') -Headers $headers -TimeoutSec 12
     foreach ($t in @($tickets)) {
       if (-not $t.id) { continue }
       $id = [string]$t.id
-      if ($printed.Contains($id)) { continue }
+      # Si falla la impresion, Send-RoutedTicket tira excepcion: NO confirmamos
+      # y la comanda sigue en la cola para el proximo intento.
       Send-RoutedTicket $t $cfg
-      [void]$printed.Add($id)
-      $state.printed = @($printed)
-      Save-AgentState $state
+      $body = @{ ids = @($id) } | ConvertTo-Json -Compress
+      Invoke-RestMethod -Uri ($api + '/api/print-queue/ack') -Headers $headers -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 12 | Out-Null
       Write-AgentLog "printed kitchen ticket $id"
     }
   } catch {

@@ -731,6 +731,10 @@ const API = {
   kitchen: () => api('/api/kitchen'),
   kitchenCreate: (b) => api('/api/kitchen', { method:'POST', body: JSON.stringify(b) }),
   kitchenUpdate: (id, b) => api('/api/kitchen/'+id, { method:'PUT', body: JSON.stringify(b) }),
+  // Cola de impresion: el estado "impreso" vive en la base, no en esta PC.
+  printQueue: (maxAgeMin) => api('/api/print-queue?maxAgeMin=' + (maxAgeMin || 30)),
+  printAck: (ids) => api('/api/print-queue/ack', { method:'POST', body: JSON.stringify({ ids }) }),
+  printReprint: (id) => api('/api/print-queue/'+id+'/reprint', { method:'POST' }),
   pendingOrders: () => api('/api/pending-orders'),
   pendingOrderCreate: (b) => api('/api/pending-orders', { method:'POST', body: JSON.stringify(b) }),
   pendingOrderUpdate: (id, b) => api('/api/pending-orders/'+id, { method:'PUT', body: JSON.stringify(b) }),
@@ -1541,7 +1545,12 @@ async function sendToKitchen() {
     return { name: p?.name, qty: it.qty, cat: p?.cat || '', segment: p?.segment || '', modifiers: it.modifiers||[], notes: it.notes||'' };
   });
   try {
-    await API.kitchenCreate({ tableId: CURRENT_TID, items: itemsForKitchen });
+    // Id propio: si el navegador reintenta o el usuario toca dos veces,
+    // el backend reconoce el id y no crea una segunda comanda.
+    const clientTicketId = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'p-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    await API.kitchenCreate({ tableId: CURRENT_TID, items: itemsForKitchen, clientTicketId });
     CURRENT_ITEMS.forEach(it => { if (!it.sentToKitchen) it.sentToKitchen = true; });
     persistItems(); renderTableMenu();
     toast('Enviado a cocina','success');
@@ -3115,14 +3124,11 @@ refreshPedidosBadge();
 // Circuito: app del equipo -> panel central -> comandera.
 // El celular solo envia el pedido. La computadora central imprime si queda abierta
 // con "Usar esta PC como estacion central" activado en Comandera.
-let _printedTickets = new Set();
-let _kitchenStationSeeded = false;
-try { _printedTickets = new Set(JSON.parse(localStorage.getItem('gestiva_printed_tickets') || '[]')); } catch(e) {}
-function _persistPrinted() {
-  const arr = [..._printedTickets].slice(-400);
-  _printedTickets = new Set(arr);
-  try { localStorage.setItem('gestiva_printed_tickets', JSON.stringify(arr)); } catch(e) {}
-}
+// El estado "impreso" ya NO vive en el localStorage de esta PC: vive en la base.
+// Antes, al abrir el panel se marcaban todas las comandas pendientes como
+// impresas, asi que todo lo que entraba con la PC apagada no salia nunca.
+const PRINT_WINDOW_MIN = 30;   // ventana razonable de un servicio en curso
+let _stationBusy = false;
 function kitchenTicketData(t) {
   return {
     restaurant: (USER && USER.restaurantName) || 'Gestiva',
@@ -3138,38 +3144,38 @@ function kitchenStationEnabled(cfg) {
   const localAgentHandlesPrint = cfg && (cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName));
   return !!(cfg && cfg.kitchenAuto && cfg.method !== 'screen' && cfg.method !== 'browser' && !localAgentHandlesPrint);
 }
+// Al ACTIVAR la estacion por primera vez damos por impreso lo que ya estaba,
+// para no escupir el historial del dia de golpe. Esto corre solo cuando el
+// usuario guarda la configuracion, nunca al abrir el panel.
 async function seedKitchenStation() {
-  let tickets;
-  try { tickets = await API.kitchen(); } catch (e) { return; }
-  tickets.forEach(t => _printedTickets.add(t.id));
-  _persistPrinted();
-  _kitchenStationSeeded = true;
+  try {
+    const pend = await API.printQueue(720);
+    if (pend.length) await API.printAck(pend.map(t => t.id));
+  } catch (e) {}
 }
+
 async function kitchenStationTick() {
-  if (!window.Comandera) return;
+  if (_stationBusy || !window.Comandera) return;
   const cfg = Comandera.getCfg();
   if (!kitchenStationEnabled(cfg)) return;
-  let tickets;
-  try { tickets = await API.kitchen(); } catch (e) { return; }
-  if (!_kitchenStationSeeded) {
-    tickets.forEach(t => _printedTickets.add(t.id));
-    _persistPrinted();
-    _kitchenStationSeeded = true;
-    return;
-  }
-  const nuevos = tickets.filter(t => !_printedTickets.has(t.id));
-  for (const t of nuevos) {
-    try {
+  _stationBusy = true;
+  try {
+    // La base dice que falta imprimir. Si esta PC estuvo apagada o el navegador
+    // cerrado, al volver retoma lo pendiente en vez de perderlo.
+    const pendientes = await API.printQueue(PRINT_WINDOW_MIN);
+    for (const t of pendientes) {
       await Comandera.print(kitchenTicketData(t));
-      _printedTickets.add(t.id); _persistPrinted();
-    } catch (e) {
-      // Si la impresora o el puente fallan, no marcamos como impreso. Se reintenta en la proxima vuelta.
-      break;
+      // Confirmamos DESPUES de imprimir: si falla la impresora, sigue en cola.
+      await API.printAck([t.id]);
     }
+  } catch (e) {
+    // Impresora, puente o red caidos: no confirmamos nada y se reintenta
+    // en la proxima vuelta. Ninguna comanda se da por impresa sin salir.
+  } finally {
+    _stationBusy = false;
   }
 }
 window.onComanderaSaved = async (cfg) => {
-  _kitchenStationSeeded = false;
   if (cfg && (cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName))) {
     toast('Estacion de impresion guardada. El agente local imprime las comandas nuevas.', 'success');
     return;
@@ -3194,7 +3200,9 @@ window.addEventListener('focus', kitchenStationTick);
       location.href = 'checkout.html'; return;
     }
     if (!location.hash) location.hash = '#/dashboard';
-    await seedKitchenStation();
+    // Sin seed al abrir: si quedaron comandas sin imprimir, kitchenStationTick
+    // las levanta de la cola y las imprime.
+    kitchenStationTick();
     navigate();
   } catch (e) {
     console.error(e);
@@ -3316,7 +3324,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260824-avisos-mozo')
+    navigator.serviceWorker.register('sw.js?v=20260907-circuito-confiable')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
