@@ -50,3 +50,34 @@ En esta carpeta, doble clic en:
 Luego abrir:
 
 `http://127.0.0.1:7777/setup`
+
+## Probar el agente antes de tocar una comandera de un cliente
+
+La conexión con las impresoras es la parte más delicada del sistema. Antes de
+publicar un cambio en `gestiva-print-agent.ps1`, correr:
+
+```powershell
+# con el backend corriendo (local o de prueba)
+pwsh -File comandera-bridge/test-agente.ps1 -Api http://127.0.0.1:3100
+```
+
+Ejecuta el `Invoke-CloudPoll` real del agente contra el backend, con la
+impresora reemplazada por un espía (no imprime de verdad). Cubre:
+
+| Escenario | Qué verifica |
+|---|---|
+| Instalación nueva | No escupe el historial del día al vincularse |
+| Operación normal | Imprime cada comanda nueva y no la repite |
+| Papel trabado | Si falla la impresora no se confirma nada: sale al reintento |
+| **Actualizar desde un agente viejo** | No reimprime lo que el agente anterior ya sacó |
+| Después de actualizar | Sigue imprimiendo normal |
+
+El cuarto es el más importante: un local que ya tiene la comandera andando no
+puede recibir una pila de comandas repetidas por actualizar el agente.
+
+Para probar una versión anterior contra el backend actual:
+
+```powershell
+git show <commit>:comandera-bridge/gestiva-print-agent.ps1 > /tmp/agente-viejo.ps1
+pwsh -File comandera-bridge/test-agente.ps1 -AgentFile /tmp/agente-viejo.ps1
+```
