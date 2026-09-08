@@ -1475,16 +1475,20 @@
       if (s.installed) {
         btn.textContent = 'Abrir Gestiva';
         hint.textContent = 'Ya tenés Gestiva instalado en este dispositivo.';
+      } else if (s.needsSafari) {
+        btn.textContent = 'Abrir en Safari para instalar';
       } else if (s.ios) {
-        btn.textContent = 'Cómo instalarlo en iPhone';
+        btn.textContent = 'Instalar en mi iPhone';
       }
     });
 
     btn.onclick = async () => {
       if (GestivaInstall.installed) { location.href = '/app'; return; }
+      // En iPhone prompt() muestra la guía visual (Apple no permite instalar
+      // desde la web); en Android/PC dispara el diálogo nativo.
       const r = await GestivaInstall.prompt();
-      if (r === 'ios') {
-        alert('Para instalar Gestiva en iPhone o iPad:\n\n1. Tocá el botón Compartir (el cuadrado con la flecha)\n2. Elegí "Agregar a inicio"\n3. Confirmá con "Agregar"\n\nVa a quedar el ícono de Gestiva en tu pantalla.');
+      if (r === 'ios' || r === 'safari') {
+        return;
       } else if (r === 'unavailable') {
         // Todavía no se puede instalar desde acá (o el navegador no lo soporta):
         // el alta es el camino natural, y desde el panel se ofrece instalar.
@@ -1545,7 +1549,7 @@
 
   // Service worker: necesario para que el navegador ofrezca instalar la app.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260907-circuito-confiable')
+    navigator.serviceWorker.register('sw.js?v=20260908-instalar-iphone')
       .then((reg) => { reg.update().catch(() => {}); })
       .catch((e) => console.warn('[sw]', e.message));
   }
