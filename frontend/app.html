@@ -3324,7 +3324,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260907-circuito-confiable')
+    navigator.serviceWorker.register('sw.js?v=20260908-instalar-iphone')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });

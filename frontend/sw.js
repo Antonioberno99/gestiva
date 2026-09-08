@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-v11-circuito-confiable';
+const CACHE_NAME = 'gestiva-v12-instalar-iphone';
 
 // Shells que guardamos para que la app abra aunque no haya internet.
 // /mozo  → app del equipo (mozos)
