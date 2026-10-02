@@ -49,6 +49,16 @@ const check=(n,ok,d)=>{ok?(pass++,console.log('  ✅ '+n)):(fail++,console.log('
   const c4=await req('/api/print-queue',{token:station});
   check('sigue en la cola tras el fallo (se reintenta)',c4.data.length===1,`n=${c4.data.length}`);
 
+  console.log('\n\x1b[1mEL TOKEN DE LA PC DE COMANDAS SOLO SIRVE PARA IMPRIMIR\x1b[0m');
+  const k = await req('/api/kitchen',{token:station});
+  check('puede leer la cocina (agente viejo 3.3.0)',k.status===200,`status=${k.status}`);
+  for (const [m,p] of [['GET','/api/customers'],['GET','/api/orders'],['GET','/api/cash'],['GET','/api/fiscal-config'],['PUT','/api/settings'],['POST','/api/print-station/token'],['GET','/api/invoices']]) {
+    const r = await req(p,{method:m,token:station,body:m==='GET'?undefined:{}});
+    check(`NO puede ${m} ${p}`, r.status===403, `status=${r.status}`);
+  }
+  const dueño = await req('/api/customers',{token:owner});
+  check('el dueño sigue accediendo normal',dueño.status===200);
+
   console.log(`\n${'─'.repeat(50)}`);
   console.log(fail===0?`\x1b[32m\x1b[1m✅ ${pass}/${pass+fail} — la comandera funciona con su token\x1b[0m`:`\x1b[31m${fail} fallaron\x1b[0m`);
   process.exit(fail?1:0);
