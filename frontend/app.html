@@ -375,7 +375,8 @@
 
 <script src="gestiva-config.js"></script>
 <script src="install-app.js"></script>
-<script src="comandera.js?v=20260702-multi-comanderas"></script>
+<script src="assets/vendor/qrcode.js"></script>
+<script src="comandera.js?v=20261002-factura-impresa"></script>
 <script>
 // ============================================================
 //                   GASTROPANEL APP (API-backed)
@@ -655,7 +656,12 @@ async function api(path, opts = {}) {
   catch (e) { if (!r.ok) throw new Error('El servidor no responde. Reintentá en unos segundos.'); }
   if (r.status === 401) { clearSession(); location.href = 'login.html'; throw new Error('unauthorized'); }
   if (r.status === 402) { location.href = 'checkout.html'; throw new Error('subscription_required'); }
-  if (!r.ok) throw new Error(data.error || 'api_error');
+  if (!r.ok) {
+    const err = new Error(data.error || 'api_error');
+    err.detail = data.detail || '';   // el backend explica el motivo en castellano
+    err.status = r.status;
+    throw err;
+  }
   return data;
 }
 
@@ -1625,17 +1631,7 @@ async function chargeTable() {
       </div>
     </div>
     <div id="facturaBlock" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
-      <label style="color:#1e40af;">¿Cómo factura el cliente?</label>
-      <select id="facDocTipo" onchange="updateFacDoc()">
-        <option value="99">Consumidor Final (sin datos)</option>
-        <option value="80">Con CUIT</option>
-        <option value="96">Con DNI</option>
-      </select>
-      <div id="facDocNroBlock" style="display:none;margin-top:8px;">
-        <input id="facDocNro" placeholder="Número de CUIT o DNI" inputmode="numeric"/>
-        <input id="facNombre" placeholder="Nombre / Razón social (opcional)" style="margin-top:6px;"/>
-      </div>
-      <p style="font-size:11px;color:var(--tx-mid);margin-top:8px;">Emite factura electrónica con ARCA (CAE + QR). Cargá tu certificado en Ajustes → Datos fiscales.</p>
+      ${facturaFormHTML()}
     </div>
     <div class="field" style="margin-top:14px;"><label>Notas (opcional)</label><textarea id="orderNote" rows="2"></textarea></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -1646,11 +1642,87 @@ function setDocMode(mode) {
   document.getElementById('docTicket').classList.toggle('active', mode==='ticket');
   document.getElementById('docFactura').classList.toggle('active', mode==='factura');
   const b = document.getElementById('facturaBlock'); if (b) b.style.display = mode==='factura' ? '' : 'none';
+  if (mode === 'factura') getFiscal().then(updateFacDoc);
+}
+// ---------- Factura: a quién se le factura ----------
+// Cada opción define el documento y la condición frente al IVA del cliente
+// (CondicionIVAReceptorId, obligatoria para ARCA). La letra la decide el backend
+// según la condición del restaurante; acá solo la anticipamos.
+const FAC_TIPOS = {
+  cf:      { label: 'Consumidor final (sin datos)',         docTipo: 99, cond: 'consumidor_final' },
+  cf_dni:  { label: 'Consumidor final con DNI',             docTipo: 96, cond: 'consumidor_final' },
+  cf_cuit: { label: 'Consumidor final con CUIT',            docTipo: 80, cond: 'consumidor_final' },
+  ri:      { label: 'Responsable Inscripto (empresa)',      docTipo: 80, cond: 'responsable_inscripto' },
+  mono:    { label: 'Monotributista',                       docTipo: 80, cond: 'monotributo' },
+  exento:  { label: 'Exento en IVA',                        docTipo: 80, cond: 'exento' }
+};
+let FISCAL_CACHE = null;
+async function getFiscal() {
+  if (FISCAL_CACHE) return FISCAL_CACHE;
+  try { FISCAL_CACHE = await api('/api/fiscal-config'); } catch (e) { FISCAL_CACHE = {}; }
+  return FISCAL_CACHE;
+}
+function facLetra(tipoKey) {
+  const f = FISCAL_CACHE || {};
+  if (f.fiscalCondition !== 'responsable_inscripto') return 'C';
+  return (tipoKey === 'ri' || tipoKey === 'mono') ? 'A' : 'B';
+}
+function facturaFormHTML() {
+  return `
+    <label style="color:#1e40af;">¿A quién se le factura?</label>
+    <select id="facTipo" onchange="updateFacDoc()">
+      ${Object.entries(FAC_TIPOS).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
+    </select>
+    <div id="facDocNroBlock" style="display:none;margin-top:8px;">
+      <input id="facDocNro" placeholder="CUIT (11 números)" inputmode="numeric"/>
+      <input id="facNombre" placeholder="Nombre o razón social" style="margin-top:6px;"/>
+      <input id="facDomicilio" placeholder="Domicilio" style="margin-top:6px;display:none;"/>
+    </div>
+    <div id="facLetraInfo" style="font-size:12px;color:#1e40af;margin-top:8px;font-weight:600;"></div>
+    <p style="font-size:11px;color:var(--tx-mid);margin-top:6px;">Factura electrónica con ARCA (CAE + QR). Los datos del restaurante se cargan en Ajustes → Datos fiscales.</p>`;
 }
 function updateFacDoc() {
-  const t = document.getElementById('facDocTipo'); if (!t) return;
-  const needsNro = (t.value==='80' || t.value==='96');
-  const blk = document.getElementById('facDocNroBlock'); if (blk) blk.style.display = needsNro ? '' : 'none';
+  const sel = document.getElementById('facTipo'); if (!sel) return;
+  const k = sel.value, t = FAC_TIPOS[k];
+  const blk = document.getElementById('facDocNroBlock');
+  if (blk) blk.style.display = t.docTipo === 99 ? 'none' : '';
+  const nro = document.getElementById('facDocNro');
+  if (nro) nro.placeholder = t.docTipo === 96 ? 'DNI' : 'CUIT (11 números)';
+  const esA = facLetra(k) === 'A';
+  const dom = document.getElementById('facDomicilio');
+  if (dom) dom.style.display = esA ? '' : 'none';   // la Factura A lleva el domicilio del cliente
+  const nom = document.getElementById('facNombre');
+  if (nom) nom.placeholder = esA ? 'Razón social (obligatoria)' : 'Nombre o razón social (opcional)';
+  const info = document.getElementById('facLetraInfo');
+  if (info) info.textContent = 'Se emite Factura ' + facLetra(k) + '.';
+}
+// Lee y valida el formulario de factura. Devuelve los datos o un texto de error.
+function leerFacturaForm() {
+  const k = (document.getElementById('facTipo') || {}).value || 'cf';
+  const t = FAC_TIPOS[k];
+  const out = { tipo: k, docTipo: t.docTipo, docNro: '0', condicionReceptor: t.cond,
+                nombre: ((document.getElementById('facNombre') || {}).value || '').trim(),
+                domicilio: ((document.getElementById('facDomicilio') || {}).value || '').trim() };
+  if (t.docTipo !== 99) {
+    out.docNro = ((document.getElementById('facDocNro') || {}).value || '').replace(/\D/g, '');
+    if (t.docTipo === 80 && out.docNro.length !== 11) return { error: 'El CUIT tiene 11 números' };
+    if (t.docTipo === 96 && (out.docNro.length < 7 || out.docNro.length > 8)) return { error: 'DNI inválido' };
+  }
+  if (facLetra(k) === 'A' && !out.nombre) return { error: 'Para Factura A cargá la razón social del cliente' };
+  return out;
+}
+// Pide la factura de una venta ya cobrada. Nunca duplica: el backend devuelve la
+// misma si ya existe, y si quedó un intento cortado lo verifica con ARCA.
+async function emitirFacturaVenta(orderId, facData) {
+  try {
+    const r = await api('/api/invoices', { method: 'POST', body: JSON.stringify({
+      orderId, docTipo: facData.docTipo, docNro: facData.docNro, condicionReceptor: facData.condicionReceptor,
+      nombre: facData.nombre, domicilio: facData.domicilio
+    })});
+    return { ok: true, invoice: r.invoice, recovered: r.recovered, duplicate: r.duplicate };
+  } catch (e) {
+    return { ok: false, code: e.message, detail: e.detail || '' };
+  }
 }
 function setPayMode(mode) {
   document.getElementById('modeSimple').classList.toggle('active', mode==='simple');
@@ -1722,14 +1794,8 @@ async function confirmCharge(total) {
   const wantFactura = document.getElementById('docFactura')?.classList.contains('active');
   let facData = null;
   if (wantFactura) {
-    const docTipo = parseInt(document.getElementById('facDocTipo').value, 10);
-    let docNro = '0';
-    if (docTipo === 80 || docTipo === 96) {
-      docNro = (document.getElementById('facDocNro').value||'').replace(/\D/g,'');
-      const minLen = docTipo === 80 ? 11 : 7;
-      if (docNro.length < minLen) return toast(docTipo===80 ? 'CUIT inválido (11 dígitos)' : 'DNI inválido','error');
-    }
-    facData = { docTipo, docNro, nombre: (document.getElementById('facNombre')?.value||'').trim() };
+    facData = leerFacturaForm();
+    if (facData.error) return toast(facData.error, 'error');
   }
   const payload = {
     tableId: CURRENT_TID,
@@ -1768,15 +1834,13 @@ async function confirmCharge(total) {
   try {
     const order = await API.createOrder(payload);
     const sale = buildSaleFromCharge(order, payload);
-    // Si se pidió factura, emitirla. El cobro YA quedó registrado: si ARCA falla, no se pierde la venta.
+    // Si se pidió factura, emitirla. El cobro YA quedó registrado: si ARCA falla,
+    // la venta no se pierde y la factura se puede reintentar desde el comprobante.
     if (facData) {
-      try {
-        const inv = await api('/api/invoices', { method:'POST', body: JSON.stringify({
-          orderId: order.id, docTipo: facData.docTipo, docNro: facData.docNro,
-          nombre: facData.nombre, importeTotal: sale.total
-        })});
-        if (inv && inv.invoice) { sale.invoice = inv.invoice; toast('Factura emitida ✓ CAE '+inv.invoice.cae,'success'); }
-      } catch(e) { toast('Cobro OK, pero la factura falló: '+(e.message||e),'error'); }
+      sale.facData = facData;
+      const r = await emitirFacturaVenta(order.id, facData);
+      if (r.ok) { sale.invoice = r.invoice; toast('Factura ' + r.invoice.letra + ' emitida ✓', 'success'); }
+      else sale.invoiceError = r;
     }
     CASH_CACHE = null; CURRENT_DISCOUNT = 0; CURRENT_DISCOUNT_TYPE='amount';
     await refreshCashPill();
@@ -1827,7 +1891,8 @@ function buildSaleFromCharge(order, payload) {
     subtotal: order.subtotal,
     discount: order.discount,
     total: (order.total!=null?order.total:window.__total),
-    payments
+    payments,
+    orderId: order.id
   };
 }
 
@@ -1836,6 +1901,7 @@ function showReceiptModal(sale, backHash) {
   backHash = backHash || '#/mesas';
   const payTxt = sale.payments.map(p => Comandera.payLabel(p.method) + (sale.payments.length>1 ? ' '+fmt(p.amount) : '')).join(' + ');
   window.__lastSale = sale;
+  window.__lastBackHash = backHash;
   openModal('Cobro registrado', `
     <div style="text-align:center;padding:4px 0;">
       <div style="width:54px;height:54px;border-radius:50%;background:var(--green-lt,#d1fae5);display:grid;place-items:center;margin:0 auto 12px;">
@@ -1844,22 +1910,104 @@ function showReceiptModal(sale, backHash) {
       <div style="font-size:13px;color:var(--tx-mid);">Total cobrado${sale.table?' · Mesa '+sale.table:''}</div>
       <div style="font-size:34px;font-weight:800;font-family:var(--ff-display);color:#10b981;">${fmt(sale.total)}</div>
       <div style="margin-top:8px;font-size:14px;color:var(--tx-dark);">Forma de pago: <strong>${payTxt}</strong></div>
-      <div style="margin-top:4px;font-size:12px;color:var(--tx-lt);">Entregale el comprobante al cliente</div>
-      ${sale.invoice ? `
-      <div style="margin-top:14px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;text-align:left;">
-        <div style="font-weight:700;color:#065f46;">Factura ${sale.invoice.letra||''} emitida</div>
-        <div style="font-size:13px;color:var(--tx-dark);margin-top:4px;">N° ${String(sale.invoice.pto_vta||0).padStart(4,'0')}-${String(sale.invoice.nro||0).padStart(8,'0')}</div>
-        <div style="font-size:13px;color:var(--tx-dark);">CAE: <strong>${sale.invoice.cae||'—'}</strong>${sale.invoice.cae_vto?' · Vto '+sale.invoice.cae_vto:''}</div>
-        ${sale.invoice.qr_url ? `<a href="${sale.invoice.qr_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#047857;">Ver / verificar en AFIP →</a>` : ''}
-      </div>` : ''}
+      <div id="facturaEstado">${facturaEstadoHTML(sale)}</div>
     </div>`,
-    `<button class="btn btn-secondary" onclick="closeModal();location.hash='${backHash}';">Listo</button>
-     <button class="btn btn-primary" onclick="printSaleReceipt()">Imprimir comprobante</button>`);
+    `<button class="btn btn-secondary" onclick="closeModal();if(location.hash==='${backHash}'){navigate();}else{location.hash='${backHash}';}">Listo</button>
+     <button class="btn btn-primary" id="btnImprimirVenta" onclick="printSaleReceipt()">${sale.invoice ? 'Imprimir factura' : 'Imprimir comprobante'}</button>`);
+}
+
+// Estado de la factura de una venta: emitida, con error (reintentar) o sin pedir.
+function facturaEstadoHTML(sale) {
+  const inv = sale.invoice;
+  if (inv) {
+    return `<div style="margin-top:14px;padding:12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;text-align:left;">
+      <div style="font-weight:700;color:#065f46;">Factura ${inv.letra||''} emitida${inv.raw && inv.raw.comprobante && inv.raw.comprobante.env === 'homologacion' ? ' (PRUEBA)' : ''}</div>
+      <div style="font-size:13px;color:var(--tx-dark);margin-top:4px;">N° ${String(inv.pto_vta||0).padStart(5,'0')}-${String(inv.nro||0).padStart(8,'0')}</div>
+      <div style="font-size:13px;color:var(--tx-dark);">CAE: <strong>${inv.cae||'—'}</strong>${inv.cae_vto?' · Vto '+String(inv.cae_vto).slice(0,10):''}</div>
+      ${inv.qr_url ? `<a href="${inv.qr_url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#047857;">Verificar en ARCA →</a>` : ''}
+    </div>`;
+  }
+  if (sale.invoiceError) {
+    const e = sale.invoiceError;
+    const sinRespuesta = e.code === 'arca_sin_respuesta';
+    return `<div style="margin-top:14px;padding:12px;background:${sinRespuesta ? '#fffbeb' : '#fef2f2'};border:1px solid ${sinRespuesta ? '#fde68a' : '#fecaca'};border-radius:10px;text-align:left;">
+      <div style="font-weight:700;color:${sinRespuesta ? '#92400e' : '#991b1b'};">${sinRespuesta ? 'ARCA no respondió' : 'La factura no se emitió'}</div>
+      <div style="font-size:13px;color:var(--tx-dark);margin-top:4px;">${escHtml(e.detail || e.code || 'Error al facturar')}</div>
+      <div style="font-size:12px;color:var(--tx-mid);margin-top:4px;">El cobro quedó registrado. Podés reintentar ahora o más tarde desde Reportes → Ventas y facturas.</div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="reintentarFactura()">Reintentar factura</button>
+        <button class="btn btn-secondary btn-sm" onclick="mostrarFormFactura()">Cambiar datos del cliente</button>
+      </div>
+    </div>`;
+  }
+  if (sale.orderId) {
+    return `<div style="margin-top:12px;"><a onclick="mostrarFormFactura()" style="font-size:13px;color:var(--or-dk);cursor:pointer;font-weight:600;">Emitir factura de esta venta</a></div>`;
+  }
+  return '';
+}
+function escHtml(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function refrescarFacturaEstado() {
+  const box = document.getElementById('facturaEstado');
+  const sale = window.__lastSale;
+  if (box && sale) box.innerHTML = facturaEstadoHTML(sale);
+  const b = document.getElementById('btnImprimirVenta');
+  if (b && sale) b.textContent = sale.invoice ? 'Imprimir factura' : 'Imprimir comprobante';
+}
+async function mostrarFormFactura() {
+  const box = document.getElementById('facturaEstado');
+  if (!box) return;
+  await getFiscal();
+  box.innerHTML = `<div style="margin-top:14px;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;text-align:left;">
+    ${facturaFormHTML()}
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-primary btn-sm" id="btnEmitirFactura" onclick="emitirDesdeForm()">Emitir factura</button>
+      <button class="btn btn-secondary btn-sm" onclick="refrescarFacturaEstado()">Cancelar</button>
+    </div></div>`;
+  const prev = window.__lastSale && window.__lastSale.facData;
+  if (prev) {
+    document.getElementById('facTipo').value = prev.tipo || 'cf';
+    if (document.getElementById('facDocNro')) document.getElementById('facDocNro').value = prev.docNro && prev.docNro !== '0' ? prev.docNro : '';
+    if (document.getElementById('facNombre')) document.getElementById('facNombre').value = prev.nombre || '';
+    if (document.getElementById('facDomicilio')) document.getElementById('facDomicilio').value = prev.domicilio || '';
+  }
+  updateFacDoc();
+}
+let FACTURANDO = false;
+async function emitirDesdeForm() {
+  const sale = window.__lastSale; if (!sale || FACTURANDO) return;
+  const facData = leerFacturaForm();
+  if (facData.error) return toast(facData.error, 'error');
+  sale.facData = facData;
+  await facturarVentaUI(sale, 'btnEmitirFactura');
+}
+async function reintentarFactura() {
+  const sale = window.__lastSale; if (!sale || !sale.facData || FACTURANDO) return;
+  await facturarVentaUI(sale, null);
+}
+async function facturarVentaUI(sale, btnId) {
+  FACTURANDO = true;
+  const b = btnId ? document.getElementById(btnId) : null;
+  if (b) { b.disabled = true; b.textContent = 'Emitiendo...'; }
+  try {
+    const r = await emitirFacturaVenta(sale.orderId, sale.facData);
+    if (r.ok) {
+      sale.invoice = r.invoice; sale.invoiceError = null;
+      toast(r.recovered ? 'Factura recuperada de ARCA ✓' : 'Factura ' + r.invoice.letra + ' emitida ✓', 'success');
+    } else sale.invoiceError = r;
+  } finally {
+    FACTURANDO = false;
+    refrescarFacturaEstado();
+  }
 }
 async function printSaleReceipt() {
-  if (!window.__lastSale || !window.Comandera) return;
-  try { await Comandera.printReceipt(window.__lastSale); }
-  catch(e) { toast('No se pudo imprimir: ' + (e.message||e), 'error'); }
+  const sale = window.__lastSale;
+  if (!sale || !window.Comandera) return;
+  try {
+    // Con factura emitida se imprime la FACTURA (con CAE y QR); si no, el comprobante interno.
+    if (sale.invoice) await Comandera.printInvoice(sale.invoice);
+    else await Comandera.printReceipt(sale);
+  } catch(e) { toast('No se pudo imprimir: ' + (e.message||e), 'error'); }
 }
 
 // ---------- PEDIDOS (Delivery / Take Away) ----------
@@ -2669,7 +2817,12 @@ async function confirmCustomerPayment(id) {
 
 // ---------- REPORTES ----------
 route('reportes', async () => {
-  const orders = await API.orders('?limit=500');
+  const [orders, invoices] = await Promise.all([
+    API.orders('?limit=500'),
+    api('/api/invoices?limit=200').catch(() => [])
+  ]);
+  window.__repOrders = orders;
+  window.__repInvoices = invoices || [];
   const products = await API.products();
   const waiters = await API.waiters();
   const today_ = today();
@@ -2744,8 +2897,76 @@ route('reportes', async () => {
         ${Object.entries(methods).sort((a,b)=>b[1]-a[1]).map(([m,v]) => `<div class="bar-row">
           <div style="text-transform:capitalize;">${m}</div><div class="bar-track"><div class="bar-fill" style="width:${(v/totalMethods)*100}%"></div></div>
           <div style="font-weight:700;">${fmt(v)} <span style="color:var(--tx-mid);font-weight:500;">(${Math.round(v/totalMethods*100)}%)</span></div></div>`).join('')}</div>`}
-    </div>`;
+    </div>
+    ${ventasFacturasHTML(orders, invoices || [])}`;
 });
+
+// ---------- Ventas y facturas: facturar, reintentar o reimprimir después ----------
+function facturaDeVenta(orderId, invoices) {
+  const delPedido = invoices.filter(i => i.order_id === orderId);
+  return delPedido.find(i => i.status === 'approved') || delPedido.find(i => i.status === 'pending') || delPedido[0] || null;
+}
+function facDataDesdeFactura(inv) {
+  if (!inv) return null;
+  const c = Number(inv.cond_iva_receptor_id) || 5, d = Number(inv.doc_tipo) || 99;
+  const tipo = d === 99 ? 'cf' : d === 96 ? 'cf_dni' : c === 5 ? 'cf_cuit' : c === 1 ? 'ri' : [6, 13, 16].includes(c) ? 'mono' : 'exento';
+  const t = FAC_TIPOS[tipo];
+  return { tipo, docTipo: t.docTipo, docNro: inv.doc_nro || '0', condicionReceptor: t.cond,
+           nombre: inv.cliente_nombre || '', domicilio: inv.cliente_domicilio || '' };
+}
+function saleDesdeOrden(o, inv) {
+  const items = (o.items || []).map(it => ({ name: it.name || 'Producto', qty: it.qty,
+    price: it.qty ? (parseFloat(it.subtotal != null ? it.subtotal : it.price * it.qty) || 0) / it.qty : 0 }));
+  const splits = Array.isArray(o.splits) ? o.splits : [];
+  const sale = {
+    restaurant: (USER && USER.restaurantName) || 'Gestiva',
+    table: o.table_num || null, waiter: o.waiter_name || null,
+    datetime: new Date(o.closed_at || o.created_at || Date.now()),
+    ref: String(o.id).replace(/-/g, '').slice(-6).toUpperCase(),
+    items, subtotal: parseFloat(o.subtotal) || 0, discount: parseFloat(o.discount) || 0, total: parseFloat(o.total) || 0,
+    payments: splits.length ? splits : [{ method: o.payment_method || 'efectivo', amount: parseFloat(o.total) || 0 }],
+    orderId: o.id, facData: facDataDesdeFactura(inv)
+  };
+  if (inv && inv.status === 'approved') sale.invoice = inv;
+  else if (inv && inv.status === 'pending') sale.invoiceError = { code: 'arca_sin_respuesta', detail: inv.error_msg || 'Quedó un intento sin respuesta de ARCA. Reintentá: se verifica antes de emitir otra.' };
+  else if (inv && inv.status === 'error') sale.invoiceError = { code: 'factura_rechazada', detail: inv.error_msg || '' };
+  return sale;
+}
+function ventasFacturasHTML(orders, invoices) {
+  const lista = orders.slice(0, 60);
+  const badge = (inv) => {
+    if (!inv) return '<span style="color:var(--tx-lt);">—</span>';
+    if (inv.status === 'approved') return `<span class="badge green">${inv.letra} ${String(inv.pto_vta).padStart(5,'0')}-${String(inv.nro).padStart(8,'0')}</span>`;
+    if (inv.status === 'pending') return '<span class="badge" style="background:#fef3c7;color:#92400e;">Sin respuesta de ARCA</span>';
+    if (inv.status === 'duplicada') return '<span class="badge" style="background:#fee2e2;color:#991b1b;">Duplicada: revisar</span>';
+    return '<span class="badge red">Rechazada</span>';
+  };
+  return `<div class="card" style="margin-top:24px;">
+    <h3 style="margin-bottom:6px;font-size:16px;">Ventas y facturas</h3>
+    <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Facturá una venta que no se facturó, reintentá si ARCA no respondió o reimprimí una factura.</p>
+    ${lista.length === 0 ? '<div class="empty">Sin ventas</div>' : `<table class="data-table" style="font-size:13px;">
+      <thead><tr><th>Fecha</th><th>Origen</th><th style="text-align:right;">Total</th><th>Factura</th><th></th></tr></thead>
+      <tbody>${lista.map(o => {
+        const inv = facturaDeVenta(o.id, invoices);
+        const d = new Date(o.closed_at || o.created_at || Date.now());
+        const accion = !inv || inv.status === 'error' ? 'Facturar' : inv.status === 'approved' ? 'Ver / imprimir' : 'Reintentar';
+        return `<tr>
+          <td>${d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})} ${d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}</td>
+          <td>${o.table_num ? 'Mesa ' + o.table_num : escHtml((o.note || 'Mostrador').slice(0, 28))}</td>
+          <td style="text-align:right;font-weight:700;">${fmt(o.total)}</td>
+          <td>${badge(inv)}</td>
+          <td style="text-align:right;"><button class="btn btn-secondary btn-sm" onclick="abrirVentaFactura('${o.id}')">${accion}</button></td>
+        </tr>`;
+      }).join('')}</tbody></table>`}
+  </div>`;
+}
+function abrirVentaFactura(orderId) {
+  const o = (window.__repOrders || []).find(x => x.id === orderId);
+  if (!o) return;
+  const sale = saleDesdeOrden(o, facturaDeVenta(orderId, window.__repInvoices || []));
+  showReceiptModal(sale, '#/reportes');
+  if (!sale.invoice && !sale.invoiceError) mostrarFormFactura();
+}
 
 // Exportar órdenes a CSV (abre en Excel)
 async function exportOrdersCSV() {
@@ -2864,6 +3085,7 @@ route('ajustes', async () => {
       <div class="card" style="grid-column:1/-1;">
         <h3 style="margin-bottom:6px;">Datos fiscales (facturación)</h3>
         <p style="font-size:13px;color:var(--tx-mid);margin-bottom:14px;">Copiá estos datos de tu <b>Constancia de Inscripción de AFIP/ARCA</b>. Sirven para que la factura salga con los datos del restaurante. Los marcados con <b>*</b> son los necesarios para facturar.</p>
+        ${fiscalEstadoHTML(fiscal)}
         <div class="grid grid-2" style="gap:12px;">
           <div class="field"><label>Condición frente al IVA *</label>
             <select id="fCond">
@@ -2957,8 +3179,29 @@ async function saveFiscal() {
       fiscalInicioActividades: $('#fInicio').value || null,
       fiscalPtoVta: $('#fPtoVta').value || null
     })});
+    FISCAL_CACHE = null;
     toast('Datos fiscales guardados','success');
-  } catch(e) { toast(e.message,'error'); }
+    navigate();
+  } catch(e) { toast(e.detail || e.message,'error'); }
+}
+
+// Qué le falta al restaurante para poder facturar, y aviso de certificado por vencer.
+function fiscalEstadoHTML(f) {
+  const faltan = f.faltan || [];
+  let vence = '';
+  if (f.certVence) {
+    const dias = Math.floor((new Date(f.certVence) - Date.now()) / 86400000);
+    const fecha = new Date(f.certVence).toLocaleDateString('es-AR');
+    if (dias < 0) vence = `<div style="margin-top:6px;color:#991b1b;font-weight:700;">El certificado venció el ${fecha}. Generá uno nuevo para seguir facturando.</div>`;
+    else if (dias <= 30) vence = `<div style="margin-top:6px;color:#92400e;font-weight:700;">El certificado vence en ${dias} días (${fecha}). Renovalo antes para no quedarte sin facturar.</div>`;
+    else vence = `<div style="margin-top:6px;color:var(--tx-mid);">Certificado vigente hasta el ${fecha}.</div>`;
+  }
+  if (!faltan.length) {
+    return `<div style="padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;margin-bottom:14px;font-size:13px;">
+      <b style="color:#065f46;">✓ Listo para facturar</b> · ${f.fiscalEnv === 'homologacion' ? 'en modo PRUEBA (homologación): las facturas no tienen validez fiscal' : 'facturas reales (producción)'}${vence}</div>`;
+  }
+  return `<div style="padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;margin-bottom:14px;font-size:13px;">
+    <b style="color:#92400e;">Para facturar falta:</b> ${faltan.join(', ')}.${vence}</div>`;
 }
 async function genCSR() {
   try {
@@ -2985,10 +3228,11 @@ async function saveCert() {
   try {
     await api('/api/fiscal-cert', { method:'PUT', body: JSON.stringify({ cert, key: key||undefined, env })});
     $('#fKey').value=''; // no dejar la clave privada en pantalla
-    toast('Certificado guardado ✓ Ya podés facturar','success');
+    FISCAL_CACHE = null;
+    toast('Certificado guardado ✓','success');
     navigate(); // refresca el estado (✓ Cargado)
   } catch(e) {
-    toast(e.message==='falta_la_clave_privada' ? 'Falta la clave privada: pegala arriba, o generá el pedido (CSR) acá mismo' : (e.message||'No se pudo guardar el certificado'),'error');
+    toast(e.message==='falta_la_clave_privada' ? 'Falta la clave privada: pegala arriba, o generá el pedido (CSR) acá mismo' : (e.detail || e.message || 'No se pudo guardar el certificado'),'error');
   }
 }
 
@@ -3425,7 +3669,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20260908-instalar-iphone')
+    navigator.serviceWorker.register('sw.js?v=20261002-facturacion')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });

@@ -1429,7 +1429,7 @@ if ('serviceWorker' in navigator) {
     if (!esperandoRecarga) esperandoRecarga = setInterval(recargarCuandoSeSeguro, 15000);
   };
   navigator.serviceWorker.addEventListener('controllerchange', recargarCuandoSeSeguro);
-  navigator.serviceWorker.register('sw.js?v=20260908-instalar-iphone').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20261002-facturacion').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

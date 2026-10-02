@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-v12-instalar-iphone';
+const CACHE_NAME = 'gestiva-v13-facturacion';
 
 // Shells que guardamos para que la app abra aunque no haya internet.
 // /mozo  → app del equipo (mozos)
@@ -10,6 +10,8 @@ const APP_SHELL = [
   './cocina.html',
   './gestiva-config.js',
   './install-app.js',
+  './comandera.js',
+  './assets/vendor/qrcode.js',
   './manifest.json',
   './manifest-app.json',
   './assets/favicon.png?v=2',
@@ -68,5 +70,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(fetch(req).catch(() => caches.match(req)));
+  // ignoreSearch: los scripts se piden con ?v=... para forzar la versión nueva,
+  // pero sin internet hay que servir el que está guardado aunque la versión difiera.
+  event.respondWith(fetch(req).catch(() => caches.match(req, { ignoreSearch: true })));
 });

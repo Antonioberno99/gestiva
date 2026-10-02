@@ -1381,10 +1381,271 @@
     return { ok: true, printed: targets.map(t => t.name) };
   }
 
+  // ============================================================
+  //  FACTURA ELECTRÓNICA — representación impresa
+  //  (RG 1415 + RG 4291 + QR de la RG 4892 + leyendas de las leyes 27.743 y 27.618)
+  //  inv = fila de invoices; inv.raw = copia congelada de todo lo que se imprime.
+  // ============================================================
+  const DOC_LABEL = { 80: 'CUIT', 86: 'CUIL', 96: 'DNI', 99: '' };
+  const pesos = (n) => '$' + (Math.round((parseFloat(n) || 0) * 100) / 100)
+    .toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fechaAR = (yyyymmdd) => {
+    const s = String(yyyymmdd || '').replace(/-/g, '');
+    return s.length === 8 ? s.slice(6, 8) + '/' + s.slice(4, 6) + '/' + s.slice(0, 4) : '';
+  };
+  const fmtCuit = (c) => { const d = String(c || '').replace(/\D/g, ''); return d.length === 11 ? d.slice(0, 2) + '-' + d.slice(2, 10) + '-' + d.slice(10) : d; };
+  const nroComprobante = (pv, nro) => String(pv || 0).padStart(5, '0') + '-' + String(nro || 0).padStart(8, '0');
+
+  // Datos listos para imprimir. En Factura A los items van sin IVA y se ajusta
+  // el último centavo para que la suma cierre exacto con el neto informado a ARCA.
+  function invoiceData(inv) {
+    const r = inv.raw || {};
+    const c = r.comprobante || {};
+    const letra = c.letra || inv.letra;
+    const imp = r.importes || { neto: inv.importe_neto, iva: inv.importe_iva, total: inv.importe_total };
+    let items = (r.items || []).map(it => ({ name: it.name, qty: it.qty, amount: parseFloat(it.subtotal) || 0 }));
+    let descuento = parseFloat(r.descuento) || 0;
+    if (letra === 'A') {
+      const neto = (v) => Math.round((v / 1.21) * 100) / 100;
+      items = items.map(it => Object.assign({}, it, { amount: neto(it.amount) }));
+      descuento = neto(descuento);
+      const suma = items.reduce((s, it) => s + it.amount, 0) - descuento;
+      const dif = Math.round(((parseFloat(imp.neto) || 0) - suma) * 100) / 100;
+      if (items.length && Math.abs(dif) > 0 && Math.abs(dif) < 1) {
+        let i = 0; items.forEach((it, k) => { if (it.amount > items[i].amount) i = k; });
+        items[i].amount = Math.round((items[i].amount + dif) * 100) / 100;
+      }
+    }
+    return {
+      emisor: r.emisor || {},
+      receptor: r.receptor || { docTipo: inv.doc_tipo, docNro: inv.doc_nro, nombre: inv.cliente_nombre, domicilio: inv.cliente_domicilio, condicionIva: inv.cliente_cond_iva },
+      letra, cbteTipo: c.cbteTipo || inv.cbte_tipo, ptoVta: c.ptoVta || inv.pto_vta, nro: c.nro || inv.nro,
+      fecha: c.fecha || inv.cbte_fch, cae: c.cae || inv.cae, caeVto: c.caeVto || String(inv.cae_vto || '').slice(0, 10),
+      qrUrl: c.qrUrl || inv.qr_url, prueba: (c.env || '') === 'homologacion',
+      items, descuento, neto: parseFloat(imp.neto) || 0, iva: parseFloat(imp.iva) || 0, total: parseFloat(imp.total) || 0,
+      leyendas: r.leyendas || {}
+    };
+  }
+
+  function makeQR(text) {
+    if (typeof window.qrcode !== 'function' || !text) return null;
+    try { const q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q; } catch (e) { return null; }
+  }
+  function qrSvg(text, px) {
+    const q = makeQR(text); if (!q) return '';
+    const n = q.getModuleCount(), m = 4, size = n + m * 2;
+    let path = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) path += 'M' + (c + m) + ' ' + (r + m) + 'h1v1h-1z';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + px + '" height="' + px +
+      '" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="' + path + '" fill="#000"/></svg>';
+  }
+  // QR como imagen de bits (GS v 0): funciona en casi todas las térmicas,
+  // incluso las que no tienen el comando de QR propio.
+  function qrRasterBytes(text, maxDots) {
+    const q = makeQR(text); if (!q) return [];
+    const n = q.getModuleCount(), quiet = 4, mods = n + quiet * 2;
+    const scale = Math.max(2, Math.min(8, Math.floor(maxDots / mods)));
+    const size = mods * scale, wb = Math.ceil(size / 8);
+    const out = [];
+    const BAND = 96; // las térmicas chicas tienen poco buffer: la imagen va en franjas
+    for (let y0 = 0; y0 < size; y0 += BAND) {
+      const h = Math.min(BAND, size - y0);
+      out.push(0x1D, 0x76, 0x30, 0x00, wb & 0xFF, (wb >> 8) & 0xFF, h & 0xFF, (h >> 8) & 0xFF);
+      for (let y = y0; y < y0 + h; y++) {
+        const r = Math.floor(y / scale) - quiet;
+        for (let bx = 0; bx < wb; bx++) {
+          let byte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const x = bx * 8 + bit;
+            const c = Math.floor(x / scale) - quiet;
+            if (x < size && r >= 0 && r < n && c >= 0 && c < n && q.isDark(r, c)) byte |= (0x80 >> bit);
+          }
+          out.push(byte);
+        }
+      }
+    }
+    return out;
+  }
+
+  function receptorLineas(d) {
+    const rc = d.receptor || {};
+    const anonimo = Number(rc.docTipo) === 99 && !rc.nombre;
+    if (anonimo) return ['A CONSUMIDOR FINAL'];
+    const out = [];
+    if (rc.nombre) out.push(rc.nombre);
+    if (Number(rc.docTipo) !== 99 && rc.docNro) out.push((DOC_LABEL[rc.docTipo] || 'Doc.') + ': ' + (Number(rc.docTipo) === 80 || Number(rc.docTipo) === 86 ? fmtCuit(rc.docNro) : rc.docNro));
+    if (rc.domicilio) out.push('Domicilio: ' + rc.domicilio);
+    out.push('Cond. IVA: ' + (rc.condicionIva || 'Consumidor Final'));
+    return out;
+  }
+
+  function invoiceHTML(inv, cfg) {
+    cfg = cfg || getCfg();
+    const d = invoiceData(inv), e = d.emisor;
+    const w = cfg.paper === 80 ? '76mm' : '54mm';
+    const fs = cfg.paper === 80 ? 13 : 11.5;
+    const lineas = d.items.map(it => `<div class="ln"><span class="l">${escapeHTML(it.qty + ' x ' + it.name)}</span><span class="r">${pesos(it.amount)}</span></div>`).join('');
+    const tf = d.leyendas.transparenciaFiscal;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Factura ${escapeHTML(d.letra)} ${nroComprobante(d.ptoVta, d.nro)}</title><style>
+      @page { size: ${cfg.paper}mm auto; margin: 0; }
+      *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+      .tk{width:${w};padding:4mm 2mm;font-family:'Courier New',monospace;color:#000;font-size:${fs}px;line-height:1.35;}
+      .c{text-align:center;} .b{font-weight:800;} .sm{font-size:${fs - 1.5}px;}
+      .rs{font-size:${fs + 3}px;font-weight:800;text-transform:uppercase;}
+      .hr{border-top:1px dashed #000;margin:5px 0;}
+      .ln{display:flex;justify-content:space-between;gap:8px;margin:1px 0;} .ln .l{flex:1;} .ln .r{white-space:nowrap;}
+      .tipo{display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0;}
+      .letra{border:2px solid #000;font-size:${fs + 12}px;font-weight:800;width:1.6em;height:1.6em;display:grid;place-items:center;}
+      .tot{display:flex;justify-content:space-between;font-size:${fs + 5}px;font-weight:800;margin:3px 0;}
+      .qr{display:flex;justify-content:center;margin:6px 0 2px;}
+      .prueba{border:2px solid #000;padding:3px;text-align:center;font-weight:800;margin:4px 0;}
+    </style></head><body><div class="tk">
+      ${d.prueba ? '<div class="prueba">COMPROBANTE DE PRUEBA<br>HOMOLOGACIÓN - SIN VALIDEZ FISCAL</div>' : ''}
+      <div class="c rs">${escapeHTML(e.razonSocial || '')}</div>
+      ${e.nombreFantasia && e.nombreFantasia !== e.razonSocial ? `<div class="c">${escapeHTML(e.nombreFantasia)}</div>` : ''}
+      <div class="c sm">${escapeHTML(e.domicilio || '')}</div>
+      <div class="c sm">CUIT: ${fmtCuit(e.cuit)}${e.iibb ? ' · IIBB: ' + escapeHTML(e.iibb) : ''}</div>
+      ${e.inicioActividades ? `<div class="c sm">Inicio de actividades: ${fechaAR(e.inicioActividades)}</div>` : ''}
+      <div class="c sm">${escapeHTML(e.condicionIva || '')}</div>
+      <div class="hr"></div>
+      <div class="tipo"><span class="b">FACTURA</span><span class="letra">${escapeHTML(d.letra)}</span><span class="sm">Cód. ${String(d.cbteTipo).padStart(3, '0')}</span></div>
+      <div class="c">Punto de venta: ${String(d.ptoVta).padStart(5, '0')} · Comp. Nro: ${String(d.nro).padStart(8, '0')}</div>
+      <div class="c">Fecha de emisión: ${fechaAR(d.fecha)}</div>
+      <div class="hr"></div>
+      ${receptorLineas(d).map(l => `<div class="sm">${escapeHTML(l)}</div>`).join('')}
+      <div class="hr"></div>
+      ${d.letra === 'A' ? '<div class="sm">Importes sin IVA</div>' : ''}
+      ${lineas || '<div>(sin items)</div>'}
+      ${d.descuento > 0 ? `<div class="ln"><span class="l">Descuento</span><span class="r">-${pesos(d.descuento)}</span></div>` : ''}
+      <div class="hr"></div>
+      ${d.letra === 'A' ? `
+        <div class="ln"><span class="l">Subtotal neto gravado</span><span class="r">${pesos(d.neto)}</span></div>
+        <div class="ln"><span class="l">IVA 21%</span><span class="r">${pesos(d.iva)}</span></div>` : ''}
+      <div class="tot"><span>TOTAL</span><span>${pesos(d.total)}</span></div>
+      ${tf ? `<div class="hr"></div>
+        <div class="sm b">Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)</div>
+        <div class="ln sm"><span class="l">IVA Contenido</span><span class="r">${pesos(tf.ivaContenido)}</span></div>
+        ${tf.otrosImpuestosNacionales > 0 ? `<div class="ln sm"><span class="l">Otros Impuestos Nacionales Indirectos</span><span class="r">${pesos(tf.otrosImpuestosNacionales)}</span></div>` : ''}` : ''}
+      ${d.leyendas.ley27618 ? `<div class="hr"></div><div class="sm">${escapeHTML(d.leyendas.ley27618)}</div>` : ''}
+      <div class="hr"></div>
+      <div class="ln"><span class="l b">CAE N°</span><span class="r b">${escapeHTML(d.cae || '')}</span></div>
+      <div class="ln"><span class="l">Vto. CAE</span><span class="r">${fechaAR(d.caeVto)}</span></div>
+      <div class="qr">${qrSvg(d.qrUrl, cfg.paper === 80 ? 150 : 120)}</div>
+      <div class="c sm">Comprobante autorizado por ARCA</div>
+      ${d.prueba ? '<div class="prueba">SIN VALIDEZ FISCAL</div>' : ''}
+    </div></body></html>`;
+  }
+
+  function escposInvoice(inv, cfg) {
+    cfg = cfg || getCfg();
+    const d = invoiceData(inv), e = d.emisor;
+    const W = charsPerLine(cfg.paper);
+    const enc = new TextEncoder();
+    const bytes = [];
+    const push = (arr) => { for (const b of arr) bytes.push(b & 0xFF); };
+    const text = (s) => push(Array.from(enc.encode(ascii(s))));
+    const line = (s) => { text(s); push([0x0A]); };
+    const lines = (s) => wrap(s, W).forEach(l => line(l));
+    const center = (on) => push([0x1B, 0x61, on ? 1 : 0]);
+    const bold = (on) => push([0x1B, 0x45, on ? 1 : 0]);
+    const big = (on) => push([0x1D, 0x21, on ? 0x11 : 0x00]);
+    const sep = () => line('-'.repeat(W));
+    const row = (l, r) => {
+      l = ascii(l); r = ascii(r);
+      if (l.length + r.length + 1 > W) { wrap(l, W).forEach(x => line(x)); line(' '.repeat(Math.max(0, W - r.length)) + r); }
+      else line(l + ' '.repeat(W - l.length - r.length) + r);
+    };
+
+    push([0x1B, 0x40]);
+    center(true);
+    if (d.prueba) { bold(true); line('*** COMPROBANTE DE PRUEBA ***'); line('HOMOLOGACION - SIN VALIDEZ FISCAL'); bold(false); }
+    bold(true); lines(e.razonSocial || ''); bold(false);
+    if (e.nombreFantasia && e.nombreFantasia !== e.razonSocial) lines(e.nombreFantasia);
+    lines(e.domicilio || '');
+    line('CUIT: ' + fmtCuit(e.cuit));
+    if (e.iibb) lines('IIBB: ' + e.iibb);
+    if (e.inicioActividades) line('Inicio act.: ' + fechaAR(e.inicioActividades));
+    lines(e.condicionIva || '');
+    sep();
+    bold(true); big(true); line('FACTURA ' + d.letra); big(false); bold(false);
+    line('Cod. ' + String(d.cbteTipo).padStart(3, '0'));
+    line('P.V. ' + String(d.ptoVta).padStart(5, '0') + '  Nro ' + String(d.nro).padStart(8, '0'));
+    line('Fecha: ' + fechaAR(d.fecha));
+    center(false);
+    sep();
+    receptorLineas(d).forEach(l => lines(l));
+    sep();
+    if (d.letra === 'A') line('Importes sin IVA');
+    d.items.forEach(it => row(it.qty + ' x ' + it.name, pesos(it.amount)));
+    if (d.descuento > 0) row('Descuento', '-' + pesos(d.descuento));
+    sep();
+    if (d.letra === 'A') { row('Subtotal neto gravado', pesos(d.neto)); row('IVA 21%', pesos(d.iva)); }
+    bold(true); big(true); row('TOTAL', pesos(d.total)); big(false); bold(false);
+    const tf = d.leyendas.transparenciaFiscal;
+    if (tf) {
+      sep();
+      lines('Regimen de Transparencia Fiscal al Consumidor (Ley 27.743)');
+      row('IVA Contenido', pesos(tf.ivaContenido));
+      if (tf.otrosImpuestosNacionales > 0) row('Otros Imp. Nac. Indirectos', pesos(tf.otrosImpuestosNacionales));
+    }
+    if (d.leyendas.ley27618) { sep(); lines(d.leyendas.ley27618); }
+    sep();
+    row('CAE N', String(d.cae || ''));
+    row('Vto. CAE', fechaAR(d.caeVto));
+    center(true);
+    push([0x0A]);
+    push(qrRasterBytes(d.qrUrl, cfg.paper === 80 ? 480 : 340));
+    push([0x0A]);
+    line('Comprobante autorizado por ARCA');
+    if (d.prueba) { bold(true); line('SIN VALIDEZ FISCAL'); bold(false); }
+    center(false);
+    push([0x0A, 0x0A, 0x0A]);
+    push([0x1D, 0x56, 0x42, 0x00]);
+    return new Uint8Array(bytes);
+  }
+
+  function invoiceViaBrowser(inv, cfg) {
+    const html = invoiceHTML(inv, cfg);
+    const ifr = document.createElement('iframe');
+    ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(ifr);
+    return new Promise((resolve) => {
+      ifr.onload = () => { try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (e) {} setTimeout(() => { ifr.remove(); resolve(); }, 1500); };
+      const doc = ifr.contentWindow.document; doc.open(); doc.write(html); doc.close();
+    });
+  }
+  // La factura sale por las mismas comanderas que los comprobantes (la caja);
+  // si no hay ninguna, por el diálogo del navegador (también sirve para guardar PDF).
+  async function printInvoice(inv, opts) {
+    const cfg = Object.assign(getCfg(), opts || {});
+    if (cfg.forceBrowser) { await invoiceViaBrowser(inv, cfg); return { ok: true, method: 'browser' }; }
+    const targets = (cfg.stations || []).filter(st => st.receipts);
+    if (!targets.length) { await invoiceViaBrowser(inv, cfg); return { ok: true, method: 'browser' }; }
+    const errors = [];
+    for (const st of targets) {
+      try {
+        const scfg = stationCfg(st, cfg, false);
+        if (st.method === 'browser') { await invoiceViaBrowser(inv, scfg); continue; }
+        const bytes = escposInvoice(inv, scfg);
+        if (st.method === 'bluetooth') await printBluetooth(bytes);
+        else if (st.method === 'usb') {
+          if (scfg.printerName) await printWindowsPrinter(bytes, scfg);
+          else await printUSB(bytes);
+        }
+        else if (st.method === 'network') await printNetwork(bytes, scfg);
+      } catch (e) {
+        errors.push((st.name || 'Comandera') + ': ' + (e.message || e));
+      }
+    }
+    if (errors.length) throw new Error(errors.join('\n'));
+    return { ok: true, printed: targets.map(t => t.name) };
+  }
+
   window.Comandera = {
     getCfg, setCfg, print, testPrint, ticketHTML, escpos, openConfig,
     checkBridge, probeNetworkPrinter,
     receiptHTML, escposReceipt, printReceipt, payLabel,
+    invoiceHTML, escposInvoice, printInvoice, invoiceData,
     getStations, saveStations,
     METHOD_LABELS, PAY_LABELS,
     _methods: ['screen', 'browser', 'bluetooth', 'usb', 'network']
