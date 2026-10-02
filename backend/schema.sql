@@ -554,3 +554,36 @@ ALTER TABLE IF EXISTS pending_orders ADD COLUMN IF NOT EXISTS order_id UUID;
 -- Arqueo: efectivo esperado y resumen por método de pago de cada cierre.
 ALTER TABLE IF EXISTS cash_history ADD COLUMN IF NOT EXISTS expected_cash NUMERIC(12,2);
 ALTER TABLE IF EXISTS cash_history ADD COLUMN IF NOT EXISTS by_method JSONB;
+
+-- ============================================================
+-- FASE 6 — Facturación ARCA a prueba de cortes
+-- ============================================================
+-- Ticket de acceso de ARCA (dura ~12 h). Guardado en la base porque ARCA no da
+-- otro mientras siga vigente: si vivía solo en memoria, cada deploy dejaba la
+-- facturación caída hasta que venciera. { homologacion: {token,sign,exp}, produccion: {...} }
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS fiscal_ta JSONB;
+
+-- Datos de la factura que hacen falta para imprimirla y para reintentar.
+ALTER TABLE IF EXISTS invoices ADD COLUMN IF NOT EXISTS cbte_fch TEXT;            -- YYYYMMDD
+ALTER TABLE IF EXISTS invoices ADD COLUMN IF NOT EXISTS cliente_domicilio TEXT;
+ALTER TABLE IF EXISTS invoices ADD COLUMN IF NOT EXISTS cond_iva_receptor_id INT;
+ALTER TABLE IF EXISTS invoices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- Una sola factura activa por venta. Si ya había duplicadas (doble toque con la
+-- versión anterior), la más nueva se marca 'duplicada' para revisión: sigue en
+-- la base con su CAE, porque ya es un comprobante emitido ante ARCA.
+DO $$
+BEGIN
+  UPDATE invoices i SET status = 'duplicada'
+   WHERE i.status IN ('pending', 'approved') AND i.order_id IS NOT NULL
+     AND EXISTS (SELECT 1 FROM invoices j
+                  WHERE j.tenant_id = i.tenant_id AND j.order_id = i.order_id
+                    AND j.status IN ('pending', 'approved')
+                    AND (j.created_at < i.created_at OR (j.created_at = i.created_at AND j.id < i.id)));
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_invoice_order_activa
+    ON invoices(tenant_id, order_id)
+    WHERE order_id IS NOT NULL AND status IN ('pending', 'approved');
+EXCEPTION WHEN others THEN
+  RAISE NOTICE 'uq_invoice_order_activa no se pudo crear: %', SQLERRM;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_invoices_numero ON invoices(tenant_id, pto_vta, cbte_tipo, nro);
