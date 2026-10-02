@@ -420,7 +420,10 @@ function productVisual(p, size = 'md') {
   const tone = hashCode((p?.cat || text)) % 7;
   return `<div class="prod-media" style="${size!=='lg'?'width:'+dim+';height:'+dim+';aspect-ratio:unset;':''}"><div class="prod-media-fallback cat-tone-${tone}">${initial}</div></div>`;
 }
-const today = () => new Date().toISOString().slice(0,10);
+// Fecha LOCAL (la PC del local está en Argentina). Con toISOString() salía la
+// fecha UTC: de 21 a 24 hs los reportes mostraban "hoy" como el día siguiente.
+const localDay = (d) => { d = d instanceof Date ? d : new Date(d); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const today = () => localDay(new Date());
 const hoursBetween = (start, end = new Date()) => Math.max(0, (new Date(end) - new Date(start)) / 36e5);
 const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
@@ -593,7 +596,7 @@ async function demoApi(path, opts = {}) {
     demoWrite('gestiva_demo_cash', null);
     return { ok:true, diff, expected, expectedCash: expected, byMethod: sum.byMethod };
   }
-  if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.filter(openTableHasOrder).length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
+  if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at && localDay(o.closed_at) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.filter(openTableHasOrder).length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
   if (path === '/api/settings') { USER = { ...USER, restaurantName:body.restaurantName || USER.restaurantName, ownerName:body.ownerName || USER.ownerName, phone:body.phone || USER.phone, currency:body.currency || USER.currency }; localStorage.setItem('gestiva_user', JSON.stringify(USER)); return USER; }
   // Customers
   const customers = demoRead('gestiva_demo_customers', []);
@@ -2551,7 +2554,7 @@ route('mozos', async () => {
     API.waiters(),
     API.openTables(),
     API.orders('?limit=200'),
-    API.staffShifts('?from=' + new Date(Date.now() - 7*86400000).toISOString().slice(0,10))
+    API.staffShifts('?from=' + localDay(new Date(Date.now() - 7*86400000)))
   ]);
   const today_ = today();
   const appUrl = teamAppUrl();
@@ -2826,8 +2829,8 @@ route('reportes', async () => {
   const products = await API.products();
   const waiters = await API.waiters();
   const today_ = today();
-  const last7days = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
-  const safeDate = (o) => (o.closed_at || o.created_at || '').slice(0,10);
+  const last7days = localDay(new Date(Date.now() - 7*86400000));
+  const safeDate = (o) => { const v = o.closed_at || o.created_at; return v ? localDay(v) : ''; };
   const todayOrders = orders.filter(o => safeDate(o) === today_);
   const weekOrders = orders.filter(o => safeDate(o) >= last7days);
   const totalDay = todayOrders.reduce((s,o)=>s+parseFloat(o.total),0);

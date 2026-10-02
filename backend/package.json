@@ -13,7 +13,8 @@
     "test": "node scripts/test-facturacion.js && node scripts/test-circuito.js && node scripts/test-comandera.js && node scripts/test-cobro.js",
     "test:cobro": "node scripts/test-cobro.js",
     "test:facturacion": "node scripts/test-facturacion.js",
-    "test:facturacion-api": "node scripts/test-facturacion-api.js"
+    "test:facturacion-api": "node scripts/test-facturacion-api.js",
+    "test:fechas": "node scripts/test-fechas.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
