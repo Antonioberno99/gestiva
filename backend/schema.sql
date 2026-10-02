@@ -544,3 +544,13 @@ CREATE INDEX IF NOT EXISTS idx_kitchen_print_queue
 -- Control de versión de la mesa abierta: evita que dos celulares se pisen los ítems.
 ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS rev INT DEFAULT 0;
 ALTER TABLE IF EXISTS open_tables ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
+-- ============================================================
+-- FASE 5 — Cobro y caja sin duplicados
+-- ============================================================
+-- Venta que generó el cobro de un pedido de delivery/take away: impide cobrarlo
+-- dos veces y permite facturarlo después.
+ALTER TABLE IF EXISTS pending_orders ADD COLUMN IF NOT EXISTS order_id UUID;
+-- Arqueo: efectivo esperado y resumen por método de pago de cada cierre.
+ALTER TABLE IF EXISTS cash_history ADD COLUMN IF NOT EXISTS expected_cash NUMERIC(12,2);
+ALTER TABLE IF EXISTS cash_history ADD COLUMN IF NOT EXISTS by_method JSONB;

@@ -122,6 +122,55 @@ pool.on('error', (e) => console.error('[pg] pool error', e));
 
 const q = (sql, params) => pool.query(sql, params);
 
+// Corre fn dentro de una transaccion. fn recibe un "q" atado a la conexion de
+// la transaccion. Si algo falla, ROLLBACK: no queda nada a medio grabar.
+async function withTx(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await fn((sql, params) => client.query(sql, params));
+    await client.query('COMMIT');
+    return out;
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Error con status HTTP, para cortar una transaccion con una respuesta clara.
+function httpError(status, code, extra) {
+  const e = new Error(code);
+  e.httpStatus = status; e.code = code; e.extra = extra;
+  return e;
+}
+
+// Agrega movimientos a la caja abierta en UNA sentencia. Antes se leia el array,
+// se le sumaba el movimiento en Node y se reescribia entero: si dos cobros
+// llegaban juntos, el segundo pisaba al primero y ese ingreso desaparecia.
+async function appendCashTx(run, tenantId, txs) {
+  if (!txs || !txs.length) return;
+  await run(`UPDATE current_cash
+                SET transactions = COALESCE(transactions, '[]'::jsonb) || $1::jsonb
+              WHERE tenant_id=$2`, [JSON.stringify(txs), tenantId]);
+}
+
+const PAY_METHODS = ['efectivo', 'debito', 'credito', 'tarjeta', 'transferencia', 'mercadopago', 'cuenta_corriente'];
+// Splits: cada pago con metodo conocido y monto positivo.
+function cleanSplits(splits) {
+  if (!Array.isArray(splits) || !splits.length) return null;
+  const out = [];
+  for (const sp of splits) {
+    const amount = Math.round((parseFloat(sp && sp.amount) || 0) * 100) / 100;
+    const method = String((sp && sp.method) || '').trim();
+    if (!(amount > 0)) return { error: 'split_amount_invalid' };
+    if (!PAY_METHODS.includes(method)) return { error: 'split_method_invalid' };
+    out.push({ method, amount });
+  }
+  return { splits: out };
+}
+
 // ---------- MercadoPago ----------
 const mpClient = MP_TOKEN ? new MercadoPagoConfig({ accessToken: MP_TOKEN }) : null;
 
@@ -1323,6 +1372,15 @@ app.put('/api/products/:id', async (req, res) => {
   res.json(r.rows[0]);
 });
 app.delete('/api/products/:id', async (req, res) => {
+  // Si el producto esta cargado en una mesa abierta o en un pedido sin cobrar,
+  // borrarlo hacia que al cobrar ese item saliera $0.
+  const ref = JSON.stringify([{ productId: req.params.id }]);
+  const enUso = await q(`SELECT 1 FROM open_tables WHERE tenant_id=$1 AND items @> $2::jsonb
+                         UNION ALL
+                         SELECT 1 FROM pending_orders WHERE tenant_id=$1 AND items @> $2::jsonb
+                           AND status NOT IN ('delivered','cancelled')
+                         LIMIT 1`, [req.tenant.id, ref]);
+  if (enUso.rows[0]) return res.status(409).json({ error: 'product_in_open_order' });
   await q('DELETE FROM products WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id]);
   res.json({ ok: true });
 });
@@ -1466,123 +1524,133 @@ app.delete('/api/open-tables/:tid', async (req, res) => {
 // Soporta: descuentos (% o monto), división de cuenta (splits), cliente con cuenta corriente,
 // modificadores por ítem y descuento automático de stock.
 app.post('/api/orders', async (req, res) => {
-  const { tableId, paymentMethod, note, discount, discountType, splits, customerId } = req.body || {};
+  const { tableId, paymentMethod, note, discount, discountType, customerId } = req.body || {};
   if (!tableId) return res.status(400).json({ error: 'missing_fields' });
 
-  const ot = (await q('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
-  if (!ot) return res.status(404).json({ error: 'table_not_open' });
-  if (itemQty(ot.items) === 0) return res.status(400).json({ error: 'table_empty' });
-
-  const products = (await q('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
-  const prodMap = new Map(products.map(p => [p.id, p]));
-
-  // Calculo subtotal usando modificadores por ítem
-  let subtotal = 0;
-  const items = (ot.items || []).map(it => {
-    const p = prodMap.get(it.productId);
-    if (!p) return it;
-    const modSum = (it.modifiers || []).reduce((s, m) => s + (parseFloat(m.price) || 0), 0);
-    const unitPrice = parseFloat(p.price) + modSum;
-    const itemSubtotal = unitPrice * it.qty - (it.discount || 0);
-    subtotal += itemSubtotal;
-    return { ...it, name: p.name, price: p.price, emoji: p.emoji, subtotal: itemSubtotal };
-  });
-
-  // Aplicar descuento global
-  let discountAmount = 0;
-  if (discount && discount > 0) {
-    discountAmount = discountType === 'percent'
-      ? subtotal * (parseFloat(discount) / 100)
-      : parseFloat(discount);
-  }
-  const total = Math.max(0, subtotal - discountAmount);
-
-  // Validar splits: si hay splits, la suma debe coincidir con el total
-  const useSplits = Array.isArray(splits) && splits.length > 0;
-  if (useSplits) {
-    const sumSplits = splits.reduce((s, sp) => s + parseFloat(sp.amount || 0), 0);
-    if (Math.abs(sumSplits - total) > 0.5) return res.status(400).json({ error: 'splits_mismatch', expected: total, got: sumSplits });
+  const sp = cleanSplits(req.body && req.body.splits);
+  if (sp && sp.error) return res.status(400).json({ error: sp.error });
+  const splits = sp ? sp.splits : null;
+  const useSplits = !!splits;
+  if (!useSplits && paymentMethod && !PAY_METHODS.includes(paymentMethod)) {
+    return res.status(400).json({ error: 'payment_method_invalid' });
   }
 
-  const payMethod = useSplits
-    ? splits.map(s => s.method).join('+')
-    : (paymentMethod || 'efectivo');
+  try {
+    // Todo el cobro es UNA transaccion. La mesa abierta se bloquea con FOR UPDATE:
+    // si el cajero toca dos veces "Confirmar cobro", el segundo pedido espera al
+    // primero y, cuando le toca, la mesa ya no existe -> table_not_open.
+    // Antes se registraban dos ventas, se descontaba el stock dos veces y la
+    // caja quedaba con un solo ingreso.
+    const order = await withTx(async (tq) => {
+      const ot = (await tq('SELECT * FROM open_tables WHERE table_id=$1 AND tenant_id=$2 FOR UPDATE',
+        [tableId, req.tenant.id])).rows[0];
+      if (!ot) throw httpError(404, 'table_not_open');
+      if (itemQty(ot.items) === 0) throw httpError(400, 'table_empty');
 
-  const table = (await q('SELECT num FROM tables WHERE id=$1', [tableId])).rows[0];
-  const waiter = ot.waiter_id ? (await q('SELECT name FROM waiters WHERE id=$1', [ot.waiter_id])).rows[0] : null;
+      const products = (await tq('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
+      const prodMap = new Map(products.map(p => [p.id, p]));
 
-  // Caja: solo se requiere si algún pago va a un método que afecta caja (no cuenta_corriente)
-  const needsCash = useSplits
-    ? splits.some(s => s.method !== 'cuenta_corriente')
-    : (payMethod !== 'cuenta_corriente');
-  const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  if (needsCash && !cash) return res.status(400).json({ error: 'cash_not_open' });
-  const allOnAccount = !needsCash && customerId;
-
-  // Insertar orden
-  const order = (await q(`INSERT INTO orders (tenant_id, table_id, table_num, waiter_id, waiter_name,
-                          items, subtotal, discount, discount_type, total, payment_method, note,
-                          customer_id, splits, opened_at, closed_at)
-                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now()) RETURNING *`,
-    [req.tenant.id, tableId, table?.num || null, ot.waiter_id, waiter?.name || null,
-     JSON.stringify(items), subtotal, discountAmount, discountType || null,
-     total, payMethod, note || null, customerId || null,
-     JSON.stringify(useSplits ? splits : []), ot.opened_at])).rows[0];
-
-  // Descuento de stock por ítem (solo productos con stock controlado)
-  for (const it of items) {
-    const p = prodMap.get(it.productId);
-    if (p && p.stock !== null && p.stock !== undefined) {
-      await q('UPDATE products SET stock=GREATEST(0, stock-$1) WHERE id=$2 AND tenant_id=$3',
-        [it.qty, it.productId, req.tenant.id]);
-    }
-  }
-
-  // Registrar movimiento en caja (si no fue todo a cuenta corriente)
-  if (cash && !allOnAccount) {
-    const txs = cash.transactions || [];
-    if (useSplits) {
-      for (const sp of splits) {
-        if (sp.method === 'cuenta_corriente') continue; // no entra a caja
-        txs.push({
-          id: uuid(), type: 'in', amount: parseFloat(sp.amount), method: sp.method,
-          desc: 'Mesa ' + (table?.num || '?') + ' (split)', at: new Date().toISOString()
-        });
-      }
-    } else {
-      txs.push({
-        id: uuid(), type: 'in', amount: total, method: payMethod,
-        desc: 'Mesa ' + (table?.num || '?'), at: new Date().toISOString()
+      // Subtotal con modificadores por item
+      let subtotal = 0;
+      const items = (ot.items || []).map(it => {
+        const p = prodMap.get(it.productId);
+        if (!p) {
+          console.warn('[orders] producto inexistente en mesa', tableId, it.productId);
+          return it;
+        }
+        const modSum = (it.modifiers || []).reduce((s, m) => s + (parseFloat(m.price) || 0), 0);
+        const unitPrice = parseFloat(p.price) + modSum;
+        const itemSubtotal = unitPrice * it.qty - (it.discount || 0);
+        subtotal += itemSubtotal;
+        return { ...it, name: p.name, price: p.price, emoji: p.emoji, subtotal: itemSubtotal };
       });
-    }
-    await q('UPDATE current_cash SET transactions=$1 WHERE tenant_id=$2',
-      [JSON.stringify(txs), req.tenant.id]);
+
+      let discountAmount = 0;
+      if (discount && discount > 0) {
+        discountAmount = discountType === 'percent'
+          ? subtotal * (parseFloat(discount) / 100)
+          : parseFloat(discount);
+      }
+      const total = Math.max(0, subtotal - discountAmount);
+
+      if (useSplits) {
+        const sumSplits = splits.reduce((s, x) => s + x.amount, 0);
+        if (Math.abs(sumSplits - total) > 0.5) throw httpError(400, 'splits_mismatch', { expected: total, got: sumSplits });
+      }
+      const payMethod = useSplits ? splits.map(s => s.method).join('+') : (paymentMethod || 'efectivo');
+
+      const table = (await tq('SELECT num FROM tables WHERE id=$1 AND tenant_id=$2', [tableId, req.tenant.id])).rows[0];
+      const waiter = ot.waiter_id
+        ? (await tq('SELECT name FROM waiters WHERE id=$1 AND tenant_id=$2', [ot.waiter_id, req.tenant.id])).rows[0]
+        : null;
+
+      // Caja: solo se requiere si algun pago va a un metodo que afecta caja.
+      // Se bloquea tambien para que un cierre de caja simultaneo no se coma este cobro.
+      const needsCash = useSplits ? splits.some(s => s.method !== 'cuenta_corriente') : (payMethod !== 'cuenta_corriente');
+      const cash = (await tq('SELECT tenant_id FROM current_cash WHERE tenant_id=$1 FOR UPDATE', [req.tenant.id])).rows[0];
+      if (needsCash && !cash) throw httpError(400, 'cash_not_open');
+      const allOnAccount = !needsCash && customerId;
+
+      if (customerId) {
+        const c = (await tq('SELECT 1 FROM customers WHERE id=$1 AND tenant_id=$2', [customerId, req.tenant.id])).rows[0];
+        if (!c) throw httpError(400, 'customer_not_found');
+      }
+
+      const order = (await tq(`INSERT INTO orders (tenant_id, table_id, table_num, waiter_id, waiter_name,
+                              items, subtotal, discount, discount_type, total, payment_method, note,
+                              customer_id, splits, opened_at, closed_at)
+                              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now()) RETURNING *`,
+        [req.tenant.id, tableId, table?.num || null, ot.waiter_id, waiter?.name || null,
+         JSON.stringify(items), subtotal, discountAmount, discountType || null,
+         total, payMethod, note || null, customerId || null,
+         JSON.stringify(useSplits ? splits : []), ot.opened_at])).rows[0];
+
+      // Stock (solo productos con stock controlado)
+      for (const it of items) {
+        const p = prodMap.get(it.productId);
+        if (p && p.stock !== null && p.stock !== undefined) {
+          await tq('UPDATE products SET stock=GREATEST(0, stock-$1) WHERE id=$2 AND tenant_id=$3',
+            [it.qty, it.productId, req.tenant.id]);
+        }
+      }
+
+      // Caja (si no fue todo a cuenta corriente)
+      if (cash && !allOnAccount) {
+        const at = new Date().toISOString();
+        const desc = 'Mesa ' + (table?.num || '?');
+        const txs = useSplits
+          ? splits.filter(x => x.method !== 'cuenta_corriente')
+              .map(x => ({ id: uuid(), type: 'in', amount: x.amount, method: x.method, desc: desc + ' (split)', at }))
+          : [{ id: uuid(), type: 'in', amount: total, method: payMethod, desc, at }];
+        await appendCashTx(tq, req.tenant.id, txs);
+      }
+
+      // Cuenta corriente (total o splits)
+      if (customerId) {
+        const amountToAccount = useSplits
+          ? splits.filter(x => x.method === 'cuenta_corriente').reduce((sum, x) => sum + x.amount, 0)
+          : (payMethod === 'cuenta_corriente' ? total : 0);
+        if (amountToAccount > 0) {
+          await tq('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3',
+            [amountToAccount, customerId, req.tenant.id]);
+          await tq(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, order_id, method, note)
+                    VALUES ($1,$2,'charge',$3,$4,'cuenta_corriente',$5)`,
+            [req.tenant.id, customerId, amountToAccount, order.id, 'Mesa ' + (table?.num || '?')]);
+        }
+      }
+
+      await tq(`UPDATE kitchen_tickets SET status='delivered', delivered_at=now()
+                WHERE tenant_id=$1 AND table_id=$2 AND status IN ('pending','preparing','ready')`,
+        [req.tenant.id, tableId]);
+      await tq('DELETE FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id]);
+      return order;
+    });
+    res.json(order);
+  } catch (e) {
+    if (e.httpStatus) return res.status(e.httpStatus).json({ error: e.code, ...(e.extra || {}) });
+    console.error('[orders]', e);
+    res.status(500).json({ error: 'server_error' });
   }
-
-  // Si hay cliente y se cobra a cuenta corriente (total o split), cargar el balance.
-  // Si hay múltiples splits a cuenta_corriente, los sumamos.
-  if (customerId) {
-    const amountToAccount = useSplits
-      ? splits.filter(s => s.method === 'cuenta_corriente').reduce((sum, s) => sum + parseFloat(s.amount||0), 0)
-      : (payMethod === 'cuenta_corriente' ? total : 0);
-    if (amountToAccount > 0) {
-      await q('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3',
-        [amountToAccount, customerId, req.tenant.id]);
-      await q(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, order_id, method, note)
-               VALUES ($1,$2,'charge',$3,$4,'cuenta_corriente',$5)`,
-        [req.tenant.id, customerId, amountToAccount, order.id, 'Mesa ' + (table?.num || '?')]);
-    }
-  }
-
-  // Marcar tickets de cocina pendientes como entregados
-  await q(`UPDATE kitchen_tickets SET status='delivered', delivered_at=now()
-           WHERE tenant_id=$1 AND table_id=$2 AND status IN ('pending','preparing','ready')`,
-    [req.tenant.id, tableId]);
-
-  // Cerrar mesa abierta
-  await q('DELETE FROM open_tables WHERE table_id=$1 AND tenant_id=$2', [tableId, req.tenant.id]);
-
-  res.json(order);
 });
 
 // ----- CUSTOMERS (clientes / cuenta corriente) -----
@@ -1627,20 +1695,18 @@ app.post('/api/customers/:id/payment', async (req, res) => {
   if (!amt || amt <= 0) return res.status(400).json({ error: 'invalid_amount' });
   const c = (await q('SELECT * FROM customers WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id])).rows[0];
   if (!c) return res.status(404).json({ error: 'not_found' });
-  await q('UPDATE customers SET balance=balance-$1 WHERE id=$2', [amt, c.id]);
-  await q(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, method, note)
-           VALUES ($1,$2,'payment',$3,$4,$5)`,
-    [req.tenant.id, c.id, amt, method || 'efectivo', note || null]);
-
-  // También suma a caja si está abierta y el método no es cuenta corriente
-  const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  if (cash && method !== 'cuenta_corriente') {
-    const txs = cash.transactions || [];
-    txs.push({ id: uuid(), type: 'in', amount: amt, method: method || 'efectivo',
-      desc: 'Pago cuenta: ' + c.name, at: new Date().toISOString() });
-    await q('UPDATE current_cash SET transactions=$1 WHERE tenant_id=$2',
-      [JSON.stringify(txs), req.tenant.id]);
-  }
+  const m = PAY_METHODS.includes(method) ? method : 'efectivo';
+  await withTx(async (tq) => {
+    await tq('UPDATE customers SET balance=balance-$1 WHERE id=$2 AND tenant_id=$3', [amt, c.id, req.tenant.id]);
+    await tq(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, method, note)
+              VALUES ($1,$2,'payment',$3,$4,$5)`,
+      [req.tenant.id, c.id, amt, m, note || null]);
+    // Tambien entra a caja si esta abierta y el pago no es a cuenta corriente.
+    if (m !== 'cuenta_corriente') {
+      await appendCashTx(tq, req.tenant.id, [{ id: uuid(), type: 'in', amount: amt, method: m,
+        desc: 'Pago cuenta: ' + c.name, at: new Date().toISOString() }]);
+    }
+  });
   res.json({ ok: true });
 });
 
@@ -1750,39 +1816,84 @@ app.get('/api/cash', async (req, res) => {
 });
 app.post('/api/cash/open', async (req, res) => {
   const { openingAmount } = req.body || {};
-  const amt = parseFloat(openingAmount) || 0;
-  const exists = await q('SELECT 1 FROM current_cash WHERE tenant_id=$1', [req.tenant.id]);
-  if (exists.rows[0]) return res.status(409).json({ error: 'cash_already_open' });
+  const amt = Math.max(0, parseFloat(openingAmount) || 0);
+  // ON CONFLICT: dos aperturas a la vez (doble toque) devuelven 409, no un error 500.
   const r = await q(`INSERT INTO current_cash (tenant_id, opening_amount, transactions, opened_at)
-                     VALUES ($1,$2,'[]'::jsonb, now()) RETURNING *`, [req.tenant.id, amt]);
+                     VALUES ($1,$2,'[]'::jsonb, now())
+                     ON CONFLICT (tenant_id) DO NOTHING RETURNING *`, [req.tenant.id, amt]);
+  if (!r.rows[0]) return res.status(409).json({ error: 'cash_already_open' });
   res.json(r.rows[0]);
 });
 app.post('/api/cash/movement', async (req, res) => {
-  const { type, amount, desc, method } = req.body || {};
-  if (!type || !amount || amount <= 0) return res.status(400).json({ error: 'invalid' });
-  const cur = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  if (!cur) return res.status(400).json({ error: 'cash_not_open' });
-  const txs = cur.transactions || [];
-  txs.push({ id: uuid(), type, amount, desc: desc || 'Movimiento', method: method || 'efectivo', at: new Date().toISOString() });
-  await q('UPDATE current_cash SET transactions=$1 WHERE tenant_id=$2', [JSON.stringify(txs), req.tenant.id]);
+  const { type, desc, method } = req.body || {};
+  // El monto se guarda como numero: si llegaba como texto, el cierre lo
+  // concatenaba en vez de sumarlo.
+  const amount = Math.round((parseFloat(req.body && req.body.amount) || 0) * 100) / 100;
+  if (!['in', 'out'].includes(type) || !(amount > 0)) return res.status(400).json({ error: 'invalid' });
+  const m = PAY_METHODS.includes(method) ? method : 'efectivo';
+  const r = await q(`UPDATE current_cash
+                        SET transactions = COALESCE(transactions, '[]'::jsonb) || $1::jsonb
+                      WHERE tenant_id=$2 RETURNING tenant_id`,
+    [JSON.stringify([{ id: uuid(), type, amount, desc: desc || 'Movimiento', method: m, at: new Date().toISOString() }]), req.tenant.id]);
+  if (!r.rows[0]) return res.status(400).json({ error: 'cash_not_open' });
   res.json({ ok: true });
 });
+// Resumen de una caja: lo que entro por cada metodo y el efectivo que deberia
+// haber en el cajon. En el cajon solo hay EFECTIVO: tarjeta, transferencia y
+// MercadoPago se concilian contra el posnet o el banco, no contra lo contado.
+function cashSummary(cur) {
+  const txs = cur.transactions || [];
+  const num = (v) => parseFloat(v) || 0;
+  const byMethod = {};
+  let totalIn = 0, totalOut = 0, cashIn = 0, cashOut = 0;
+  for (const t of txs) {
+    const amt = num(t.amount);
+    const m = t.method || 'efectivo';
+    if (t.type === 'in') {
+      totalIn += amt;
+      byMethod[m] = Math.round(((byMethod[m] || 0) + amt) * 100) / 100;
+      if (m === 'efectivo') cashIn += amt;
+    } else if (t.type === 'out') {
+      totalOut += amt;
+      if (m === 'efectivo') cashOut += amt;
+    }
+  }
+  const round = (v) => Math.round(v * 100) / 100;
+  return {
+    totalIn: round(totalIn), totalOut: round(totalOut), byMethod,
+    expectedCash: round(num(cur.opening_amount) + cashIn - cashOut)
+  };
+}
+
 app.post('/api/cash/close', async (req, res) => {
   const { closingAmount } = req.body || {};
-  const cur = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  if (!cur) return res.status(400).json({ error: 'cash_not_open' });
-  const closing = parseFloat(closingAmount) || 0;
-  const txs = cur.transactions || [];
-  const totalIn = txs.filter(t => t.type === 'in').reduce((s,t) => s + t.amount, 0);
-  const totalOut = txs.filter(t => t.type === 'out').reduce((s,t) => s + t.amount, 0);
-  const expected = parseFloat(cur.opening_amount) + totalIn - totalOut;
-  const diff = closing - expected;
-
-  await q(`INSERT INTO cash_history (tenant_id, opening_amount, closing_amount, total_in, total_out, diff, transactions, opened_at, closed_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())`,
-    [req.tenant.id, cur.opening_amount, closing, totalIn, totalOut, diff, JSON.stringify(txs), cur.opened_at]);
-  await q('DELETE FROM current_cash WHERE tenant_id=$1', [req.tenant.id]);
-  res.json({ ok: true, diff, expected });
+  if (closingAmount === undefined || closingAmount === null || closingAmount === '' || isNaN(parseFloat(closingAmount))) {
+    return res.status(400).json({ error: 'closing_amount_required' });
+  }
+  const closing = Math.round(parseFloat(closingAmount) * 100) / 100;
+  try {
+    const out = await withTx(async (tq) => {
+      // FOR UPDATE: un cobro que llega justo durante el cierre espera y no se pierde.
+      const cur = (await tq('SELECT * FROM current_cash WHERE tenant_id=$1 FOR UPDATE', [req.tenant.id])).rows[0];
+      if (!cur) throw httpError(400, 'cash_not_open');
+      const sum = cashSummary(cur);
+      const diff = Math.round((closing - sum.expectedCash) * 100) / 100;
+      await tq(`INSERT INTO cash_history (tenant_id, opening_amount, closing_amount, total_in, total_out, diff,
+                                          transactions, opened_at, closed_at, expected_cash, by_method)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now(), $9, $10)`,
+        [req.tenant.id, cur.opening_amount, closing, sum.totalIn, sum.totalOut, diff,
+         JSON.stringify(cur.transactions || []), cur.opened_at, sum.expectedCash, JSON.stringify(sum.byMethod)]);
+      await tq('DELETE FROM current_cash WHERE tenant_id=$1', [req.tenant.id]);
+      // expected se mantiene por compatibilidad con pantallas viejas: es el efectivo esperado.
+      return { ok: true, diff, expected: sum.expectedCash, expectedCash: sum.expectedCash,
+               byMethod: sum.byMethod, totalIn: sum.totalIn, totalOut: sum.totalOut };
+    });
+    res.json(out);
+  } catch (e) {
+    if (e.httpStatus) return res.status(e.httpStatus).json({ error: e.code });
+    console.error('[cash-close]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ----- PENDING ORDERS (delivery + takeaway) -----
@@ -1834,94 +1945,110 @@ app.put('/api/pending-orders/:id', async (req, res) => {
 
 // Cobrar un pedido pending y convertirlo en orden
 app.post('/api/pending-orders/:id/charge', async (req, res) => {
-  const { paymentMethod, splits, discount, discountType, customerId } = req.body || {};
-  const po = (await q('SELECT * FROM pending_orders WHERE id=$1 AND tenant_id=$2', [req.params.id, req.tenant.id])).rows[0];
-  if (!po) return res.status(404).json({ error: 'not_found' });
-
-  const products = (await q('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
-  const prodMap = new Map(products.map(p => [p.id, p]));
-
-  let subtotal = 0;
-  const items = (po.items || []).map(it => {
-    const p = prodMap.get(it.productId);
-    if (!p) return it;
-    const modSum = (it.modifiers || []).reduce((s,m) => s + (parseFloat(m.price)||0), 0);
-    const unit = parseFloat(p.price) + modSum;
-    const itemSubtotal = unit * it.qty - (it.discount||0);
-    subtotal += itemSubtotal;
-    return { ...it, name: p.name, price: p.price, emoji: p.emoji, subtotal: itemSubtotal };
-  });
-
-  let discountAmount = 0;
-  if (discount > 0) {
-    discountAmount = discountType === 'percent' ? subtotal*(discount/100) : parseFloat(discount);
-  }
-  const total = Math.max(0, subtotal - discountAmount);
-
-  const useSplits = Array.isArray(splits) && splits.length > 0;
-  if (useSplits) {
-    const sumSplits = splits.reduce((s, sp) => s + parseFloat(sp.amount||0), 0);
-    if (Math.abs(sumSplits - total) > 0.5) return res.status(400).json({ error: 'splits_mismatch', expected: total });
-  }
-  const payMethod = useSplits ? splits.map(s => s.method).join('+') : (paymentMethod || 'efectivo');
-
-  const cash = (await q('SELECT * FROM current_cash WHERE tenant_id=$1', [req.tenant.id])).rows[0];
-  const needsCash = useSplits
-    ? splits.some(s => s.method !== 'cuenta_corriente')
-    : (payMethod !== 'cuenta_corriente');
-  if (needsCash && !cash) return res.status(400).json({ error: 'cash_not_open' });
-  const allOnAccount = !needsCash && (customerId || po.customer_id);
-
-  const order = (await q(`INSERT INTO orders (tenant_id, waiter_id, waiter_name, items, subtotal,
-                          discount, discount_type, total, payment_method, note, customer_id, splits, closed_at)
-                          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now()) RETURNING *`,
-    [req.tenant.id, po.waiter_id, null, JSON.stringify(items), subtotal,
-     discountAmount, discountType || null, total, payMethod,
-     po.kind === 'delivery' ? '🛵 Delivery: ' + (po.delivery_address||'') : '📦 Take away',
-     customerId || po.customer_id || null,
-     JSON.stringify(useSplits ? splits : [])])).rows[0];
-
-  // Descuento stock
-  for (const it of items) {
-    const p = prodMap.get(it.productId);
-    if (p && p.stock !== null && p.stock !== undefined) {
-      await q('UPDATE products SET stock=GREATEST(0, stock-$1) WHERE id=$2 AND tenant_id=$3',
-        [it.qty, it.productId, req.tenant.id]);
-    }
+  const { paymentMethod, discount, discountType, customerId } = req.body || {};
+  const sp = cleanSplits(req.body && req.body.splits);
+  if (sp && sp.error) return res.status(400).json({ error: sp.error });
+  const splits = sp ? sp.splits : null;
+  const useSplits = !!splits;
+  if (!useSplits && paymentMethod && !PAY_METHODS.includes(paymentMethod)) {
+    return res.status(400).json({ error: 'payment_method_invalid' });
   }
 
-  // Caja
-  if (cash && !allOnAccount) {
-    const txs = cash.transactions || [];
-    const desc = (po.kind === 'delivery' ? 'Delivery ' : 'Take away ') + (po.customer_name||'');
-    if (useSplits) {
-      for (const sp of splits) {
-        if (sp.method === 'cuenta_corriente') continue;
-        txs.push({ id: uuid(), type:'in', amount: parseFloat(sp.amount), method: sp.method, desc, at: new Date().toISOString() });
+  try {
+    const order = await withTx(async (tq) => {
+      // FOR UPDATE + chequeo de estado: antes este endpoint no miraba si el
+      // pedido ya estaba cobrado, asi que un doble toque (o volver a tocar
+      // "Cobrar" mas tarde) registraba la venta otra vez.
+      const po = (await tq('SELECT * FROM pending_orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE',
+        [req.params.id, req.tenant.id])).rows[0];
+      if (!po) throw httpError(404, 'not_found');
+      if (po.order_id || po.status === 'delivered') throw httpError(409, 'already_charged');
+      if (po.status === 'cancelled') throw httpError(409, 'order_cancelled');
+
+      const products = (await tq('SELECT id, name, price, emoji, stock FROM products WHERE tenant_id=$1', [req.tenant.id])).rows;
+      const prodMap = new Map(products.map(p => [p.id, p]));
+
+      let subtotal = 0;
+      const items = (po.items || []).map(it => {
+        const p = prodMap.get(it.productId);
+        if (!p) return it;
+        const modSum = (it.modifiers || []).reduce((s, m) => s + (parseFloat(m.price) || 0), 0);
+        const unit = parseFloat(p.price) + modSum;
+        const itemSubtotal = unit * it.qty - (it.discount || 0);
+        subtotal += itemSubtotal;
+        return { ...it, name: p.name, price: p.price, emoji: p.emoji, subtotal: itemSubtotal };
+      });
+
+      let discountAmount = 0;
+      if (discount > 0) {
+        discountAmount = discountType === 'percent' ? subtotal * (discount / 100) : parseFloat(discount);
       }
-    } else {
-      txs.push({ id: uuid(), type:'in', amount: total, method: payMethod, desc, at: new Date().toISOString() });
-    }
-    await q('UPDATE current_cash SET transactions=$1 WHERE tenant_id=$2', [JSON.stringify(txs), req.tenant.id]);
-  }
+      const total = Math.max(0, subtotal - discountAmount);
 
-  // Cuenta corriente
-  const cid = customerId || po.customer_id;
-  if (cid) {
-    const amountToAccount = useSplits
-      ? splits.filter(s => s.method === 'cuenta_corriente').reduce((sum, s) => sum + parseFloat(s.amount||0), 0)
-      : (payMethod === 'cuenta_corriente' ? total : 0);
-    if (amountToAccount > 0) {
-      await q('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3', [amountToAccount, cid, req.tenant.id]);
-      await q(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, order_id, method, note)
-               VALUES ($1,$2,'charge',$3,$4,'cuenta_corriente',$5)`,
-        [req.tenant.id, cid, amountToAccount, order.id, po.kind]);
-    }
-  }
+      if (useSplits) {
+        const sumSplits = splits.reduce((s, x) => s + x.amount, 0);
+        if (Math.abs(sumSplits - total) > 0.5) throw httpError(400, 'splits_mismatch', { expected: total });
+      }
+      const payMethod = useSplits ? splits.map(s => s.method).join('+') : (paymentMethod || 'efectivo');
 
-  // Marcar pending_order como entregado y delivered
-  await q(`UPDATE pending_orders SET status='delivered' WHERE id=$1`, [po.id]);
-  res.json(order);
+      const needsCash = useSplits ? splits.some(s => s.method !== 'cuenta_corriente') : (payMethod !== 'cuenta_corriente');
+      const cash = (await tq('SELECT tenant_id FROM current_cash WHERE tenant_id=$1 FOR UPDATE', [req.tenant.id])).rows[0];
+      if (needsCash && !cash) throw httpError(400, 'cash_not_open');
+      const cid = customerId || po.customer_id || null;
+      const allOnAccount = !needsCash && cid;
+      if (customerId) {
+        const c = (await tq('SELECT 1 FROM customers WHERE id=$1 AND tenant_id=$2', [customerId, req.tenant.id])).rows[0];
+        if (!c) throw httpError(400, 'customer_not_found');
+      }
+
+      const order = (await tq(`INSERT INTO orders (tenant_id, waiter_id, waiter_name, items, subtotal,
+                              discount, discount_type, total, payment_method, note, customer_id, splits, closed_at)
+                              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now()) RETURNING *`,
+        [req.tenant.id, po.waiter_id, null, JSON.stringify(items), subtotal,
+         discountAmount, discountType || null, total, payMethod,
+         po.kind === 'delivery' ? '🛵 Delivery: ' + (po.delivery_address || '') : '📦 Take away',
+         cid, JSON.stringify(useSplits ? splits : [])])).rows[0];
+
+      for (const it of items) {
+        const p = prodMap.get(it.productId);
+        if (p && p.stock !== null && p.stock !== undefined) {
+          await tq('UPDATE products SET stock=GREATEST(0, stock-$1) WHERE id=$2 AND tenant_id=$3',
+            [it.qty, it.productId, req.tenant.id]);
+        }
+      }
+
+      if (cash && !allOnAccount) {
+        const at = new Date().toISOString();
+        const desc = (po.kind === 'delivery' ? 'Delivery ' : 'Take away ') + (po.customer_name || '');
+        const txs = useSplits
+          ? splits.filter(x => x.method !== 'cuenta_corriente')
+              .map(x => ({ id: uuid(), type: 'in', amount: x.amount, method: x.method, desc, at }))
+          : [{ id: uuid(), type: 'in', amount: total, method: payMethod, desc, at }];
+        await appendCashTx(tq, req.tenant.id, txs);
+      }
+
+      if (cid) {
+        const amountToAccount = useSplits
+          ? splits.filter(x => x.method === 'cuenta_corriente').reduce((sum, x) => sum + x.amount, 0)
+          : (payMethod === 'cuenta_corriente' ? total : 0);
+        if (amountToAccount > 0) {
+          await tq('UPDATE customers SET balance=balance+$1 WHERE id=$2 AND tenant_id=$3', [amountToAccount, cid, req.tenant.id]);
+          await tq(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, order_id, method, note)
+                    VALUES ($1,$2,'charge',$3,$4,'cuenta_corriente',$5)`,
+            [req.tenant.id, cid, amountToAccount, order.id, po.kind]);
+        }
+      }
+
+      await tq(`UPDATE pending_orders SET status='delivered', order_id=$2 WHERE id=$1 AND tenant_id=$3`,
+        [po.id, order.id, req.tenant.id]);
+      return order;
+    });
+    res.json(order);
+  } catch (e) {
+    if (e.httpStatus) return res.status(e.httpStatus).json({ error: e.code, ...(e.extra || {}) });
+    console.error('[pending-charge]', e);
+    res.status(500).json({ error: 'server_error' });
+  }
 });
 
 // ----- DASHBOARD -----
