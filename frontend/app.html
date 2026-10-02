@@ -576,10 +576,9 @@ async function demoApi(path, opts = {}) {
   }
   if (path === '/api/cash/close') {
     if (!cash) throw new Error('cash_not_open');
-    const txs = cash.transactions || [];
-    const totalIn = txs.filter(t=>t.type==='in').reduce((s,t)=>s+parseFloat(t.amount),0);
-    const totalOut = txs.filter(t=>t.type==='out').reduce((s,t)=>s+parseFloat(t.amount),0);
-    const expected = parseFloat(cash.opening_amount) + totalIn - totalOut;
+    const sum = cashSummaryUI(cash);
+    const totalIn = sum.totalIn, totalOut = sum.totalOut;
+    const expected = sum.expectedCash;
     const closing = parseFloat(body.closingAmount)||0;
     const diff = closing - expected;
     // Guardar en historial demo
@@ -587,11 +586,11 @@ async function demoApi(path, opts = {}) {
     history.unshift({
       opened_at:cash.opened_at, closed_at:new Date().toISOString(),
       opening_amount:cash.opening_amount, closing_amount:closing,
-      total_in:totalIn, total_out:totalOut, diff
+      total_in:totalIn, total_out:totalOut, diff, expected_cash: expected, by_method: sum.byMethod
     });
     demoWrite('gestiva_demo_cash_history', history.slice(0,30));
     demoWrite('gestiva_demo_cash', null);
-    return { ok:true, diff, expected };
+    return { ok:true, diff, expected, expectedCash: expected, byMethod: sum.byMethod };
   }
   if (path === '/api/dashboard') { const todayOrders = orders.filter(o => o.closed_at?.slice(0,10) === today()); return { ordersToday:todayOrders, ordersWeek:orders, openCount:openTables.filter(openTableHasOrder).length, tablesCount:tables.length, productsTotal:products.length, productsAvailable:products.filter(p => p.available).length, cash }; }
   if (path === '/api/settings') { USER = { ...USER, restaurantName:body.restaurantName || USER.restaurantName, ownerName:body.ownerName || USER.ownerName, phone:body.phone || USER.phone, currency:body.currency || USER.currency }; localStorage.setItem('gestiva_user', JSON.stringify(USER)); return USER; }
@@ -649,11 +648,24 @@ async function api(path, opts = {}) {
     }
   });
   const text = await r.text();
-  const data = text ? JSON.parse(text) : {};
-  if (r.status === 401) { localStorage.clear(); location.href = 'login.html'; throw new Error('unauthorized'); }
+  // Si el servidor esta despertando o caido, Render devuelve una pagina HTML:
+  // no la parseamos como JSON (antes salia "Unexpected token <").
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; }
+  catch (e) { if (!r.ok) throw new Error('El servidor no responde. Reintentá en unos segundos.'); }
+  if (r.status === 401) { clearSession(); location.href = 'login.html'; throw new Error('unauthorized'); }
   if (r.status === 402) { location.href = 'checkout.html'; throw new Error('subscription_required'); }
   if (!r.ok) throw new Error(data.error || 'api_error');
   return data;
+}
+
+// Cierra la sesion SIN tocar la configuracion de esta PC. Antes se hacia
+// localStorage.clear(): cada vez que la sesion vencia (o salia un 401) se
+// borraba tambien la lista de comanderas configuradas en la PC central.
+function clearSession() {
+  ['gestiva_token', 'gestiva_user', 'gestiva_demo'].forEach(k => {
+    try { localStorage.removeItem(k); } catch (e) {}
+  });
 }
 
 function isEditableTarget(el) {
@@ -771,7 +783,7 @@ function closeModal() { $('#modalRoot').innerHTML = ''; }
 // ---------- Sidebar ----------
 function logout() {
   if (!confirm('¿Cerrar sesión?')) return;
-  localStorage.clear(); location.href = 'login.html';
+  clearSession(); location.href = 'login.html';
 }
 function refreshSubPill() {
   const pill = $('#subPill');
@@ -850,8 +862,8 @@ async function refreshCashPill() {
     const status = $('#cashStatus');
     const amount = $('#cashAmount');
     if (CASH_CACHE) {
-      const txs = CASH_CACHE.transactions || [];
-      const total = parseFloat(CASH_CACHE.opening_amount) + txs.reduce((s,t) => s + (t.type === 'in' ? t.amount : -t.amount), 0);
+      // La pastilla muestra el efectivo del cajon, igual que la pantalla de caja.
+      const total = cashSummaryUI(CASH_CACHE).expectedCash;
       pill.className = 'cash-pill open';
       status.textContent = 'Abierta';
       amount.textContent = fmt(total);
@@ -1627,7 +1639,7 @@ async function chargeTable() {
     </div>
     <div class="field" style="margin-top:14px;"><label>Notas (opcional)</label><textarea id="orderNote" rows="2"></textarea></div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="confirmCharge(${total})">Confirmar cobro</button>`);
+     <button class="btn btn-primary" id="btnConfirmCharge" onclick="confirmCharge(${total})">Confirmar cobro</button>`);
   window.__total = total;
 }
 function setDocMode(mode) {
@@ -1702,6 +1714,7 @@ async function quickAddCustomer() {
     toast('Cliente creado','success');
   } catch(e) { toast(e.message,'error'); }
 }
+let CHARGING = false;
 async function confirmCharge(total) {
   const note = $('#orderNote').value;
   const isSplit = document.getElementById('modeSplit').classList.contains('active');
@@ -1747,6 +1760,11 @@ async function confirmCharge(total) {
       payload.customerId = cid;
     }
   }
+  // Un solo cobro por vez: el boton se apaga hasta que vuelve la respuesta.
+  if (CHARGING) return;
+  CHARGING = true;
+  const btnCharge = document.getElementById('btnConfirmCharge');
+  if (btnCharge) { btnCharge.disabled = true; btnCharge.textContent = 'Cobrando...'; }
   try {
     const order = await API.createOrder(payload);
     const sale = buildSaleFromCharge(order, payload);
@@ -1765,10 +1783,28 @@ async function confirmCharge(total) {
     toast('Cobro registrado','success');
     showReceiptModal(sale);
   } catch(e) {
-    toast(e.message === 'cash_not_open' ? 'Abrí la caja primero' :
-          e.message === 'splits_mismatch' ? 'La suma de pagos no coincide con el total' :
-          e.message, 'error');
+    toast(chargeErrorText(e.message), 'error');
+    if (e.message === 'table_not_open') { closeModal(); location.hash = '#/mesas'; }
+  } finally {
+    CHARGING = false;
+    const b = document.getElementById('btnConfirmCharge');
+    if (b) { b.disabled = false; b.textContent = 'Confirmar cobro'; }
   }
+}
+
+// Textos para los rechazos del cobro (antes salia el codigo crudo, ej: "table_not_open").
+function chargeErrorText(code) {
+  return ({
+    cash_not_open: 'Abrí la caja primero',
+    splits_mismatch: 'La suma de pagos no coincide con el total',
+    table_not_open: 'Esta mesa ya fue cobrada',
+    already_charged: 'Este pedido ya fue cobrado',
+    order_cancelled: 'Este pedido está cancelado',
+    split_amount_invalid: 'Cada pago tiene que tener un monto mayor a cero',
+    split_method_invalid: 'Hay un pago con un método no válido',
+    customer_not_found: 'El cliente elegido no existe',
+    table_empty: 'La mesa no tiene productos'
+  })[code] || code;
 }
 
 // Arma el comprobante de venta a partir de la orden cobrada
@@ -2070,14 +2106,18 @@ async function chargePending() {
       <select id="pcCust"><option value="">— Elegir —</option>${customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}</select>
     </div>`,
     `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="confirmChargePending()">Confirmar cobro</button>`);
+     <button class="btn btn-primary" id="btnConfirmPending" onclick="confirmChargePending()">Confirmar cobro</button>`);
 }
 async function confirmChargePending() {
   const method = $('#pcMethod').value;
   const customerId = method === 'cuenta_corriente' ? $('#pcCust').value : null;
   if (method === 'cuenta_corriente' && !customerId) return toast('Elegí un cliente','error');
+  if (CHARGING) return;
+  CHARGING = true;
+  const btn = document.getElementById('btnConfirmPending');
+  if (btn) { btn.disabled = true; btn.textContent = 'Cobrando...'; }
   try {
-    await API.pendingOrderCharge(window.__pendingId, { paymentMethod: method, customerId });
+    const order = await API.pendingOrderCharge(window.__pendingId, { paymentMethod: method, customerId });
     CASH_CACHE = null; await refreshCashPill();
     toast('Cobro registrado','success');
     const sale = {
@@ -2085,10 +2125,18 @@ async function confirmChargePending() {
       table: null, waiter: null, datetime: new Date(), ref: window.__pendingId ? String(window.__pendingId).replace(/-/g,'').slice(-6).toUpperCase() : null,
       items: window.__pendingSaleItems || [],
       subtotal: window.__pendingTotal, discount: 0, total: window.__pendingTotal,
-      payments: [{ method, amount: window.__pendingTotal }]
+      payments: [{ method, amount: window.__pendingTotal }],
+      orderId: order && order.id
     };
     showReceiptModal(sale, '#/pedidos');
-  } catch(e) { toast(e.message === 'cash_not_open' ? 'Abrí la caja primero' : e.message, 'error'); }
+  } catch(e) {
+    toast(chargeErrorText(e.message), 'error');
+    if (e.message === 'already_charged') { closeModal(); location.hash = '#/pedidos'; }
+  } finally {
+    CHARGING = false;
+    const b = document.getElementById('btnConfirmPending');
+    if (b) { b.disabled = false; b.textContent = 'Confirmar cobro'; }
+  }
 }
 
 // ---------- PRODUCTOS ----------
@@ -2201,7 +2249,11 @@ async function saveProduct(id) {
 async function deleteProductCfm(id) {
   if (!confirm('¿Eliminar producto?')) return;
   try { await API.productDelete(id); closeModal(); navigate(); toast('Producto eliminado','success'); }
-  catch(e) { toast(e.message,'error'); }
+  catch(e) {
+    toast(e.message === 'product_in_open_order'
+      ? 'Ese producto está cargado en una mesa o pedido sin cobrar. Cobralo primero, o marcalo como no disponible.'
+      : e.message, 'error');
+  }
 }
 
 // ---------- CAJA ----------
@@ -2211,9 +2263,10 @@ route('caja', async () => {
   await refreshCashPill();
   const cur = c.current;
   const txs = cur?.transactions || [];
-  const inSum = txs.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0);
-  const outSum = txs.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
-  const balance = cur ? parseFloat(cur.opening_amount) + inSum - outSum : 0;
+  const sum = cur ? cashSummaryUI(cur) : { totalIn: 0, totalOut: 0, expectedCash: 0, byMethod: {} };
+  const inSum = sum.totalIn, outSum = sum.totalOut;
+  const balance = sum.expectedCash;
+  const methodRows = Object.entries(sum.byMethod).sort((a,b) => b[1]-a[1]);
 
   $('#view').innerHTML = `
     <div class="page-header">
@@ -2230,8 +2283,17 @@ route('caja', async () => {
         <div class="card"><div class="card-title">Ingresos</div><div class="card-value" style="color:var(--green);">${fmt(inSum)}</div></div>
         <div class="card"><div class="card-title">Egresos</div><div class="card-value" style="color:var(--red);">${fmt(outSum)}</div></div>
         <div class="card" style="background:linear-gradient(135deg,#fff7ed,#fff);border-color:var(--or-200);">
-          <div class="card-title">En caja</div><div class="card-value" style="color:var(--or-dk);">${fmt(balance)}</div></div>
+          <div class="card-title">Efectivo en el cajón</div><div class="card-value" style="color:var(--or-dk);">${fmt(balance)}</div></div>
       </div>
+      ${methodRows.length ? `<div class="card" style="margin-bottom:24px;">
+        <h3 style="margin-bottom:12px;font-size:16px;">Cobrado por método</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;">
+          ${methodRows.map(([m, v]) => `<div style="padding:10px 14px;border:1px solid var(--border);border-radius:10px;min-width:140px;">
+            <div style="font-size:12px;color:var(--tx-mid);">${Comandera.payLabel(m)}</div>
+            <div style="font-weight:800;font-size:17px;">${fmt(v)}</div></div>`).join('')}
+        </div>
+        <p style="font-size:12px;color:var(--tx-lt);margin-top:10px;">En el cajón solo hay efectivo. Tarjeta, transferencia y MercadoPago se controlan contra el posnet o el banco.</p>
+      </div>` : ''}
       <div class="card">
         <h3 style="margin-bottom:16px;font-size:16px;">Movimientos (${txs.length})</h3>
         ${txs.length===0 ? '<div class="empty">Sin movimientos</div>' : `<table class="data-table">
@@ -2248,11 +2310,12 @@ route('caja', async () => {
       </div>
       ${c.history && c.history.length>0 ? `<div class="card" style="margin-top:24px;">
         <h3 style="margin-bottom:16px;font-size:16px;">Historial</h3>
-        <table class="data-table"><thead><tr><th>Fecha</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Final</th><th>Diff</th></tr></thead>
+        <table class="data-table"><thead><tr><th>Fecha</th><th>Apertura</th><th>Ingresos</th><th>Egresos</th><th>Efectivo esperado</th><th>Contado</th><th>Diferencia</th></tr></thead>
         <tbody>${c.history.map(h => `<tr>
           <td>${new Date(h.closed_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
           <td>${fmt(h.opening_amount)}</td><td style="color:var(--green);">${fmt(h.total_in)}</td>
           <td style="color:var(--red);">${fmt(h.total_out)}</td>
+          <td>${h.expected_cash != null ? fmt(h.expected_cash) : '—'}</td>
           <td><strong>${fmt(h.closing_amount)}</strong></td>
           <td style="color:${parseFloat(h.diff)>=0?'var(--green)':'var(--red)'};font-weight:700;">${parseFloat(h.diff)>=0?'+':''}${fmt(h.diff)}</td></tr>`).join('')}</tbody></table></div>` : ''}
     `}`;
@@ -2282,18 +2345,56 @@ async function doMovement() {
     CASH_CACHE = null; closeModal(); navigate(); toast('Movimiento registrado','success');
   } catch(e) { toast(e.message,'error'); }
 }
+// Mismo calculo que el backend (cashSummary): el cajon solo tiene efectivo.
+function cashSummaryUI(cur) {
+  const txs = cur.transactions || [];
+  const num = (v) => parseFloat(v) || 0;
+  const byMethod = {};
+  let totalIn = 0, totalOut = 0, cashIn = 0, cashOut = 0;
+  for (const t of txs) {
+    const amt = num(t.amount), m = t.method || 'efectivo';
+    if (t.type === 'in') { totalIn += amt; byMethod[m] = (byMethod[m] || 0) + amt; if (m === 'efectivo') cashIn += amt; }
+    else if (t.type === 'out') { totalOut += amt; if (m === 'efectivo') cashOut += amt; }
+  }
+  return { totalIn, totalOut, byMethod, expectedCash: num(cur.opening_amount) + cashIn - cashOut };
+}
 async function closeCashUI() {
   const c = await API.cash();
   const cur = c.current;
-  const txs = cur.transactions||[];
-  const expected = parseFloat(cur.opening_amount) + txs.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0) - txs.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
-  openModal('Cerrar caja', `<p style="color:var(--tx-mid);margin-bottom:12px;">Saldo esperado: <strong>${fmt(expected)}</strong></p>
-    <div class="field"><label>Monto contado</label><input id="closeAmt" type="number" value="${expected}" min="0" step="1000" autofocus/></div>`,
-    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="doCloseCash()">Cerrar caja</button>`);
+  if (!cur) { toast('La caja ya está cerrada','info'); navigate(); return; }
+  const sum = cashSummaryUI(cur);
+  const otros = Object.entries(sum.byMethod).filter(([m]) => m !== 'efectivo');
+  // El campo arranca VACIO: hay que contar el cajon. Antes venia precargado con
+  // el esperado y la caja se cerraba siempre "sin diferencia" sin contar nada.
+  openModal('Cerrar caja', `
+    <p style="color:var(--tx-mid);margin-bottom:6px;">Contá el efectivo del cajón y escribí cuánto hay.</p>
+    <div style="padding:12px 14px;background:#fff7ed;border:1px solid var(--or-200);border-radius:10px;margin-bottom:14px;">
+      <div style="font-size:12px;color:var(--tx-mid);">Efectivo que debería haber</div>
+      <div style="font-size:22px;font-weight:800;color:var(--or-dk);">${fmt(sum.expectedCash)}</div>
+      <div style="font-size:12px;color:var(--tx-lt);">Apertura + cobros en efectivo − egresos en efectivo</div>
+    </div>
+    <div class="field"><label>Efectivo contado</label><input id="closeAmt" type="number" min="0" step="100" placeholder="Ej: ${Math.round(sum.expectedCash)}" autofocus/></div>
+    ${otros.length ? `<div style="margin-top:12px;font-size:13px;color:var(--tx-mid);">
+      <b>Para controlar aparte</b> (no está en el cajón):
+      ${otros.map(([m, v]) => `<div style="display:flex;justify-content:space-between;margin-top:4px;"><span>${Comandera.payLabel(m)}</span><b>${fmt(v)}</b></div>`).join('')}
+    </div>` : ''}`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" id="btnCloseCash" onclick="doCloseCash()">Cerrar caja</button>`);
 }
 async function doCloseCash() {
-  try { await API.cashClose({ closingAmount: parseFloat($('#closeAmt').value)||0 }); CASH_CACHE = null; closeModal(); navigate(); toast('Caja cerrada','success'); }
-  catch(e) { toast(e.message,'error'); }
+  const raw = ($('#closeAmt').value || '').trim();
+  if (raw === '') return toast('Escribí cuánto efectivo contaste en el cajón','error');
+  const b = document.getElementById('btnCloseCash');
+  if (b) { b.disabled = true; b.textContent = 'Cerrando...'; }
+  try {
+    const r = await API.cashClose({ closingAmount: parseFloat(raw) || 0 });
+    CASH_CACHE = null; closeModal(); navigate();
+    const d = parseFloat(r.diff) || 0;
+    if (Math.abs(d) < 1) toast('Caja cerrada · el efectivo coincide', 'success');
+    else toast('Caja cerrada · ' + (d > 0 ? 'sobran ' : 'faltan ') + fmt(Math.abs(d)) + ' en efectivo', d > 0 ? 'info' : 'error');
+  } catch(e) {
+    toast(e.message === 'cash_not_open' ? 'La caja ya estaba cerrada' : e.message, 'error');
+    if (b) { b.disabled = false; b.textContent = 'Cerrar caja'; }
+  }
 }
 
 // ---------- MOZOS (Equipo) ----------
