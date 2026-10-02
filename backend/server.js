@@ -25,6 +25,13 @@ const asistente = require('./asistente');
 // ---------- Config ----------
 const PORT = process.env.PORT || 3100;
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-prod-gp';
+// Con la clave por defecto cualquiera puede fabricar una sesión válida (de un
+// restaurante o de admin). Render la genera sola con el blueprint, pero si el
+// servicio se creó a mano puede faltar: se avisa en los logs y en /health.
+const JWT_SECRET_DEBIL = !process.env.JWT_SECRET || process.env.JWT_SECRET.length < 24;
+if (JWT_SECRET_DEBIL && process.env.NODE_ENV === 'production') {
+  console.error('\n[seguridad] ⚠️  JWT_SECRET falta o es muy corto. Configurá uno largo y aleatorio en Render → Environment.\n');
+}
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
@@ -436,12 +443,29 @@ async function refreshSubscriptionStatus(tenantId) {
 }
 
 // ---------- Middleware ----------
+// El token de la PC de comandas (365 días, guardado en un archivo en esa PC)
+// solo puede leer la cola de impresión y confirmar lo impreso. Antes daba
+// acceso total a la cuenta del dueño: ventas, clientes, caja, ajustes.
+// Son exactamente los endpoints que usa el agente (3.3.0 usa /api/kitchen).
+const PRINT_STATION_ALLOWED = [
+  ['GET', '/api/kitchen'],
+  ['GET', '/api/print-queue'],
+  ['POST', '/api/print-queue/ack']
+];
+function printStationPuede(req) {
+  const path = (req.originalUrl || '').split('?')[0].replace(/\/+$/, '');
+  return PRINT_STATION_ALLOWED.some(([m, p]) => req.method === m && path === p);
+}
+
 async function requireAuth(req, res, next) {
   try {
     const h = req.headers.authorization || '';
     const token = h.startsWith('Bearer ') ? h.slice(7) : null;
     if (!token) return res.status(401).json({ error: 'no_token' });
     const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope === 'print_station' && !printStationPuede(req)) {
+      return res.status(403).json({ error: 'scope_insuficiente' });
+    }
     const t = await refreshSubscriptionStatus(decoded.id);
     if (!t) return res.status(401).json({ error: 'tenant_not_found' });
     req.tenant = t;
@@ -3256,7 +3280,9 @@ app.get('/', (req, res) => res.json({ ok: true, service: 'gestiva-backend', time
 app.get('/health', async (req, res) => {
   try {
     await q('SELECT 1');
-    res.json({ ok: true, db: 'up' });
+    const warnings = [];
+    if (JWT_SECRET_DEBIL && process.env.NODE_ENV === 'production') warnings.push('jwt_secret_debil');
+    res.json({ ok: true, db: 'up', ...(warnings.length ? { warnings } : {}) });
   } catch (e) {
     res.status(500).json({ ok: false, db: e.message });
   }
