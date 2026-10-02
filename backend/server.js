@@ -2129,8 +2129,15 @@ app.post('/api/asistente', async (req, res) => {
 
 // ----- DATOS FISCALES DEL RESTAURANTE (facturación) -----
 // Cada restaurante carga sus datos fiscales. Aparecen en los comprobantes/tickets.
+// ============================================================
+//                 FACTURACIÓN ELECTRÓNICA (ARCA)
+// ============================================================
+const afipLib = () => require('./afip'); // carga node-forge solo cuando se usa
+
 app.get('/api/fiscal-config', async (req, res) => {
   const t = req.tenant;
+  const afip = afipLib();
+  const vto = t.fiscal_cert ? afip.vencimientoCertificado(t.fiscal_cert) : null;
   res.json({
     fiscalEnabled: !!t.fiscal_enabled,
     fiscalCuit: t.fiscal_cuit || '',
@@ -2141,38 +2148,85 @@ app.get('/api/fiscal-config', async (req, res) => {
     fiscalIngresosBrutos: t.fiscal_ingresos_brutos || '',
     fiscalInicioActividades: t.fiscal_inicio_actividades || null,
     fiscalEnv: t.fiscal_env || 'homologacion',
-    hasCert: !!(t.fiscal_cert && t.fiscal_key)
+    hasCert: !!(t.fiscal_cert && t.fiscal_key),
+    certVence: vto ? vto.toISOString() : null,
+    // Lo que falta para poder facturar (vacío = listo)
+    faltan: afip.validarEmisor(t)
   });
 });
+
 app.put('/api/fiscal-config', async (req, res) => {
-  const { fiscalCondition, fiscalCuit, fiscalRazonSocial, fiscalDomicilio,
-          fiscalPtoVta, fiscalIngresosBrutos, fiscalInicioActividades } = req.body || {};
+  const afip = afipLib();
+  const { fiscalCondition, fiscalRazonSocial, fiscalDomicilio, fiscalIngresosBrutos, fiscalInicioActividades } = req.body || {};
+  const cuit = String((req.body && req.body.fiscalCuit) || '').replace(/\D/g, '');
+  const pv = req.body && req.body.fiscalPtoVta ? parseInt(req.body.fiscalPtoVta, 10) : null;
+  // Validar al guardar: antes se guardaba cualquier cosa y el error aparecía
+  // recién al facturar, con un mensaje de ARCA incomprensible.
+  if (fiscalCondition && !['responsable_inscripto', 'monotributo', 'exento'].includes(fiscalCondition)) {
+    return res.status(400).json({ error: 'dato_fiscal_invalido', detail: 'Condición frente al IVA no válida.' });
+  }
+  if (cuit && !afip.cuitValido(cuit)) {
+    return res.status(400).json({ error: 'dato_fiscal_invalido', detail: 'El CUIT no es válido: revisá los 11 números.' });
+  }
+  if (pv !== null && !(pv >= 1 && pv <= 99998)) {
+    return res.status(400).json({ error: 'dato_fiscal_invalido', detail: 'El punto de venta tiene que ser un número entre 1 y 99998.' });
+  }
+  if (fiscalInicioActividades && isNaN(Date.parse(fiscalInicioActividades))) {
+    return res.status(400).json({ error: 'dato_fiscal_invalido', detail: 'La fecha de inicio de actividades no es válida.' });
+  }
   await q(`UPDATE tenants SET
       fiscal_condition = $1, fiscal_cuit = $2, fiscal_razon_social = $3,
       fiscal_domicilio = $4, fiscal_pto_vta = $5, fiscal_ingresos_brutos = $6,
       fiscal_inicio_actividades = $7
       WHERE id=$8`,
-    [fiscalCondition || null, fiscalCuit || null, fiscalRazonSocial || null,
-     fiscalDomicilio || null, (fiscalPtoVta ? parseInt(fiscalPtoVta, 10) : null),
-     fiscalIngresosBrutos || null, fiscalInicioActividades || null, req.tenant.id]);
-  res.json({ ok: true });
+    [fiscalCondition || null, cuit || null, (fiscalRazonSocial || '').trim() || null,
+     (fiscalDomicilio || '').trim() || null, pv, (fiscalIngresosBrutos || '').trim() || null,
+     fiscalInicioActividades || null, req.tenant.id]);
+  const t = (await q('SELECT * FROM tenants WHERE id=$1', [req.tenant.id])).rows[0];
+  res.json({ ok: true, faltan: afip.validarEmisor(t) });
 });
 
-// Subir el certificado + clave fiscal (PEM). El restaurante factura con SU certificado.
+// CUIT que figura en un certificado de ARCA (subject serialNumber = "CUIT 20123456789").
+function cuitDelCertificado(certPem) {
+  try {
+    const forge = require('node-forge');
+    const cert = forge.pki.certificateFromPem(certPem);
+    const sn = cert.subject.attributes.find(a => a.name === 'serialNumber' || a.type === '2.5.4.5');
+    const m = sn && String(sn.value).match(/(\d{11})/);
+    return m ? m[1] : null;
+  } catch (e) { return null; }
+}
+// El certificado tiene que corresponder a la clave privada (si no, ARCA rechaza el login).
+function certYClaveCoinciden(certPem, keyPem) {
+  try {
+    const forge = require('node-forge');
+    const pub = forge.pki.certificateFromPem(certPem).publicKey;
+    const priv = forge.pki.privateKeyFromPem(keyPem);
+    return pub.n.equals(priv.n) && pub.e.equals(priv.e);
+  } catch (e) { return false; }
+}
+
+// Subir el certificado (y opcionalmente la clave). El restaurante factura con SU certificado.
 // ⚠️ Seguridad: antes de uso amplio, cifrar fiscal_cert/fiscal_key en la base (son credenciales sensibles).
 app.put('/api/fiscal-cert', async (req, res) => {
   const { cert, key, env } = req.body || {};
   if (!cert || !String(cert).includes('BEGIN CERTIFICATE')) return res.status(400).json({ error: 'cert_invalido' });
   const fenv = env === 'homologacion' ? 'homologacion' : 'produccion';
-  if (key && String(key).includes('PRIVATE KEY')) {
-    await q('UPDATE tenants SET fiscal_cert=$1, fiscal_key=$2, fiscal_env=$3, fiscal_enabled=true WHERE id=$4',
-      [cert, key, fenv, req.tenant.id]);
-    return res.json({ ok: true, env: fenv });
+  const t = (await q('SELECT fiscal_key, fiscal_cuit FROM tenants WHERE id=$1', [req.tenant.id])).rows[0];
+  const keyPem = (key && String(key).includes('PRIVATE KEY')) ? key : t.fiscal_key;
+  if (!keyPem) return res.status(400).json({ error: 'falta_la_clave_privada' });
+  // Validaciones que antes recién fallaban al facturar, con errores de ARCA.
+  if (!certYClaveCoinciden(cert, keyPem)) {
+    return res.status(400).json({ error: 'cert_no_coincide',
+      detail: 'Ese certificado no corresponde a la clave guardada. Si generaste un pedido nuevo, subí el certificado que ARCA emitió para ESE pedido.' });
   }
-  // Sin key en el request: usa la que generó /api/fiscal-csr (debe existir).
-  const r = await q(`UPDATE tenants SET fiscal_cert=$1, fiscal_env=$2, fiscal_enabled=true
-                     WHERE id=$3 AND fiscal_key IS NOT NULL RETURNING id`, [cert, fenv, req.tenant.id]);
-  if (!r.rows[0]) return res.status(400).json({ error: 'falta_la_clave_privada' });
+  const cuitCert = cuitDelCertificado(cert);
+  if (cuitCert && t.fiscal_cuit && cuitCert !== String(t.fiscal_cuit).replace(/\D/g, '')) {
+    return res.status(400).json({ error: 'cert_otro_cuit',
+      detail: 'El certificado es del CUIT ' + cuitCert + ' y en tus datos fiscales figura ' + t.fiscal_cuit + '.' });
+  }
+  await q('UPDATE tenants SET fiscal_cert=$1, fiscal_key=$2, fiscal_env=$3, fiscal_enabled=true WHERE id=$4',
+    [cert, keyPem, fenv, req.tenant.id]);
   res.json({ ok: true, env: fenv });
 });
 
@@ -2183,7 +2237,7 @@ app.post('/api/fiscal-csr', async (req, res) => {
     const t = req.tenant;
     const cuit = String(t.fiscal_cuit || '').replace(/\D/g, '');
     if (cuit.length !== 11) return res.status(400).json({ error: 'carga_primero_el_cuit' });
-    const afip = require('./afip');
+    const afip = afipLib();
     const { keyPem, csrPem } = afip.generarKeyYCSR(cuit, t.fiscal_razon_social || 'Restaurante');
     await q('UPDATE tenants SET fiscal_key=$1 WHERE id=$2', [keyPem, t.id]);
     res.json({ ok: true, csr: csrPem });
@@ -2193,26 +2247,199 @@ app.post('/api/fiscal-csr', async (req, res) => {
   }
 });
 
-// Emitir una factura electrónica para una venta: pide el CAE a ARCA y arma el QR.
+// Ticket de acceso de ARCA guardado en la base (ver afip.wsaaLogin).
+function fiscalStore(tenantId) {
+  return {
+    get: async (env) => {
+      const r = (await q('SELECT fiscal_ta FROM tenants WHERE id=$1', [tenantId])).rows[0];
+      return (r && r.fiscal_ta && r.fiscal_ta[env]) || null;
+    },
+    set: async (env, ta) => {
+      await q(`UPDATE tenants SET fiscal_ta = COALESCE(fiscal_ta, '{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb)
+               WHERE id=$1`, [tenantId, env, JSON.stringify({ token: ta.token, sign: ta.sign, exp: ta.exp })]);
+    },
+    clear: async (env) => {
+      await q(`UPDATE tenants SET fiscal_ta = COALESCE(fiscal_ta, '{}'::jsonb) - $2::text WHERE id=$1`, [tenantId, env]);
+    }
+  };
+}
+
+// Una factura por vez por restaurante: ARCA numera "último + 1", así que dos
+// facturas pedidas a la vez se pisaban el número y una era rechazada.
+const _fiscalLocks = new Map();
+function withFiscalLock(key, fn) {
+  const prev = _fiscalLocks.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.then(() => {}, () => {});
+  _fiscalLocks.set(key, tail);
+  tail.then(() => { if (_fiscalLocks.get(key) === tail) _fiscalLocks.delete(key); });
+  return run;
+}
+
+// Todo lo que lleva la factura impresa, congelado al momento de emitirla:
+// si después el restaurante cambia su domicilio, las facturas viejas no cambian.
+function invoiceSnapshot(tenant, order, f) {
+  const afip = afipLib();
+  const items = (order.items || []).map(it => ({
+    name: it.name || 'Producto', qty: Number(it.qty) || 1,
+    price: Number(it.subtotal != null && it.qty ? it.subtotal / it.qty : it.price) || 0,
+    subtotal: Number(it.subtotal != null ? it.subtotal : (Number(it.price) || 0) * (Number(it.qty) || 1)) || 0
+  }));
+  const esMonotributista = afip.COND_MONOTRIBUTO.includes(f.condIvaReceptorId);
+  return {
+    emisor: {
+      razonSocial: tenant.fiscal_razon_social || '',
+      nombreFantasia: tenant.restaurant_name || '',
+      cuit: String(tenant.fiscal_cuit || '').replace(/\D/g, ''),
+      domicilio: tenant.fiscal_domicilio || '',
+      condicionIva: afip.CONDICION_EMISOR_LABEL[tenant.fiscal_condition] || '',
+      iibb: tenant.fiscal_ingresos_brutos || '',
+      inicioActividades: tenant.fiscal_inicio_actividades
+        ? new Date(tenant.fiscal_inicio_actividades).toISOString().slice(0, 10) : ''
+    },
+    receptor: {
+      docTipo: f.docTipo, docNro: f.docNro, nombre: f.receptorNombre || '',
+      domicilio: f.receptorDomicilio || '', condicionIva: f.condIvaReceptor || '',
+      condIvaId: f.condIvaReceptorId
+    },
+    comprobante: {
+      letra: f.letra, cbteTipo: f.cbteTipo, ptoVta: f.ptoVta, nro: f.nro, fecha: f.fecha,
+      cae: f.cae, caeVto: f.caeVto, qrUrl: f.qrUrl, env: f.env, recuperada: !!f.recuperada
+    },
+    importes: { neto: f.impNeto, iva: f.impIVA, total: f.impTotal, alicuota: 21 },
+    items,
+    subtotal: Number(order.subtotal) || 0,
+    descuento: Number(order.discount) || 0,
+    leyendas: {
+      // Ley 27.743: en Factura B a consumidor final se informa el IVA contenido.
+      transparenciaFiscal: (f.letra === 'B' && f.condIvaReceptorId === 5)
+        ? { ivaContenido: f.impIVA, otrosImpuestosNacionales: 0 } : null,
+      // RG 5003: Factura A a monotributistas lleva esta leyenda.
+      ley27618: (f.letra === 'A' && esMonotributista) ? afip.LEYENDA_27618 : null
+    }
+  };
+}
+
+function invoiceRowToReservado(row) {
+  if (!row || !row.nro) return null;
+  return {
+    nro: Number(row.nro), cbteTipo: row.cbte_tipo, ptoVta: row.pto_vta, letra: row.letra,
+    impTotal: Number(row.importe_total), docTipo: row.doc_tipo, docNro: row.doc_nro,
+    condIvaReceptorId: row.cond_iva_receptor_id, nombre: row.cliente_nombre, domicilio: row.cliente_domicilio
+  };
+}
+
+// Emitir la factura de una venta. Idempotente por venta: si ya tiene factura
+// aprobada la devuelve; si quedó un intento sin respuesta, primero le pregunta a
+// ARCA si salió (y recupera el CAE) antes de pedir un número nuevo. Así un doble
+// toque, un reintento o un corte de internet nunca generan dos facturas.
 app.post('/api/invoices', async (req, res) => {
+  const { orderId, docTipo, docNro, condicionReceptor, nombre, domicilio } = req.body || {};
+  if (!orderId) return res.status(400).json({ error: 'falta_venta', detail: 'Elegí la venta a facturar.' });
+  const order = (await q('SELECT * FROM orders WHERE id=$1 AND tenant_id=$2', [orderId, req.tenant.id])).rows[0];
+  if (!order) return res.status(404).json({ error: 'venta_no_encontrada' });
+  // El importe sale de la venta registrada, no de lo que mande la pantalla.
+  const importeTotal = Math.round(Number(order.total) * 100) / 100;
+  if (!(importeTotal > 0)) return res.status(400).json({ error: 'importe_invalido', detail: 'La venta tiene total $0.' });
+
   try {
-    const { orderId, docTipo, docNro, condicionReceptor, importeTotal } = req.body || {};
-    if (importeTotal == null || !(Number(importeTotal) > 0)) return res.status(400).json({ error: 'importe_invalido' });
-    const afip = require('./afip'); // carga node-forge solo al facturar
-    const f = await afip.emitirFactura(req.tenant, {
-      docTipo: docTipo || 99, docNro: docNro || 0, condicionReceptor, importeTotal: Number(importeTotal)
+    const out = await withFiscalLock(req.tenant.id, async () => {
+      const afip = afipLib();
+      const tenant = (await q('SELECT * FROM tenants WHERE id=$1', [req.tenant.id])).rows[0];
+      const venta = { docTipo, docNro, condicionReceptor, nombre, domicilio, importeTotal };
+
+      let row = (await q(`SELECT * FROM invoices WHERE tenant_id=$1 AND order_id=$2 AND status IN ('pending','approved')`,
+        [tenant.id, orderId])).rows[0];
+      if (row && row.status === 'approved') return { invoice: row, duplicate: true };
+
+      if (!row) {
+        const faltan = afip.validarEmisor(tenant);
+        if (faltan.length) throw httpError(422, 'factura_rechazada', { detail: 'Faltan datos fiscales del restaurante: ' + faltan.join(', ') + '. Completalos en Ajustes → Datos fiscales.' });
+        const rec = afip.normalizarReceptor(tenant.fiscal_condition, venta);
+        if (rec.error) throw httpError(422, 'factura_rechazada', { detail: rec.error });
+        row = (await q(`INSERT INTO invoices (tenant_id, order_id, cbte_tipo, letra, pto_vta, doc_tipo, doc_nro,
+                          cliente_nombre, cliente_domicilio, cond_iva_receptor_id, importe_total, status)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending')
+                        ON CONFLICT (tenant_id, order_id) WHERE order_id IS NOT NULL AND status IN ('pending','approved')
+                        DO NOTHING RETURNING *`,
+          [tenant.id, orderId, afip.cbteTipoFor(tenant.fiscal_condition, rec.letra), rec.letra,
+           tenant.fiscal_pto_vta, rec.docTipo, rec.docNro, rec.nombre || null, rec.domicilio || null,
+           rec.condIvaReceptorId, importeTotal])).rows[0];
+        if (!row) {
+          row = (await q(`SELECT * FROM invoices WHERE tenant_id=$1 AND order_id=$2 AND status IN ('pending','approved')`,
+            [tenant.id, orderId])).rows[0];
+          if (row && row.status === 'approved') return { invoice: row, duplicate: true };
+        }
+      }
+      const rowId = row.id;
+
+      let f;
+      try {
+        f = await afip.emitirFactura(tenant, venta, {
+          store: fiscalStore(tenant.id),
+          reservado: invoiceRowToReservado(row),
+          // El número se guarda ANTES de pedir el CAE: si la respuesta se pierde,
+          // el reintento sabe qué número consultar.
+          onReserva: async (r) => {
+            await q(`UPDATE invoices SET nro=$2, cbte_tipo=$3, letra=$4, pto_vta=$5, cbte_fch=$6, doc_tipo=$7, doc_nro=$8,
+                       cliente_nombre=$9, cliente_domicilio=$10, cond_iva_receptor_id=$11, importe_total=$12,
+                       error_msg=NULL, updated_at=now()
+                     WHERE id=$1`,
+              [rowId, r.nro, r.cbteTipo, r.letra, r.ptoVta, r.fecha, r.docTipo, r.docNro,
+               r.nombre || null, r.domicilio || null, r.condIvaReceptorId, r.impTotal]);
+          },
+          numeroUsadoPorOtra: async (p) => (await q(
+            `SELECT 1 FROM invoices WHERE tenant_id=$1 AND pto_vta=$2 AND cbte_tipo=$3 AND nro=$4 AND id<>$5
+               AND status IN ('approved','duplicada') LIMIT 1`,
+            [tenant.id, p.ptoVta, p.cbteTipo, p.nro, rowId])).rows.length > 0
+        });
+      } catch (e) {
+        if (e.validacion || e.arcaRechazo) {
+          // ARCA dijo que no (o faltan datos): no se consumió número, se puede reintentar.
+          await q(`UPDATE invoices SET status='error', error_msg=$2, updated_at=now() WHERE id=$1`, [rowId, e.message]);
+          throw httpError(422, 'factura_rechazada', { detail: e.message });
+        }
+        // Corte o timeout: no sabemos si ARCA la autorizó. Queda pendiente y el
+        // próximo intento lo verifica antes de pedir otra.
+        await q(`UPDATE invoices SET error_msg=$2, updated_at=now() WHERE id=$1`, [rowId, e.message]);
+        console.error('[invoices] sin respuesta de ARCA', e.message);
+        throw httpError(503, 'arca_sin_respuesta', {
+          detail: 'ARCA no respondió y no sabemos si la factura salió. Reintentá en un momento: Gestiva verifica con ARCA antes de emitir otra, así que no se duplica.'
+        });
+      }
+
+      const snap = invoiceSnapshot(tenant, order, f);
+      const caeVtoDate = f.caeVto ? String(f.caeVto).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : null;
+      const upd = (await q(`UPDATE invoices SET status='approved', cbte_tipo=$2, letra=$3, pto_vta=$4, nro=$5,
+                              doc_tipo=$6, doc_nro=$7, cliente_nombre=$8, cliente_domicilio=$9,
+                              cond_iva_receptor_id=$10, cliente_cond_iva=$11,
+                              importe_neto=$12, importe_iva=$13, importe_total=$14,
+                              cae=$15, cae_vto=$16, qr_url=$17, cbte_fch=$18, raw=$19, error_msg=NULL, updated_at=now()
+                            WHERE id=$1 RETURNING *`,
+        [rowId, f.cbteTipo, f.letra, f.ptoVta, f.nro, f.docTipo, String(f.docNro), f.receptorNombre || null,
+         f.receptorDomicilio || null, f.condIvaReceptorId, f.condIvaReceptor, f.impNeto, f.impIVA, f.impTotal,
+         f.cae, caeVtoDate, f.qrUrl, f.fecha, JSON.stringify(snap)])).rows[0];
+      return { invoice: upd, recovered: !!f.recuperada };
     });
-    const caeVtoDate = f.caeVto ? String(f.caeVto).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') : null;
-    const ins = await q(`INSERT INTO invoices (tenant_id, order_id, cbte_tipo, letra, pto_vta, nro, doc_tipo, doc_nro,
-                         importe_neto, importe_iva, importe_total, cae, cae_vto, qr_url, status, raw)
-                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'approved',$15) RETURNING *`,
-      [req.tenant.id, orderId || null, f.cbteTipo, f.letra, f.ptoVta, f.nro, f.docTipo, String(f.docNro),
-       f.impNeto, f.impIVA, f.impTotal, f.cae, caeVtoDate, f.qrUrl, JSON.stringify(f)]);
-    res.json({ ok: true, invoice: ins.rows[0] });
+    res.json({ ok: true, ...out });
   } catch (e) {
+    if (e.httpStatus) return res.status(e.httpStatus).json({ error: e.code, ...(e.extra || {}) });
     console.error('[invoices]', e?.message || e);
     res.status(500).json({ error: 'facturacion_error', detail: e?.message || String(e) });
   }
+});
+
+// Factura de una venta (para reimprimirla o saber si quedó pendiente/rechazada),
+// o las últimas facturas del local.
+app.get('/api/invoices', async (req, res) => {
+  if (req.query.orderId) {
+    const r = await q(`SELECT * FROM invoices WHERE tenant_id=$1 AND order_id=$2
+                       ORDER BY (status='approved') DESC, created_at DESC LIMIT 1`, [req.tenant.id, req.query.orderId]);
+    return res.json(r.rows[0] || null);
+  }
+  const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
+  const r = await q(`SELECT * FROM invoices WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT ${limit}`, [req.tenant.id]);
+  res.json(r.rows);
 });
 
 // ============================================================
