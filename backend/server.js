@@ -1728,6 +1728,10 @@ app.post('/api/customers/:id/payment', async (req, res) => {
   if (!c) return res.status(404).json({ error: 'not_found' });
   const m = PAY_METHODS.includes(method) ? method : 'efectivo';
   await withTx(async (tq) => {
+    // Mismo orden de bloqueo que el cobro de mesas (primero la caja, después el
+    // cliente): con el orden invertido, un pago y un cobro a cuenta corriente del
+    // mismo cliente en el mismo instante se bloqueaban mutuamente.
+    await tq('SELECT 1 FROM current_cash WHERE tenant_id=$1 FOR UPDATE', [req.tenant.id]);
     await tq('UPDATE customers SET balance=balance-$1 WHERE id=$2 AND tenant_id=$3', [amt, c.id, req.tenant.id]);
     await tq(`INSERT INTO customer_transactions (tenant_id, customer_id, type, amount, method, note)
               VALUES ($1,$2,'payment',$3,$4,$5)`,

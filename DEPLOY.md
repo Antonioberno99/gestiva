@@ -160,7 +160,27 @@ Cuando todo esté probado en TEST:
 
 - **Render Free**: $0/mes (limitado, se duerme tras 15 min)
 - **Vercel Hobby**: $0/mes (ilimitado para proyectos personales)
-- **PostgreSQL Render Free**: $0/mes (90 días, después se borra — pasar a paid o migrar)
+- **PostgreSQL Render Free**: $0/mes — ⚠️ **vence a los 30 días de creada**; después hay 14 días de gracia y Render **borra la base con todos los datos**. No incluye backups.
 - **MercadoPago**: comisión por transacción (no hay costo fijo)
 
-Para producción seria, pasar Render a plan paid (~$7/mes) y la DB también.
+> ⚠️ **Antes de tener restaurantes reales, pasá la base de datos a un plan pago.**
+> En la base viven las ventas, la caja, los clientes y las facturas emitidas ante
+> ARCA de todos los locales. Con el plan gratis se pierden a los 30 días.
+> Render → la base `gestiva-db` → **Upgrade**. Los planes pagos incluyen backups.
+
+Para producción seria, pasar también el servicio web a un plan pago: en el plan
+gratis se duerme tras 15 minutos sin uso y la primera pantalla tarda en abrir.
+(Mientras la PC de comandas esté prendida, el agente de impresión lo mantiene
+despierto.)
+
+## Verificar antes de lanzar
+
+```bash
+cd backend
+npm run test:facturacion          # facturación ARCA contra un ARCA simulado (no necesita base)
+DATABASE_URL=... npm run test:facturacion-api
+GESTIVA_API=http://127.0.0.1:3100 npm test   # con el backend corriendo
+```
+
+Y en `/health` del backend no tiene que aparecer `"warnings"`: si dice
+`jwt_secret_debil`, falta configurar `JWT_SECRET` en Render → Environment.
