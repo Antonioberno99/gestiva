@@ -156,6 +156,11 @@ async function appendCashTx(run, tenantId, txs) {
               WHERE tenant_id=$2`, [JSON.stringify(txs), tenantId]);
 }
 
+// Zona horaria del negocio. Render corre en UTC: sin esto, "hoy" cambiaba a
+// las 21 hs de Argentina, en pleno servicio de la noche.
+const TZ_AR = 'America/Argentina/Buenos_Aires';
+const hoyAR = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ_AR, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
 const PAY_METHODS = ['efectivo', 'debito', 'credito', 'tarjeta', 'transferencia', 'mercadopago', 'cuenta_corriente'];
 // Splits: cada pago con metodo conocido y monto positivo.
 function cleanSplits(splits) {
@@ -1474,11 +1479,13 @@ app.delete('/api/waiters/:id', async (req, res) => {
 });
 
 app.get('/api/staff-shifts', async (req, res) => {
-  const from = req.query.from || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || ''))
+    ? req.query.from
+    : new Intl.DateTimeFormat('en-CA', { timeZone: TZ_AR }).format(new Date(Date.now() - 7 * 86400000));
   const r = await q(`SELECT ss.*, w.name AS waiter_name, w.role AS waiter_role, w.color AS waiter_color
                      FROM staff_shifts ss
                      JOIN waiters w ON w.id=ss.waiter_id
-                     WHERE ss.tenant_id=$1 AND ss.started_at::date >= $2
+                     WHERE ss.tenant_id=$1 AND (ss.started_at AT TIME ZONE '${TZ_AR}')::date >= $2
                      ORDER BY ss.started_at DESC LIMIT 500`, [req.tenant.id, from]);
   res.json(r.rows);
 });
@@ -2054,12 +2061,13 @@ app.post('/api/pending-orders/:id/charge', async (req, res) => {
 // ----- DASHBOARD -----
 app.get('/api/dashboard', async (req, res) => {
   const tid = req.tenant.id;
-  const today = new Date().toISOString().slice(0,10);
-  const last7 = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
-
+  // Días en hora argentina (closed_at es TIMESTAMPTZ; la base corre en UTC).
   const [ordersToday, ordersWeek, openTables, tablesCount, prodCount, cash] = await Promise.all([
-    q(`SELECT * FROM orders WHERE tenant_id=$1 AND closed_at::date=$2 ORDER BY closed_at DESC`, [tid, today]),
-    q(`SELECT * FROM orders WHERE tenant_id=$1 AND closed_at::date >= $2`, [tid, last7]),
+    q(`SELECT * FROM orders WHERE tenant_id=$1
+         AND (closed_at AT TIME ZONE '${TZ_AR}')::date = (now() AT TIME ZONE '${TZ_AR}')::date
+       ORDER BY closed_at DESC`, [tid]),
+    q(`SELECT * FROM orders WHERE tenant_id=$1
+         AND (closed_at AT TIME ZONE '${TZ_AR}')::date >= (now() AT TIME ZONE '${TZ_AR}')::date - 7`, [tid]),
     q(`SELECT items FROM open_tables WHERE tenant_id=$1`, [tid]),
     q(`SELECT count(*)::int AS n FROM tables WHERE tenant_id=$1`, [tid]),
     q(`SELECT count(*)::int AS n, sum(CASE WHEN available THEN 1 ELSE 0 END)::int AS avail FROM products WHERE tenant_id=$1`, [tid]),
@@ -2109,7 +2117,7 @@ app.post('/api/asistente', async (req, res) => {
   try {
     if (!asistente.enabled()) return res.status(503).json({ error: 'asistente_no_configurado' });
 
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyAR();
     const uso = asistenteUso.get(req.tenant.id);
     const n = (uso && uso.dia === hoy) ? uso.n : 0;
     if (n >= ASISTENTE_LIMITE_DIA) return res.status(429).json({ error: 'limite_diario' });
@@ -2294,8 +2302,7 @@ function invoiceSnapshot(tenant, order, f) {
       domicilio: tenant.fiscal_domicilio || '',
       condicionIva: afip.CONDICION_EMISOR_LABEL[tenant.fiscal_condition] || '',
       iibb: tenant.fiscal_ingresos_brutos || '',
-      inicioActividades: tenant.fiscal_inicio_actividades
-        ? new Date(tenant.fiscal_inicio_actividades).toISOString().slice(0, 10) : ''
+      inicioActividades: fechaDeColumna(tenant.fiscal_inicio_actividades)
     },
     receptor: {
       docTipo: f.docTipo, docNro: f.docNro, nombre: f.receptorNombre || '',
@@ -2318,6 +2325,14 @@ function invoiceSnapshot(tenant, order, f) {
       ley27618: (f.letra === 'A' && esMonotributista) ? afip.LEYENDA_27618 : null
     }
   };
+}
+
+// Columna DATE → 'YYYY-MM-DD'. pg la convierte a medianoche LOCAL del servidor:
+// se leen los campos locales para no correr el día si el servidor no está en UTC.
+function fechaDeColumna(d) {
+  if (!d) return '';
+  if (d instanceof Date) return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return String(d).slice(0, 10);
 }
 
 function invoiceRowToReservado(row) {

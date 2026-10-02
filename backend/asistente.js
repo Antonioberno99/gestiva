@@ -83,7 +83,8 @@ async function contextoDelNegocio(q, tenant) {
     safe('SELECT count(*)::int AS n FROM waiters WHERE tenant_id=$1', [id]),
     // closed_at = cuando se cobró la venta (es lo que usan los reportes)
     safe(`SELECT count(*)::int AS n, COALESCE(sum(total),0)::float AS total
-          FROM orders WHERE tenant_id=$1 AND closed_at >= date_trunc('day', now())`, [id]),
+          FROM orders WHERE tenant_id=$1
+           AND closed_at >= (date_trunc('day', now() AT TIME ZONE 'America/Argentina/Buenos_Aires') AT TIME ZONE 'America/Argentina/Buenos_Aires')`, [id]),
     safe(`SELECT count(*)::int AS n, COALESCE(sum(total),0)::float AS total
           FROM orders WHERE tenant_id=$1 AND closed_at >= now() - interval '30 days'`, [id]),
     // Los items se guardan como JSON dentro de la venta; contamos por nombre para
