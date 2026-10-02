@@ -187,7 +187,7 @@
       <div class="hr"></div>
       ${rows || '<div class="item">(sin items)</div>'}
       <div class="hr"></div>
-      <div class="foot">-- COCINA --${cfg.footer ? '<br>' + escapeHTML(cfg.footer) : ''}</div>
+      <div class="foot">-- ${escapeHTML(cfg._nameSuffix || 'COCINA')} --${cfg.footer ? '<br>' + escapeHTML(cfg.footer) : ''}</div>
     </div></body></html>`;
   }
   function escapeHTML(s) {
@@ -238,7 +238,7 @@
     bold(false);
     sep();
     center(true);
-    line('-- COCINA --');
+    line('-- ' + (cfg._nameSuffix || 'COCINA') + ' --');
     if (cfg.footer) line(cfg.footer);
     center(false);
     push([0x0A, 0x0A, 0x0A]);      // feed
