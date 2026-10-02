@@ -3036,6 +3036,8 @@ route('ajustes', async () => {
         <p style="font-size:13px;color:var(--tx-mid);line-height:1.55;margin-bottom:14px;">
           Definí acá si tu local separa los pedidos entre cocina y barra. Los mozos van a
           ver en la app a dónde va cada producto, y el pedido se muestra separado.
+          <b>Se actualiza solo</b> cuando guardás las comanderas en la PC central, para que lo
+          que ve el mozo coincida con dónde imprime.
         </p>
         <label style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:11px;cursor:pointer;margin-bottom:12px;">
           <input type="checkbox" id="setHasBar" ${USER.hasBarStation ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--or);"
@@ -3523,7 +3525,47 @@ async function kitchenStationTick() {
     _stationBusy = false;
   }
 }
+// Lo que la app del mozo muestra ("Va a Barra") tiene que coincidir con dónde
+// imprime de verdad. Antes eran dos configuraciones sueltas: Ajustes (solo
+// para mostrar) y las comanderas de esta PC (las que imprimen).
+async function sincronizarBarraConComanderas(cfg) {
+  const stations = (cfg && cfg.stations) || [];
+  if (!stations.length) return null;   // esta PC no imprime: no tocamos nada
+  const cats = (st) => String(st.categories || '').split(',').map(x => x.trim()).filter(Boolean);
+  const barra = stations.find(st => st.route === 'solo' && cats(st).length);
+  const hasBar = !!barra;
+  const barCats = hasBar ? cats(barra).join(',') : (USER.barCategories || 'Bebidas,Tragos');
+  if (!!USER.hasBarStation === hasBar && (!hasBar || (USER.barCategories || '') === barCats)) return null;
+  try {
+    const u = await API.settings({ hasBarStation: hasBar, barCategories: barCats });
+    USER = u; localStorage.setItem('gestiva_user', JSON.stringify(u));
+    return hasBar ? ('La app de los mozos ahora muestra que ' + barCats + ' va a ' + (barra.name || 'Barra') + '.')
+                  : 'La app de los mozos muestra que todo va a cocina.';
+  } catch (e) { return null; }
+}
+// Con el agente de impresión (comanderas de red/USB) se imprimen dos comanderas
+// de pedidos: la principal y la de barra. Si hay otra que no es ninguna de esas
+// dos ni imprime comprobantes, no va a recibir nada: hay que avisarlo.
+function comanderasSinPedidos(cfg) {
+  if (!cfg || !(cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName))) return [];
+  const es = (st, ip, name) => (st.method === 'network' && st.printerIp && st.printerIp === ip) ||
+                               (st.method === 'usb' && st.printerName && st.printerName === name);
+  return (cfg.stations || []).filter(st => {
+    if (st.receipts) return false;
+    if (es(st, cfg.printerIp, cfg.printerName)) return false;
+    if (cfg.routingMode === 'split' && es(st, cfg.barPrinterIp, cfg.barPrinterName)) return false;
+    return true;
+  }).map(st => st.name || 'Comandera');
+}
+
 window.onComanderaSaved = async (cfg) => {
+  const avisoBarra = await sincronizarBarraConComanderas(cfg);
+  const mudas = comanderasSinPedidos(cfg);
+  if (mudas.length) {
+    toast('Atención: ' + mudas.join(', ') + (mudas.length === 1 ? ' no va a recibir' : ' no van a recibir') +
+          ' pedidos. La estación imprime en la comandera principal y en la de barra. Revisá qué imprime cada una.', 'error');
+  }
+  if (avisoBarra) setTimeout(() => toast(avisoBarra, 'info'), mudas.length ? 2600 : 0);
   if (cfg && (cfg.method === 'network' || (cfg.method === 'usb' && cfg.printerName))) {
     toast('Estacion de impresion guardada. El agente local imprime las comandas nuevas.', 'success');
     return;
