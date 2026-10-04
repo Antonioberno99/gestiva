@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestiva-v13-facturacion';
+const CACHE_NAME = 'gestiva-v14-descarga';
 
 // Shells que guardamos para que la app abra aunque no haya internet.
 // /mozo  → app del equipo (mozos)
@@ -6,6 +6,7 @@ const CACHE_NAME = 'gestiva-v13-facturacion';
 // /cocina → pantalla de cocina (KDS)
 const APP_SHELL = [
   './mozo.html',
+  './descargar.html',
   './app.html',
   './cocina.html',
   './gestiva-config.js',
@@ -45,6 +46,7 @@ function shellFor(url) {
   const p = (url.pathname || '').toLowerCase();
   if (p.startsWith('/cocina')) return './cocina.html';
   if (p.startsWith('/mozo')) return './mozo.html';
+  if (p.startsWith('/descargar')) return './descargar.html';
   return './app.html';
 }
 

@@ -9,6 +9,11 @@
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
   <!-- Manifest de la app: habilita el botón "Instalar Gestiva" de esta página -->
   <link rel="manifest" href="manifest-app.json">
+  <script>
+    // Abierta desde el ícono instalado: ir directo al panel.
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) location.replace('/app');
+  </script>
+  <script src="install-app.js"></script>
   <meta name="theme-color" content="#f97316">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -580,7 +585,7 @@
   <div class="m-quick">
     <a href="signup.html" class="m-qa primary">Probar gratis<small>30 días sin cargo</small></a>
     <a href="login.html" class="m-qa">Iniciar sesión<small>Mi restaurante</small></a>
-    <a href="mozo.html" class="m-qa">App del Mozo<small>Tomar pedidos</small></a>
+    <a href="/descargar" class="m-qa">App del Mozo<small>Descargar</small></a>
     <a href="vendedores.html" class="m-qa">Ser Vendedor<small>Ganá 40%</small></a>
   </div>
 
@@ -1203,8 +1208,8 @@
         <h2 class="sec-title">Mozos, bartenders y cocina trabajan desde el celular</h2>
         <p class="sec-sub">La app del equipo sirve para tomar pedidos por mesa, ver su panel personal, marcar ingreso y salida, y controlar sus horas trabajadas. Entran con el email del restaurante y el PIN que les das desde el panel central.</p>
         <div class="team-actions">
-          <a href="/mozo" class="btn btn-primary">Abrir app para instalar</a>
-          <button class="btn btn-outline" onclick="downloadTeamApk()">Instalar en celular</button>
+          <a href="/descargar" class="btn btn-primary">Descargar app de mozos</a>
+          <a href="/mozo" class="btn btn-outline">Ya la tengo: entrar</a>
         </div>
         <p style="margin-top:12px;color:var(--tx-mid);font-size:14px;">Cada integrante del equipo entra con el email del restaurante y el PIN que le asignás desde el panel central. Simple y sin instalaciones complicadas.</p>
         <div class="team-list">
@@ -1262,17 +1267,17 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
         </div>
         <h4>Android</h4>
-        <p>Desde Chrome tocá <b>Instalar</b> o el menú ⋮ → <b>Agregar a pantalla principal</b>. Se ve y funciona como cualquier app.</p>
+        <p>Tocá <b>Instalar Gestiva</b> y confirmá. Si no aparece, en Chrome: menú ⋮ → <b>Instalar app</b>. Se ve y funciona como cualquier app.</p>
       </div>
       <div class="dl-card">
         <div class="dl-ic">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
         </div>
         <h4>iPhone y iPad</h4>
-        <p>Desde Safari tocá el botón <b>Compartir</b> y elegí <b>Agregar a inicio</b>. El ícono de Gestiva queda en tu pantalla.</p>
+        <p>Safari: <b>Compartir</b> → <b>Agregar a inicio</b> (en iOS 26: ⋯ → Compartir). Chrome: <b>Compartir</b> en la barra de direcciones → <b>Agregar a inicio</b>.</p>
       </div>
     </div>
-    <p class="dl-foot fade">¿Tus mozos toman pedidos desde el celular? Instalá también la <a href="/mozo">app del equipo</a>, que es aparte y entra con PIN.</p>
+    <p class="dl-foot fade">¿Tus mozos toman pedidos desde el celular? Descargá también la <a href="/descargar">app del equipo</a>, que es aparte y entra con PIN.</p>
   </div>
 </section>
 
@@ -1436,7 +1441,6 @@
 </footer>
 
 <script src="gestiva-config.js"></script>
-<script src="install-app.js"></script>
 <script>
   // ── tracking de visitas: cuántas personas exploran la web (anónimo, sin datos personales) ──
   (function trackVisit(){
@@ -1459,13 +1463,14 @@
     document.body.style.overflow = open ? 'hidden' : '';
   }
 
-  // La app del equipo se instala desde su propia página (/mozo), donde el
-  // navegador ofrece el diálogo de instalación.
+  // La app del equipo se descarga desde su propia página (/descargar), sin
+  // login: ahí el navegador ofrece el diálogo de instalación.
   function downloadTeamApk() {
-    location.href = '/mozo';
+    location.href = '/descargar';
   }
 
   // ── Instalar Gestiva (PWA) desde la landing ──
+  // Instala el PANEL del dueño. La app de los mozos se descarga en /descargar.
   (function () {
     const btn = document.getElementById('dlInstallBtn');
     const hint = document.getElementById('dlHint');
@@ -1475,26 +1480,21 @@
       if (s.installed) {
         btn.textContent = 'Abrir Gestiva';
         hint.textContent = 'Ya tenés Gestiva instalado en este dispositivo.';
-      } else if (s.needsSafari) {
-        btn.textContent = 'Abrir en Safari para instalar';
+      } else if (s.needsSafari || s.needsChrome) {
+        btn.textContent = 'Instalar Gestiva';
+        hint.textContent = 'Estás dentro de otra app: abrí este link en ' + (s.needsSafari ? 'Safari' : 'Chrome') + ' para instalar.';
       } else if (s.ios) {
-        btn.textContent = 'Instalar en mi iPhone';
+        btn.textContent = 'Instalar en mi ' + (s.ipad ? 'iPad' : 'iPhone');
       }
+      if (s.justInstalled) hint.textContent = '¡Listo! Gestiva quedó instalado. Abrilo desde el ícono.';
     });
 
     btn.onclick = async () => {
       if (GestivaInstall.installed) { location.href = '/app'; return; }
-      // En iPhone prompt() muestra la guía visual (Apple no permite instalar
-      // desde la web); en Android/PC dispara el diálogo nativo.
-      const r = await GestivaInstall.prompt();
-      if (r === 'ios' || r === 'safari') {
-        return;
-      } else if (r === 'unavailable') {
-        // Todavía no se puede instalar desde acá (o el navegador no lo soporta):
-        // el alta es el camino natural, y desde el panel se ofrece instalar.
-        hint.textContent = 'Tu navegador no ofrece la instalación acá. Creá tu cuenta y instalalo desde el panel, o usá Chrome/Edge.';
-        location.href = 'signup.html';
-      }
+      // Android/PC: diálogo nativo de instalación. iPhone, o si el navegador
+      // no lo ofrece: los pasos para ESE navegador. Ya no se manda al registro
+      // (eso pedía usuario y contraseña para "descargar").
+      await GestivaInstall.prompt({ nombre: 'Gestiva' });
     };
   })();
 
@@ -1549,7 +1549,7 @@
 
   // Service worker: necesario para que el navegador ofrezca instalar la app.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20261002-facturacion')
+    navigator.serviceWorker.register('sw.js?v=20261004-descarga')
       .then((reg) => { reg.update().catch(() => {}); })
       .catch((e) => console.warn('[sw]', e.message));
   }

@@ -17,6 +17,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Gestiva Equipo">
+<script src="install-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800&display=swap" rel="stylesheet">
 <style>
@@ -321,7 +322,6 @@
 <div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
 
 <script src="gestiva-config.js"></script>
-<script src="install-app.js"></script>
 <script>
 // ---- Avisos flotantes ----
 // El mozo tiene que ver que su toque hizo algo, sin frenar lo que está haciendo.
@@ -1400,23 +1400,32 @@ function seguroParaRecargar() {
 
   GestivaInstall.onChange(function (s) {
     card.hidden = !GestivaInstall.canOffer();
-    if (s.needsSafari) {
-      document.getElementById('installTitle').textContent = 'Abrila en Safari para instalarla';
-      document.getElementById('installSub').textContent = 'Estás dentro de otra app y no se puede instalar desde acá.';
+    if (s.needsSafari || s.needsChrome) {
+      document.getElementById('installTitle').textContent = 'Abrila en ' + (s.needsSafari ? 'Safari' : 'Chrome') + ' para instalarla';
+      document.getElementById('installSub').textContent = 'Estás dentro de otra app y desde acá no se puede instalar.';
       btn.textContent = 'Ver cómo';
     } else if (s.ios) {
-      document.getElementById('installTitle').textContent = 'Instalá la app en tu iPhone';
-      document.getElementById('installSub').textContent = 'Dos toques y queda el ícono en tu pantalla.';
+      document.getElementById('installTitle').textContent = 'Instalá la app en tu ' + (s.ipad ? 'iPad' : 'iPhone');
+      document.getElementById('installSub').textContent = 'Queda el ícono en tu pantalla, como cualquier app.';
+      btn.textContent = 'Instalar';
+    } else {
+      document.getElementById('installTitle').textContent = 'Instalá la app en tu celular';
+      document.getElementById('installSub').textContent = 'Un toque y queda el ícono en tu pantalla.';
       btn.textContent = 'Instalar';
     }
   });
 
-  btn.onclick = function () { GestivaInstall.prompt(); };
+  btn.onclick = function () { GestivaInstall.prompt({ nombre: 'Gestiva Equipo' }); };
 })();
 
 if ('serviceWorker' in navigator) {
   let reloadingForUpdate = false;
   let esperandoRecarga = null;
+  // En la PRIMERA visita no hay versión vieja que reemplazar: el service worker
+  // solo toma el control de la página. Antes eso también recargaba la página
+  // y en el celular se veía "aparecer y desaparecer". Solo se recarga cuando
+  // una versión nueva reemplaza a otra que ya estaba controlando.
+  let controladorActual = navigator.serviceWorker.controller;
   const recargarCuandoSeSeguro = () => {
     if (reloadingForUpdate) return;
     if (seguroParaRecargar()) {
@@ -1428,8 +1437,11 @@ if ('serviceWorker' in navigator) {
     // Todavía está trabajando: reintentamos cada 15s hasta que quede libre.
     if (!esperandoRecarga) esperandoRecarga = setInterval(recargarCuandoSeSeguro, 15000);
   };
-  navigator.serviceWorker.addEventListener('controllerchange', recargarCuandoSeSeguro);
-  navigator.serviceWorker.register('sw.js?v=20261002-facturacion').then((reg) => {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!controladorActual) { controladorActual = navigator.serviceWorker.controller; return; }
+    recargarCuandoSeSeguro();
+  });
+  navigator.serviceWorker.register('sw.js?v=20261004-descarga').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

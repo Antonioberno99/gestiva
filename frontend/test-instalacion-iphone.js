@@ -1,8 +1,7 @@
 // Verifica el flujo de instalación en iPhone emulando Safari, el navegador
-// interno de Instagram y Chrome iOS.  Requiere playwright:
+// interno de Instagram (así llega el link por WhatsApp/redes) y Chrome iOS.
+// Requiere playwright:
 //   npx playwright install chromium && node frontend/test-instalacion-iphone.js
-// Prueba el flujo de instalación emulando iPhone real (Safari, y el navegador
-// interno de Instagram, que es como llega el link por WhatsApp/redes).
 const { chromium, devices } = require('playwright');
 const http = require('http'), fs = require('fs'), path = require('path');
 
@@ -33,6 +32,7 @@ function serve() {
 const UA_SAFARI_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 const UA_INSTAGRAM  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 335.0.0.32.98 (iPhone14,3; iOS 17_5; en_US)';
 const UA_CHROME_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0 Mobile/15E148 Safari/604.1';
+const UA_CHROME_IOS_VIEJO = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/108.0 Mobile/15E148 Safari/604.1';
 
 (async () => {
   const srv = await serve();
@@ -119,11 +119,22 @@ const UA_CHROME_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Ap
     await ctx.close();
   }
 
-  seccion('4. iPHONE CON CHROME — tampoco puede instalar');
+  seccion('4. iPHONE CON CHROME — desde iOS 16.4 instala desde el mismo Chrome');
   {
     const { ctx, page } = await abrir(UA_CHROME_IOS, 'mozo.html');
     const st = await page.evaluate(() => GestivaInstall.state());
-    check('lo detecta y manda a Safari', st.needsSafari === true);
+    check('detecta Chrome en iPhone', st.ios === true && st.iosBrowser === 'chrome');
+    check('NO lo manda a Safari', st.needsSafari === false);
+    check('la tarjeta habla de instalar en el iPhone', /iPhone/i.test(await page.textContent('#installTitle')));
+    await page.click('#installBtn');
+    await page.waitForTimeout(600);
+    const texto = await page.evaluate(() => { const el = document.querySelector('.gv-ins'); return el ? el.innerText : ''; });
+    check('los pasos son los de Chrome (Compartir junto a la barra de direcciones)', /barra de direcciones/.test(texto) && /Agregar a inicio/.test(texto), texto.slice(0, 100));
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await abrir(UA_CHROME_IOS_VIEJO, 'mozo.html');
+    check('en un iPhone con iOS 16.2 sí lo manda a Safari (ahí Chrome no puede)', await page.evaluate(() => GestivaInstall.state().needsSafari) === true);
     await ctx.close();
   }
 
