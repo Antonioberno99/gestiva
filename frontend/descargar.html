@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Descargar Gestiva Equipo · App para mozos</title>
+<meta name="description" content="Descargá la app de Gestiva para tomar pedidos desde el celular." />
+<!-- Este manifest es el de la APP DE MOZOS (abre en /mozo): lo que se instala
+     desde esta página es esa app, no el panel del dueño. -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="assets/favicon.png?v=2">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+<meta name="theme-color" content="#f97316">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Gestiva Equipo">
+<script>
+  // Si se abre desde el ícono ya instalado, va directo a la app.
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    location.replace('/mozo');
+  }
+</script>
+<!-- En el <head> y sin defer: Android avisa que se puede instalar apenas
+     carga la página, y si el script llega tarde ese aviso se pierde. -->
+<script src="install-app.js"></script>
+<style>
+  :root { --or:#f97316; --or-dk:#ea580c; --tx:#0f172a; --mid:#64748b; --bg:#f8fafc; --line:#e2e8f0; --green:#047857; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--tx); background: var(--bg);
+         min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; }
+  main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+         padding: calc(28px + env(safe-area-inset-top)) 22px calc(28px + env(safe-area-inset-bottom)); text-align: center; }
+  .icono { width: 104px; height: 104px; border-radius: 26px; box-shadow: 0 14px 36px rgba(234,88,12,.32); margin-bottom: 22px; }
+  h1 { font-size: 27px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 8px; }
+  .sub { font-size: 16px; line-height: 1.5; color: var(--mid); margin: 0 auto 28px; max-width: 340px; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 360px; padding: 18px 20px;
+         border: 0; border-radius: 16px; font-family: inherit; font-size: 18px; font-weight: 800; cursor: pointer; text-decoration: none;
+         -webkit-tap-highlight-color: transparent; }
+  .btn-primary { background: linear-gradient(135deg, var(--or), var(--or-dk)); color: #fff; box-shadow: 0 10px 24px rgba(234,88,12,.32); }
+  .btn-primary:active { transform: scale(.985); }
+  .btn-primary[disabled] { opacity: .75; }
+  .btn svg { width: 22px; height: 22px; flex: none; }
+  .ok { display: none; max-width: 360px; width: 100%; background: #ecfdf5; border: 1px solid #a7f3d0; color: var(--green);
+        border-radius: 14px; padding: 14px 16px; margin-top: 16px; font-weight: 700; font-size: 15px; line-height: 1.45; }
+  .ok.on { display: block; }
+  .ya { margin-top: 22px; font-size: 14.5px; color: var(--mid); }
+  .ya a { color: var(--or-dk); font-weight: 700; text-decoration: none; }
+  .info { margin-top: 30px; max-width: 360px; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line);
+          border-radius: 16px; padding: 16px 18px; }
+  .info h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--mid); margin: 0 0 10px; }
+  .info li { font-size: 14.5px; line-height: 1.5; margin: 0 0 6px; }
+  .info ol { padding-left: 20px; margin: 0; }
+  footer { text-align: center; font-size: 12.5px; color: #94a3b8; padding: 0 20px calc(18px + env(safe-area-inset-bottom)); }
+</style>
+</head>
+<body>
+<main>
+  <img class="icono" src="assets/icon-192.png" alt="" width="104" height="104">
+  <h1>Gestiva Equipo</h1>
+  <p class="sub">La app para tomar pedidos desde el celular y mandarlos directo a la cocina.</p>
+
+  <button class="btn btn-primary" id="btnDescargar" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+    <span id="btnTexto">Descargar app</span>
+  </button>
+  <div class="ok" id="okMsg">¡Listo! Ya tenés <b>Gestiva Equipo</b> en tu pantalla de inicio. Abrila desde el ícono.</div>
+
+  <p class="ya">¿Ya la tenés? <a href="/mozo" id="linkAbrir">Abrir la app</a></p>
+
+  <div class="info">
+    <h2>Después de instalarla</h2>
+    <ol>
+      <li>Abrí <b>Gestiva Equipo</b> desde el ícono.</li>
+      <li>Entrá con el email del restaurante y tu PIN. Te los da el encargado.</li>
+      <li>Marcá tu ingreso y empezá a tomar pedidos.</li>
+    </ol>
+  </div>
+</main>
+<footer>Gestiva · gestión para restaurantes</footer>
+
+<script>
+(function () {
+  var btn = document.getElementById('btnDescargar');
+  var txt = document.getElementById('btnTexto');
+  var ok = document.getElementById('okMsg');
+  if (!window.GestivaInstall) return;
+
+  GestivaInstall.onChange(function (s) {
+    if (s.justInstalled) {
+      ok.classList.add('on');
+      txt.textContent = 'Abrir la app';
+      btn.onclick = function () { location.href = '/mozo'; };
+    }
+  });
+
+  var ocupado = false;
+  btn.onclick = function () {
+    if (ocupado) return;
+    ocupado = true;
+    var original = txt.textContent;
+    // En Android puede tardar un segundo en estar listo el diálogo de instalación.
+    if (GestivaInstall.android && !GestivaInstall.available) txt.textContent = 'Preparando...';
+    GestivaInstall.prompt({ nombre: 'Gestiva Equipo' }).then(function (r) {
+      if (r === 'accepted') {
+        ok.classList.add('on');
+        txt.textContent = 'Abrir la app';
+        btn.onclick = function () { location.href = '/mozo'; };
+      } else {
+        txt.textContent = original;
+      }
+    }).catch(function () {
+      txt.textContent = original;
+    }).then(function () { ocupado = false; });
+  };
+})();
+
+// Service worker: necesario para que Android ofrezca instalar y para que la
+// app abra sin internet. NO se recarga la página al activarse (eso era el
+// "aparece y desaparece" de la primera visita).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js?v=20261004-descarga').catch(function () {});
+}
+</script>
+</body>
+</html>

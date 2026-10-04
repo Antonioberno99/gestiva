@@ -8,7 +8,7 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
-    { "source": "/assets/gestiva-equipo.apk", "destination": "/mozo", "permanent": false },
+    { "source": "/assets/gestiva-equipo.apk", "destination": "/descargar", "permanent": false },
     { "source": "/", "destination": "/landing", "permanent": false }
   ]
 }

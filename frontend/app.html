@@ -429,7 +429,18 @@ const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
-const teamAppUrl = () => new URL('/mozo', location.origin).href;
+// Link para que el equipo DESCARGUE la app (página sin login). La app en sí
+// abre en /mozo y ahí recién se entra con el email del local y el PIN.
+const teamAppUrl = () => new URL('/descargar', location.origin).href;
+// QR en SVG (usa la librería que ya carga el panel para las facturas).
+function qrSvgPanel(text, px) {
+  if (typeof window.qrcode !== 'function') return '';
+  const q = window.qrcode(0, 'M'); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = 4, size = n + m * 2;
+  let d = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += 'M' + (c + m) + ' ' + (r + m) + 'h1v1h-1z';
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${px}" height="${px}" shape-rendering="crispEdges" role="img" aria-label="Código QR para descargar la app"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
 const IS_DEMO = TOKEN === 'gestiva_demo_token';
 
 function demoRead(key, fallback) {
@@ -2584,13 +2595,17 @@ route('mozos', async () => {
     <div class="card" style="margin-bottom:24px;">
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
         <div>
-          <h3 style="font-size:16px;margin-bottom:6px;">Instalacion para celulares</h3>
-          <div style="color:var(--tx-mid);line-height:1.55;">El equipo entra con el email del restaurante y su PIN. Desde el celular se instala abriendo la app y agregandola a la pantalla de inicio.</div>
+          <h3 style="font-size:16px;margin-bottom:6px;">Descargar la app en el celular del equipo</h3>
+          <div style="color:var(--tx-mid);line-height:1.55;">Que el mozo escanee este código con la cámara del celular, o mandale el link. Se descarga sin pedir usuario ni contraseña; después entra con el email del restaurante y su PIN.</div>
           <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${appUrl}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
+            <a class="btn btn-secondary btn-sm" href="https://wa.me/?text=${encodeURIComponent('Descargá la app de Gestiva para tomar pedidos: ' + appUrl)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+          </div>
         </div>
-        <div style="min-width:220px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-          <a class="btn btn-secondary" href="/mozo" target="_blank">Ver app</a>
-          <button class="btn btn-primary" onclick="downloadTeamApk()">Instalar en celular</button>
+        <div style="text-align:center;">
+          <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;display:inline-block;">${qrSvgPanel(appUrl, 150)}</div>
+          <div style="font-size:12px;color:var(--tx-mid);margin-top:4px;">Escaneá con la cámara</div>
         </div>
       </div>
     </div>
@@ -2642,16 +2657,20 @@ async function copyTeamAppLink() {
     prompt('Copiar link de la app', teamAppUrl());
   }
 }
-async function downloadTeamApk() {
-  const apk = 'assets/gestiva-equipo.apk';
-  try {
-    const r = await fetch(apk, { method:'HEAD' });
-    if (!r.ok) throw new Error('missing');
-    location.href = apk;
-  } catch(e) {
-    toast('Todavia no hay APK real. Abro la app instalable.', 'info');
-    location.href = '/mozo';
-  }
+// "Instalar en celular" desde la PC: se muestra el QR para escanear con el
+// celular del mozo (antes intentaba bajar un .apk que no existe y terminaba
+// en la pantalla de login de la app).
+function downloadTeamApk() {
+  const url = teamAppUrl();
+  openModal('Descargar la app del equipo', `
+    <div style="text-align:center;">
+      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Que el mozo escanee este código con la <b>cámara del celular</b>. Se abre la página de descarga y con un toque queda instalada.</p>
+      <div style="display:inline-block;background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px;">${qrSvgPanel(url, 220)}</div>
+      <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${url}</div>
+      <p style="font-size:12.5px;color:var(--tx-lt);margin:10px 0 0;">No pide usuario para descargar. Para entrar a la app, el mozo usa el email del restaurante y su PIN.</p>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="copyTeamAppLink()">Copiar link</button>
+     <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent('Descargá la app de Gestiva para tomar pedidos: ' + url)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>`);
 }
 async function editWaiter(id) {
   let w = { name:'', role:'Mozo', color:'#f97316', commissionPercent:0 };
@@ -3614,12 +3633,10 @@ window.addEventListener('focus', kitchenStationTick);
       if (s.ios) txt.textContent = 'Agregar a inicio';
     });
     btn.onclick = async () => {
-      const r = await GestivaInstall.prompt();
-      if (r === 'ios') {
-        alert('Para instalar Gestiva en iPhone o iPad:\n\n1. Tocá el botón Compartir (el cuadrado con la flecha)\n2. Elegí "Agregar a inicio"\n3. Confirmá con "Agregar"\n\nVa a quedar el ícono de Gestiva en tu pantalla.');
-      } else if (r === 'accepted') {
-        btn.hidden = true;
-      }
+      // Android/PC: diálogo nativo. iPhone/iPad: la guía con los pasos de SU
+      // navegador (antes además saltaba un alert encima, con pasos viejos).
+      const r = await GestivaInstall.prompt({ nombre: 'Gestiva' });
+      if (r === 'accepted') btn.hidden = true;
     };
   }
   // ---------- Asistente con IA ----------
@@ -3714,7 +3731,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20261002-facturacion')
+    navigator.serviceWorker.register('sw.js?v=20261004-descarga')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
