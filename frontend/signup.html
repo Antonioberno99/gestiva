@@ -170,7 +170,7 @@ async function handleGoogleSignIn(response) {
   try {
     const r = await fetch(window.API_URL + '/auth/google', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ credential: response.credential, ref: currentRef() || undefined })
+      body: JSON.stringify({ credential: response.credential, ref: currentRef() || undefined, mode: 'signup' })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google no está configurado en el backend' : (data.error || 'Error al crear la cuenta'));

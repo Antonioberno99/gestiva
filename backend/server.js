@@ -112,6 +112,8 @@ function planFor(planId) {
 }
 // Si está vacío, el endpoint /auth/google rechaza pedidos
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+// Dónde se verifica el token de Google. Solo se cambia para pruebas locales.
+const GOOGLE_TOKENINFO_URL = process.env.GOOGLE_TOKENINFO_URL || 'https://oauth2.googleapis.com/tokeninfo';
 // SKIP_BILLING=1 desactiva todo cobro: registros quedan 'active' por 1 año.
 // Útil mientras no esté integrado el banco. Para activar cobro real, poner SKIP_BILLING=0.
 const SKIP_BILLING = process.env.SKIP_BILLING === '1' || !MP_TOKEN;
@@ -194,7 +196,9 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
+// En JSON como el resto: las pantallas de login leen { error } y muestran
+// "Demasiados intentos" (con texto plano mostraban un error incomprensible).
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, message: { error: 'too_many_attempts' } });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 240 });
 const trackLimiter = rateLimit({ windowMs: 60 * 1000, max: 300 });
 
@@ -301,6 +305,14 @@ async function resolveRefCode(ref) {
   return out;
 }
 
+// Lo que recibe la app de los mozos: lo del local, sin los datos de la cuenta
+// del dueño (su cuenta de Google, si tiene contraseña, el link de pago).
+function publicTenantMozo(t) {
+  const p = publicTenant(t);
+  delete p.googleEmail; delete p.googlePicture; delete p.hasPassword; delete p.mpInitPoint;
+  return p;
+}
+
 function publicTenant(t) {
   const planId = t.plan || 'pro';
   const plan = planFor(planId);
@@ -317,6 +329,11 @@ function publicTenant(t) {
     currency: t.currency,
     googlePicture: t.google_picture || null,
     hasGoogle: !!t.google_id,
+    googleEmail: t.google_email || null,
+    hasPassword: !!t.password_hash,
+    // Con este código (y su PIN) entran los mozos a la app: no depende de con
+    // qué email o cuenta de Google entra el dueño al panel.
+    teamCode: t.team_code || null,
     emailVerified: !!t.email_verified,
     // Estaciones de comanda: sirve para MOSTRAR el destino en la app del mozo y
     // en el panel. La impresión la sigue resolviendo el agente en la PC del local.
@@ -724,6 +741,9 @@ app.post('/auth/login', loginLimiter, async (req, res) => {
     const r = await q('SELECT * FROM tenants WHERE email=$1', [normalizedEmail]);
     const t = r.rows[0];
     if (!t) return res.status(401).json({ error: 'invalid_credentials' });
+    // Cuenta creada con Google: no tiene contraseña. Antes esto tiraba un error
+    // interno; ahora se le dice que entre con Google.
+    if (!t.password_hash) return res.status(401).json({ error: 'use_google' });
     const ok = await bcrypt.compare(password, t.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
     await refreshSubscriptionStatus(t.id);
@@ -775,7 +795,7 @@ app.post('/auth/onboarding', requireAuth, async (req, res) => {
 async function verifyGoogleCredential(credential) {
   if (!GOOGLE_CLIENT_ID) { const e = new Error('google_not_configured'); e.code = 503; throw e; }
   if (!credential) { const e = new Error('missing_credential'); e.code = 400; throw e; }
-  const verifyRes = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential));
+  const verifyRes = await fetch(GOOGLE_TOKENINFO_URL + '?id_token=' + encodeURIComponent(credential));
   if (!verifyRes.ok) { const e = new Error('invalid_credential'); e.code = 401; throw e; }
   const info = await verifyRes.json();
   const aud = Array.isArray(info.aud) ? info.aud : [info.aud];
@@ -787,22 +807,44 @@ async function verifyGoogleCredential(credential) {
   return { email, googleId, name: info.name || '', picture: info.picture || null };
 }
 
+// Error de Google o de la base → status HTTP. Los errores de Postgres traen un
+// .code de texto ('23505'), que no es un status válido.
+function statusDeError(e) {
+  return Number.isInteger(e && e.code) && e.code >= 400 && e.code < 600 ? e.code : 500;
+}
+
 app.post('/auth/google', authLimiter, async (req, res) => {
   try {
-    const { credential, ref } = req.body || {};
+    // mode: 'login' desde "Iniciar sesión" (no crea nada), 'signup' desde el alta.
+    const { credential, ref, mode } = req.body || {};
     const { email, googleId, name, picture } = await verifyGoogleCredential(credential);
 
-    // Buscar tenant existente por google_id o email
-    const r = await q('SELECT * FROM tenants WHERE google_id=$1 OR email=$2 LIMIT 1', [googleId, email]);
+    // Primero el local que tiene ESTA cuenta de Google vinculada; después el
+    // registrado con el mismo email. Antes era "cualquiera de los dos" y, si
+    // había uno de cada, entraba a uno al azar.
+    const r = await q(`SELECT * FROM tenants
+                        WHERE google_id=$1 OR email=$2 OR google_email=$2
+                        ORDER BY (google_id = $1) IS TRUE DESC, (email = $2) IS TRUE DESC, created_at
+                        LIMIT 1`, [googleId, email]);
     let t = r.rows[0];
     let isNew = false;
 
+    if (!t && mode === 'login') {
+      // Desde "Iniciar sesión" NO se crea un restaurante nuevo sin avisar: si el
+      // dueño se había registrado con otro email, terminaba con dos locales
+      // (la PC trabajando en uno y los mozos en el otro).
+      return res.status(404).json({ error: 'no_account', email });
+    }
+
     if (t) {
-      // Linkear google_id y picture si no estaban
+      // Linkear google_id, el email de Google y la foto si no estaban
       const updates = [];
       const params = [];
       let idx = 1;
       if (!t.google_id) { updates.push(`google_id=$${idx++}`); params.push(googleId); }
+      if ((!t.google_id || t.google_id === googleId) && t.google_email !== email) {
+        updates.push(`google_email=$${idx++}`); params.push(email);
+      }
       if (!t.google_picture) { updates.push(`google_picture=$${idx++}`); params.push(picture); }
       if (updates.length > 0) {
         params.push(t.id);
@@ -836,10 +878,10 @@ app.post('/auth/google', authLimiter, async (req, res) => {
       // Google ya verificó el correo (lo chequeamos en verifyGoogleCredential),
       // así que la cuenta nace con email_verified = true.
       const ins = await q(
-        `INSERT INTO tenants (email, google_id, google_picture, restaurant_name, owner_name,
+        `INSERT INTO tenants (email, google_id, google_email, google_picture, restaurant_name, owner_name,
                               subscription_status, subscription_started_at, subscription_ends_at, grace_ends_at, vendor_id, access_code,
                               email_verified, email_verified_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,now()) RETURNING *`,
+         VALUES ($1,$2,$1,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,now()) RETURNING *`,
         [email, googleId, picture, 'Mi restaurante', name, initialStatus, startedAt, endsAt, graceEndsAt, vendorId, compCode]
       );
       t = ins.rows[0];
@@ -859,7 +901,9 @@ app.post('/auth/google', authLimiter, async (req, res) => {
     return res.json({ token, user: publicTenant(t), isNew });
   } catch (e) {
     console.error('[auth-google]', e);
-    return res.status(500).json({ error: 'server_error' });
+    // Antes todo era 'server_error' y el dueño no sabía qué pasaba.
+    const st = statusDeError(e);
+    return res.status(st).json({ error: st === 500 ? 'server_error' : e.message });
   }
 });
 
@@ -1188,24 +1232,52 @@ async function createKitchenTicket({ tenantId, tableId, waiterId, items, notes, 
   return { ticket: r.rows[0], duplicate: false };
 }
 
+// La app de los mozos identifica al local con el CÓDIGO DEL LOCAL (el dueño lo
+// ve en el panel, en Equipo) o, como antes, con el email de la cuenta: el de
+// registro o el de la cuenta de Google vinculada.
+function normalizarCodigoLocal(v) {
+  return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+// Devuelve los locales candidatos: con un código, uno; con un email, el que se
+// registró con ese email y/o el que tiene esa cuenta de Google vinculada (casi
+// siempre es el mismo; si son dos, entra al que tenga un mozo con ese PIN).
+async function buscarLocalesDeMozos(identificador) {
+  const v = String(identificador || '').trim();
+  if (v.includes('@')) {
+    const email = v.toLowerCase();
+    const rows = (await q(`SELECT * FROM tenants WHERE email=$1 OR google_email=$1
+                            ORDER BY (google_id IS NOT NULL AND google_email = $1) DESC, (email = $1) DESC, created_at
+                            LIMIT 3`, [email])).rows;
+    return { tenants: rows, porCodigo: false };
+  }
+  const codigo = normalizarCodigoLocal(v);
+  const rows = codigo ? (await q('SELECT * FROM tenants WHERE team_code=$1', [codigo])).rows : [];
+  return { tenants: rows, porCodigo: true };
+}
+
 app.post('/waiter/login', loginLimiter, async (req, res) => {
   try {
-    const { email, pin } = req.body || {};
-    if (!email || !pin) return res.status(400).json({ error: 'missing_fields' });
-    const normalizedEmail = email.toLowerCase().trim();
-    const tenant = (await q('SELECT * FROM tenants WHERE email=$1', [normalizedEmail])).rows[0];
-    if (!tenant) return res.status(401).json({ error: 'invalid_credentials' });
+    // 'local' es lo nuevo (código o email); 'email' lo mandan las apps viejas.
+    const { local, email, pin } = req.body || {};
+    const identificador = String(local || email || '').trim();
+    if (!identificador || !pin) return res.status(400).json({ error: 'missing_fields' });
+    const { tenants, porCodigo } = await buscarLocalesDeMozos(identificador);
+    // Con el código se puede decir qué falló (el código no es un dato personal);
+    // con un email no, para no revelar qué emails son clientes.
+    if (!tenants.length) return res.status(401).json({ error: porCodigo ? 'local_not_found' : 'invalid_credentials' });
 
-    const waiters = (await q('SELECT * FROM waiters WHERE tenant_id=$1 AND access_pin_hash IS NOT NULL ORDER BY created_at', [tenant.id])).rows;
-    for (const waiter of waiters) {
-      if (await bcrypt.compare(String(pin), waiter.access_pin_hash)) {
-        const freshTenant = await refreshSubscriptionStatus(tenant.id);
-        const token = signWaiterToken(freshTenant, waiter);
-        return res.json({ token, restaurant: publicTenant(freshTenant), waiter: publicWaiter(waiter) });
+    for (const tenant of tenants) {
+      const waiters = (await q('SELECT * FROM waiters WHERE tenant_id=$1 AND access_pin_hash IS NOT NULL ORDER BY created_at', [tenant.id])).rows;
+      for (const waiter of waiters) {
+        if (await bcrypt.compare(String(pin), waiter.access_pin_hash)) {
+          const freshTenant = await refreshSubscriptionStatus(tenant.id);
+          const token = signWaiterToken(freshTenant, waiter);
+          return res.json({ token, restaurant: publicTenantMozo(freshTenant), waiter: publicWaiter(waiter) });
+        }
       }
     }
 
-    return res.status(401).json({ error: 'invalid_credentials' });
+    return res.status(401).json({ error: porCodigo ? 'invalid_pin' : 'invalid_credentials' });
   } catch (e) {
     console.error('[waiter-login]', e);
     return res.status(500).json({ error: 'server_error' });
@@ -1213,7 +1285,7 @@ app.post('/waiter/login', loginLimiter, async (req, res) => {
 });
 
 app.get('/waiter/me', requireWaiterAuth, async (req, res) => {
-  res.json({ restaurant: publicTenant(req.tenant), waiter: publicWaiter(req.waiter) });
+  res.json({ restaurant: publicTenantMozo(req.tenant), waiter: publicWaiter(req.waiter) });
 });
 
 app.get('/waiter/bootstrap', requireWaiterAuth, async (req, res) => {
@@ -1230,7 +1302,7 @@ app.get('/waiter/bootstrap', requireWaiterAuth, async (req, res) => {
        ORDER BY started_at DESC LIMIT 20`, [req.tenant.id, req.waiter.id])
   ]);
   res.json({
-    restaurant: publicTenant(req.tenant),
+    restaurant: publicTenantMozo(req.tenant),
     waiter: publicWaiter(req.waiter),
     tables: tables.rows,
     openTables: openTables.rows,
@@ -2129,6 +2201,42 @@ app.put('/api/settings', async (req, res) => {
      typeof barCategories === 'string' ? barCategories.trim() : null,
      req.tenant.id]);
   res.json(publicTenant(r.rows[0]));
+});
+
+// Vincular una cuenta de Google al local con el que el dueño ya entra. Es el
+// caso "me registré con un email y en la PC quiero entrar con Google": sin
+// esto, tocar "Iniciar sesión con Google" creaba OTRO restaurante vacío.
+app.post('/api/account/google', async (req, res) => {
+  try {
+    const { email, googleId, picture } = await verifyGoogleCredential((req.body || {}).credential);
+    const t = req.tenant;
+    if (t.google_id && t.google_id !== googleId) {
+      // Ya tiene otra cuenta de Google: no la pisamos sin que la desvincule.
+      return res.status(409).json({ error: 'otra_google_vinculada',
+        detail: `Este restaurante ya tiene vinculada otra cuenta de Google${t.google_email ? ' (' + t.google_email + ')' : ''}.` });
+    }
+    const otro = (await q('SELECT * FROM tenants WHERE google_id=$1 AND id<>$2', [googleId, t.id])).rows[0];
+    if (otro) {
+      // ¿Es el restaurante vacío que se creó por error al tocar "Iniciar sesión
+      // con Google"? (sin contraseña, sin suscripción y sin ventas). Entonces se
+      // le pasa el vínculo a este. Si tiene uso real, no se toca nada.
+      const conVentas = (await q('SELECT 1 FROM orders WHERE tenant_id=$1 LIMIT 1', [otro.id])).rows[0];
+      const vacio = !otro.password_hash && !otro.mp_preapproval_id && !otro.access_code &&
+                    otro.subscription_status === 'pending' && !conVentas;
+      if (!vacio) return res.status(409).json({ error: 'google_en_otro_local',
+        detail: `Esa cuenta de Google ya se usa en el restaurante «${otro.restaurant_name}». Para no mezclar los datos, no se movió nada.` });
+      await q('UPDATE tenants SET google_id=NULL, google_email=NULL WHERE id=$1', [otro.id]);
+    }
+    const r = await q(`UPDATE tenants SET google_id=$1, google_email=$2, google_picture=COALESCE(google_picture,$3)
+                        WHERE id=$4 RETURNING *`, [googleId, email, picture, t.id]);
+    return res.json({ user: publicTenant(r.rows[0]) });
+  } catch (e) {
+    // Un token de Google inválido NO es "sesión vencida": nada de 401 acá,
+    // el panel cerraría la sesión del dueño.
+    const st = statusDeError(e);
+    if (st === 500) console.error('[account-google]', e);
+    return res.status(st === 401 ? 400 : st).json({ error: st === 500 ? 'server_error' : e.message });
+  }
 });
 
 // ----- ASISTENTE CON IA -----

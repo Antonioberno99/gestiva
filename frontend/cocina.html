@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --bg-dark: #0f172a; --bg-card: #1e293b; --bg-card-light: #334155;
@@ -125,6 +126,10 @@
   .login-btn:hover { background: var(--or-dk); }
   .err { background: rgba(239,68,68,.15); color: #fca5a5; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display:none; }
   .err.on { display: block; }
+  #gBtn { display:flex; justify-content:center; margin-bottom: 4px; }
+  #gBtn:empty { display:none; }
+  .divider { display:flex; align-items:center; gap:10px; margin:16px 0; color: var(--text-mid); font-size: 12px; }
+  .divider::before, .divider::after { content:''; flex:1; height:1px; background:#475569; }
 
   @media (max-width: 600px) {
     .stats { display:none; }
@@ -140,10 +145,12 @@
     <h1>Cocina</h1>
     <p>Iniciá sesión con la cuenta del restaurante para ver los pedidos en tiempo real.</p>
     <div class="err" id="loginErr"></div>
+    <div id="gBtn"></div>
+    <div class="divider" id="gDivider" style="display:none;">o con email</div>
     <div class="field"><label>Email del restaurante</label><input id="loginEmail" type="email" autocomplete="email" placeholder="tu@email.com"/></div>
     <div class="field"><label>Contraseña</label><input id="loginPass" type="password" placeholder="••••••••"/></div>
     <button class="login-btn" id="loginBtn" onclick="doLogin()">Entrar a cocina</button>
-    <p style="font-size:12px;margin-top:14px;color:var(--text-mid);">Usá las mismas credenciales que en el panel del restaurante.</p>
+    <p style="font-size:12px;margin-top:14px;color:var(--text-mid);">Entrá igual que en el panel del restaurante: con Google o con tu email y contraseña.</p>
   </div>
 </div>
 
@@ -185,7 +192,7 @@ async function doLogin() {
       body: JSON.stringify({ email, password })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : data.error);
+    if (!r.ok) throw new Error(MENSAJES_LOGIN[data.error] || data.error);
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
     showApp();
@@ -194,6 +201,54 @@ async function doLogin() {
     btn.disabled = false; btn.textContent = 'Entrar a cocina';
   }
 }
+
+// La cocina se entra con la misma cuenta que el panel. Si el dueño entra al
+// panel con Google, acá también (antes solo había email y contraseña, y una
+// cuenta creada con Google no tiene contraseña: no podía entrar).
+const MENSAJES_LOGIN = {
+  invalid_credentials: 'Email o contraseña incorrectos',
+  use_google: 'Esta cuenta se creó con Google: entrá con el botón «Iniciar sesión con Google».',
+  too_many_attempts: 'Demasiados intentos. Esperá unos minutos y probá de nuevo.',
+  google_not_configured: 'El ingreso con Google no está configurado.',
+  invalid_credential: 'Google no confirmó la cuenta. Probá de nuevo.',
+  email_not_verified: 'Esa cuenta de Google no tiene el email verificado.',
+  server_error: 'Error del servidor. Probá de nuevo en unos segundos.'
+};
+async function loginGoogle(resp) {
+  const err = $('#loginErr');
+  err.classList.remove('on');
+  try {
+    const r = await fetch(window.API_URL + '/auth/google', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ credential: resp.credential, mode: 'login' })   // la cocina nunca crea un restaurante
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error === 'no_account'
+      ? 'No hay ningún restaurante con ' + (data.email || 'esa cuenta') + '. Entrá con la misma cuenta que usás en el panel.'
+      : (MENSAJES_LOGIN[data.error] || data.error));
+    localStorage.setItem('gestiva_token', data.token);
+    localStorage.setItem('gestiva_user', JSON.stringify(data.user));
+    showApp();
+  } catch (e) {
+    err.textContent = e.message; err.classList.add('on');
+  }
+}
+function initGoogleCocina() {
+  if (!window.GOOGLE_CLIENT_ID || !window.google || !window.google.accounts || !window.google.accounts.id) return;
+  window.google.accounts.id.initialize({ client_id: window.GOOGLE_CLIENT_ID, callback: loginGoogle, auto_select: false, context: 'signin' });
+  window.google.accounts.id.renderButton(document.getElementById('gBtn'), {
+    type: 'standard', theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'rectangular', width: 300
+  });
+  document.getElementById('gDivider').style.display = '';
+}
+window.addEventListener('load', () => {
+  let intentos = 0;
+  const t = setInterval(() => {
+    intentos++;
+    if (window.google && window.google.accounts && window.google.accounts.id) { clearInterval(t); initGoogleCocina(); }
+    else if (intentos > 50) clearInterval(t);
+  }, 200);
+});
 
 async function api(path, opts = {}) {
   const r = await fetch(window.API_URL + path, {

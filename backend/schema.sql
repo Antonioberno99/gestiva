@@ -587,3 +587,49 @@ EXCEPTION WHEN others THEN
   RAISE NOTICE 'uq_invoice_order_activa no se pudo crear: %', SQLERRM;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_invoices_numero ON invoices(tenant_id, pto_vta, cbte_tipo, nro);
+
+-- ============================================================
+-- FASE 7: los mozos entran con el CÓDIGO DEL LOCAL
+-- ============================================================
+-- La app de los mozos identificaba al restaurante con el email de la cuenta
+-- del dueño. Si el dueño entra con Google, ese email no se ve en ningún lado y
+-- el equipo terminaba usando otro. Cada local tiene ahora un código corto que
+-- se ve en el panel (Equipo): 6 letras y números, sin 0/O/1/I/L para que no se
+-- confundan al dictarlo. El email sigue sirviendo, como antes.
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS team_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_team_code ON tenants(team_code);
+CREATE OR REPLACE FUNCTION gestiva_codigo_local() RETURNS TEXT AS $$
+DECLARE
+  abc TEXT := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  c TEXT;
+BEGIN
+  LOOP
+    c := '';
+    FOR i IN 1..6 LOOP
+      c := c || substr(abc, 1 + floor(random() * length(abc))::int, 1);
+    END LOOP;
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM tenants WHERE team_code = c);
+  END LOOP;
+  RETURN c;
+END $$ LANGUAGE plpgsql VOLATILE;
+ALTER TABLE IF EXISTS tenants ALTER COLUMN team_code SET DEFAULT gestiva_codigo_local();
+-- Locales que ya existían: uno por uno, y si justo se repitiera, otro código.
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN SELECT id FROM tenants WHERE team_code IS NULL LOOP
+    LOOP
+      BEGIN
+        UPDATE tenants SET team_code = gestiva_codigo_local() WHERE id = r.id;
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        NULL;
+      END;
+    END LOOP;
+  END LOOP;
+END $$;
+
+-- Email de la cuenta de Google vinculada: puede ser distinto del email con el
+-- que se registró el local (el dueño se registró con uno y entra con otro).
+ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS google_email TEXT;
+CREATE INDEX IF NOT EXISTS idx_tenants_google_email ON tenants(google_email);
