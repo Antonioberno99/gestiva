@@ -16,9 +16,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Gestiva Equipo">
 <script>
-  // Si se abre desde el ícono ya instalado, va directo a la app.
+  // Si se abre desde el ícono ya instalado, va directo a la app (con el código
+  // del local, si vino en el link).
   if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
-    location.replace('/mozo');
+    var l = ''; try { l = new URLSearchParams(location.search).get('local') || ''; } catch (e) {}
+    location.replace('/mozo' + (l ? '?local=' + encodeURIComponent(l) : ''));
   }
 </script>
 <!-- En el <head> y sin defer: Android avisa que se puede instalar apenas
@@ -52,6 +54,12 @@
   .info h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--mid); margin: 0 0 10px; }
   .info li { font-size: 14.5px; line-height: 1.5; margin: 0 0 6px; }
   .info ol { padding-left: 20px; margin: 0; }
+  .codigo { display: none; max-width: 360px; width: 100%; margin-top: 18px; background: #fff7ed; border: 1px solid #fed7aa;
+            border-radius: 16px; padding: 14px 16px; }
+  .codigo.on { display: block; }
+  .codigo span { display: block; font-size: 12.5px; font-weight: 700; color: #9a3412; text-transform: uppercase; letter-spacing: .05em; }
+  .codigo strong { display: block; font-size: 30px; letter-spacing: .18em; margin: 4px 0 2px; color: var(--tx); }
+  .codigo small { display: block; font-size: 13.5px; color: var(--mid); line-height: 1.45; }
   footer { text-align: center; font-size: 12.5px; color: #94a3b8; padding: 0 20px calc(18px + env(safe-area-inset-bottom)); }
 </style>
 </head>
@@ -67,13 +75,19 @@
   </button>
   <div class="ok" id="okMsg">¡Listo! Ya tenés <b>Gestiva Equipo</b> en tu pantalla de inicio. Abrila desde el ícono.</div>
 
+  <div class="codigo" id="codigoLocal">
+    <span>Código de tu local</span>
+    <strong id="codigoTxt"></strong>
+    <small>Con este código y tu PIN entrás a la app. Anotalo por las dudas.</small>
+  </div>
+
   <p class="ya">¿Ya la tenés? <a href="/mozo" id="linkAbrir">Abrir la app</a></p>
 
   <div class="info">
     <h2>Después de instalarla</h2>
     <ol>
       <li>Abrí <b>Gestiva Equipo</b> desde el ícono.</li>
-      <li>Entrá con el email del restaurante y tu PIN. Te los da el encargado.</li>
+      <li>Entrá con el código del local y tu PIN. Te los da el encargado.</li>
       <li>Marcá tu ingreso y empezá a tomar pedidos.</li>
     </ol>
   </div>
@@ -81,6 +95,18 @@
 <footer>Gestiva · gestión para restaurantes</footer>
 
 <script>
+// Código del local que viene en el link o el QR del panel (?local=K7M2QX):
+// se muestra, queda guardado en el celular y se pasa a la app.
+var LOCAL = '';
+try { LOCAL = (new URLSearchParams(location.search).get('local') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); } catch (e) {}
+var APP_URL = '/mozo' + (LOCAL ? '?local=' + LOCAL : '');
+if (LOCAL) {
+  document.getElementById('codigoTxt').textContent = LOCAL;
+  document.getElementById('codigoLocal').classList.add('on');
+  document.getElementById('linkAbrir').setAttribute('href', APP_URL);
+  try { localStorage.setItem('gestiva_waiter_local', LOCAL); } catch (e) {}
+}
+
 (function () {
   var btn = document.getElementById('btnDescargar');
   var txt = document.getElementById('btnTexto');
@@ -91,7 +117,7 @@
     if (s.justInstalled) {
       ok.classList.add('on');
       txt.textContent = 'Abrir la app';
-      btn.onclick = function () { location.href = '/mozo'; };
+      btn.onclick = function () { location.href = APP_URL; };
     }
   });
 
@@ -106,7 +132,7 @@
       if (r === 'accepted') {
         ok.classList.add('on');
         txt.textContent = 'Abrir la app';
-        btn.onclick = function () { location.href = '/mozo'; };
+        btn.onclick = function () { location.href = APP_URL; };
       } else {
         txt.textContent = original;
       }
@@ -120,7 +146,7 @@
 // app abra sin internet. NO se recarga la página al activarse (eso era el
 // "aparece y desaparece" de la primera visita).
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=20261004-descarga').catch(function () {});
+  navigator.serviceWorker.register('sw.js?v=20261004-codigo-local').catch(function () {});
 }
 </script>
 </body>

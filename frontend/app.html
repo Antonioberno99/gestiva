@@ -429,9 +429,26 @@ const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
-// Link para que el equipo DESCARGUE la app (página sin login). La app en sí
-// abre en /mozo y ahí recién se entra con el email del local y el PIN.
-const teamAppUrl = () => new URL('/descargar', location.origin).href;
+// Link para que el equipo DESCARGUE la app (página sin login). Lleva el código
+// del local: la app lo deja cargado y el mozo solo escribe su PIN.
+const teamAppUrl = () => {
+  const u = new URL('/descargar', location.origin);
+  if (USER && USER.teamCode) u.searchParams.set('local', USER.teamCode);
+  return u.href;
+};
+const teamAppMensaje = () => 'Descargá la app de Gestiva para tomar pedidos: ' + teamAppUrl() +
+  (USER && USER.teamCode ? '\nCódigo del local: ' + USER.teamCode + '\nTu PIN te lo paso yo.' : '');
+// Cómo entran los mozos a la app (bloque reutilizado en Equipo y en el QR).
+function teamAccesoHtml() {
+  if (USER && USER.teamCode) {
+    return `<div style="margin-top:14px;display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 14px;">
+        <span style="font-size:12px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:.05em;">Código del local</span>
+        <strong class="team-code" style="font-size:22px;letter-spacing:.16em;color:var(--tx-dark);">${USER.teamCode}</strong>
+      </div>
+      <div style="margin-top:8px;font-size:13px;color:var(--tx-mid);line-height:1.5;">Los mozos entran a la app con este código y su PIN. No necesitan tu email ni tu cuenta de Google.</div>`;
+  }
+  return `<div style="margin-top:10px;font-size:13px;color:var(--tx-mid);line-height:1.5;">Los mozos entran a la app con el email <b>${(USER && USER.email) || ''}</b> y su PIN.</div>`;
+}
 // QR en SVG (usa la librería que ya carga el panel para las facturas).
 function qrSvgPanel(text, px) {
   if (typeof window.qrcode !== 'function') return '';
@@ -2596,11 +2613,12 @@ route('mozos', async () => {
       <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
         <div>
           <h3 style="font-size:16px;margin-bottom:6px;">Descargar la app en el celular del equipo</h3>
-          <div style="color:var(--tx-mid);line-height:1.55;">Que el mozo escanee este código con la cámara del celular, o mandale el link. Se descarga sin pedir usuario ni contraseña; después entra con el email del restaurante y su PIN.</div>
+          <div style="color:var(--tx-mid);line-height:1.55;">Que el mozo escanee este QR con la cámara del celular, o mandale el link. Se descarga sin pedir usuario ni contraseña.</div>
+          ${teamAccesoHtml()}
           <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${appUrl}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
             <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
-            <a class="btn btn-secondary btn-sm" href="https://wa.me/?text=${encodeURIComponent('Descargá la app de Gestiva para tomar pedidos: ' + appUrl)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+            <a class="btn btn-secondary btn-sm" href="https://wa.me/?text=${encodeURIComponent(teamAppMensaje())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
           </div>
         </div>
         <div style="text-align:center;">
@@ -2664,13 +2682,13 @@ function downloadTeamApk() {
   const url = teamAppUrl();
   openModal('Descargar la app del equipo', `
     <div style="text-align:center;">
-      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Que el mozo escanee este código con la <b>cámara del celular</b>. Se abre la página de descarga y con un toque queda instalada.</p>
+      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Que el mozo escanee este QR con la <b>cámara del celular</b>. Se abre la página de descarga y con un toque queda instalada.</p>
       <div style="display:inline-block;background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px;">${qrSvgPanel(url, 220)}</div>
       <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${url}</div>
-      <p style="font-size:12.5px;color:var(--tx-lt);margin:10px 0 0;">No pide usuario para descargar. Para entrar a la app, el mozo usa el email del restaurante y su PIN.</p>
+      ${teamAccesoHtml()}
     </div>`,
     `<button class="btn btn-secondary" onclick="copyTeamAppLink()">Copiar link</button>
-     <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent('Descargá la app de Gestiva para tomar pedidos: ' + url)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>`);
+     <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(teamAppMensaje())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>`);
 }
 async function editWaiter(id) {
   let w = { name:'', role:'Mozo', color:'#f97316', commissionPercent:0 };
@@ -2685,7 +2703,7 @@ async function editWaiter(id) {
     </div>
     <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>
     <div class="field"><label>PIN para app del equipo</label><input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${id ? 'Dejar vacio para no cambiar' : 'Ej: 1234'}"/></div>
-    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">Cada persona entra a la app con el email del restaurante y su PIN. La comisión se calcula sobre el total de sus ventas.</p>`,
+    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">Cada persona entra a la app con ${USER.teamCode ? 'el código del local <b>' + USER.teamCode + '</b>' : 'el email del restaurante'} y su PIN. La comisión se calcula sobre el total de sus ventas.</p>`,
     `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
@@ -3020,6 +3038,67 @@ async function exportOrdersCSV() {
   toast('Reporte descargado','success');
 }
 
+// ---------- CUENTA Y ACCESO ----------
+// Con qué entra el dueño al panel y con qué entran los mozos a la app. Si el
+// dueño se registró con un email y quiere entrar con Google, acá vincula su
+// cuenta de Google a ESTE restaurante (antes, "Iniciar sesión con Google"
+// creaba otro restaurante vacío y la PC y los mozos quedaban separados).
+function cuentaAccesoHtml() {
+  const fila = (lbl, val) => `<div style="padding:10px 0;border-bottom:1px solid var(--border-soft);">
+      <div style="font-size:12px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">${lbl}</div>
+      <div style="font-weight:600;margin-top:4px;line-height:1.5;word-break:break-word;">${val}</div></div>`;
+  const accesos = [];
+  if (USER.hasPassword !== false) accesos.push(`Email y contraseña <span style="color:var(--tx-mid);font-weight:500;">(${USER.email})</span>`);
+  if (USER.hasGoogle) accesos.push(`Google <span style="color:var(--tx-mid);font-weight:500;">(${USER.googleEmail || USER.email})</span>`);
+  const puedeVincular = !USER.hasGoogle && !IS_DEMO && !!window.GOOGLE_CLIENT_ID;
+  return `<div class="card" id="cuentaCard">
+    <h3 style="margin-bottom:8px;">Cuenta y acceso</h3>
+    ${fila('Entrás al panel con', accesos.join(' o ') || USER.email)}
+    ${puedeVincular ? `<div style="padding:12px 0;border-bottom:1px solid var(--border-soft);">
+        <div style="font-size:13px;color:var(--tx-mid);line-height:1.5;margin-bottom:10px;">¿Querés entrar con Google? Vinculá tu cuenta acá: vas a entrar a <b>este mismo restaurante</b>, con todo lo que ya tenés cargado.</div>
+        <div id="gLinkBtn"></div>
+        <div id="gLinkMsg" style="font-size:13px;margin-top:8px;line-height:1.5;"></div>
+      </div>` : ''}
+    ${fila('App de los mozos', USER.teamCode
+        ? `Código del local <b class="team-code" style="letter-spacing:.12em;">${USER.teamCode}</b> + el PIN de cada uno · <a href="#/mozos" style="color:var(--or-dk);">Ver Equipo</a>`
+        : `Email del restaurante + el PIN de cada uno · <a href="#/mozos" style="color:var(--or-dk);">Ver Equipo</a>`)}
+  </div>`;
+}
+function cargarGoogle() {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.accounts && window.google.accounts.id) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => resolve(); s.onerror = () => reject(new Error('google_no_cargo'));
+    document.head.appendChild(s);
+  });
+}
+async function montarBotonVincularGoogle() {
+  const el = document.getElementById('gLinkBtn');
+  if (!el) return;
+  try { await cargarGoogle(); }
+  catch (e) { const m = document.getElementById('gLinkMsg'); if (m) m.textContent = 'No se pudo cargar Google. Revisá la conexión y volvé a abrir Ajustes.'; return; }
+  window.google.accounts.id.initialize({ client_id: window.GOOGLE_CLIENT_ID, callback: vincularGoogle, auto_select: false, context: 'use' });
+  window.google.accounts.id.renderButton(el, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular' });
+}
+async function vincularGoogle(resp) {
+  const m = document.getElementById('gLinkMsg');
+  if (m) { m.style.color = 'var(--tx-mid)'; m.textContent = 'Vinculando...'; }
+  try {
+    const r = await api('/api/account/google', { method: 'POST', body: JSON.stringify({ credential: resp && resp.credential }) });
+    USER = r.user; localStorage.setItem('gestiva_user', JSON.stringify(USER));
+    toast('Listo: ya podés entrar al panel con Google', 'success');
+    navigate();
+  } catch (e) {
+    const textos = {
+      google_not_configured: 'El ingreso con Google no está configurado en el servidor.',
+      invalid_credential: 'Google no confirmó la cuenta. Probá de nuevo.',
+      email_not_verified: 'Esa cuenta de Google no tiene el email verificado.'
+    };
+    if (m) { m.style.color = 'var(--red)'; m.textContent = e.detail || textos[e.message] || 'No se pudo vincular. Probá de nuevo.'; }
+  }
+}
+
 // ---------- AJUSTES ----------
 route('ajustes', async () => {
   const me = await API.me();
@@ -3050,6 +3129,7 @@ route('ajustes', async () => {
         <div class="field"><label>Moneda</label><input id="setCurrency" value="${USER.currency||'$'}" maxlength="3"/></div>
         <button class="btn btn-primary btn-block" onclick="saveSettings()">Guardar cambios</button>
       </div>
+      ${cuentaAccesoHtml()}
       <div class="card">
         <h3 style="margin-bottom:8px;">Comanderas: cocina y barra</h3>
         <p style="font-size:13px;color:var(--tx-mid);line-height:1.55;margin-bottom:14px;">
@@ -3159,6 +3239,7 @@ route('ajustes', async () => {
         </div>
       </div>
     </div>`;
+  montarBotonVincularGoogle();
 });
 async function cancelSubscription() {
   if (!confirm('¿Cancelar tu suscripción? Mantenés el acceso hasta que termine el período actual y no se te cobra más. Podés reactivar cuando quieras.')) return;
@@ -3731,7 +3812,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20261004-descarga')
+    navigator.serviceWorker.register('sw.js?v=20261004-codigo-local')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });

@@ -14,7 +14,8 @@
     "test:cobro": "node scripts/test-cobro.js",
     "test:facturacion": "node scripts/test-facturacion.js",
     "test:facturacion-api": "node scripts/test-facturacion-api.js",
-    "test:fechas": "node scripts/test-fechas.js"
+    "test:fechas": "node scripts/test-fechas.js",
+    "test:ingreso": "node scripts/test-ingreso.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

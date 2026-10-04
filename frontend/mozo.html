@@ -110,6 +110,8 @@
   .btn-danger { background:var(--red-lt); color:#b91c1c; }
   .err { display:none; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:14px; padding:12px; margin-bottom:14px; font-size:14px; }
   .err.on { display:block; }
+  #local.es-codigo { text-transform:uppercase; letter-spacing:.14em; font-weight:800; font-size:18px; }
+  .login-ayuda { font-size:12.5px; margin-top:14px; color:#64748b; text-align:center; line-height:1.5; }
   .app { display:none; min-height:100dvh; padding-bottom:82px; background:linear-gradient(180deg,#fff 0%,#f8fafc 28%,#eef2f7 100%); }
   .topbar { position:sticky; top:0; z-index:20; background:rgba(255,255,255,.94); backdrop-filter:blur(18px); border-bottom:1px solid rgba(226,232,240,.82); padding:12px 14px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; }
   .who { min-width:0; max-width:100%; display:flex; align-items:center; gap:10px; }
@@ -225,18 +227,19 @@
   <form class="login-card" id="loginForm">
     <div class="brand"><div class="brand-mark"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div><div class="brand-name">Gestiva</div></div>
     <h1>App de mozos</h1>
-    <p class="sub">Entrá con el email del restaurante y tu PIN para tomar pedidos desde el celular.</p>
+    <p class="sub">Entrá con el código de tu local y tu PIN para tomar pedidos desde el celular.</p>
     <div class="err" id="loginErr" aria-live="polite"></div>
     <div class="field">
-      <label for="email">Email del restaurante</label>
-      <input id="email" name="email" type="email" required autocomplete="username" />
+      <label for="local">Código del local</label>
+      <input id="local" name="local" type="text" required autocomplete="username" autocapitalize="characters"
+             autocorrect="off" spellcheck="false" placeholder="Ej: K7M2QX" />
     </div>
     <div class="field">
       <label for="pin">PIN del mozo</label>
       <input id="pin" name="pin" type="password" inputmode="numeric" required autocomplete="current-password" />
     </div>
     <button class="btn btn-primary" id="loginBtn" type="submit">Entrar</button>
-    <p style="font-size:12px;margin-top:14px;color:#64748b;text-align:center;">Pedile al encargado el email del restaurante y tu PIN personal.</p>
+    <p class="login-ayuda">El código del local y tu PIN te los da el encargado (están en el panel, en <b>Equipo</b>). También podés usar el email del restaurante.</p>
     <div class="install-card" id="installCard" hidden>
       <div class="install-copy">
         <strong id="installTitle">Instalá la app en tu celular</strong>
@@ -612,6 +615,8 @@ async function api(path, opts = {}) {
     showLogin();
     throw new ApiError('Sesión vencida', 401, data);
   }
+  // En el login, 429 = demasiados intentos fallidos (no es que el servidor no ande).
+  if (r.status === 429 && path === '/waiter/login') throw new ApiError(data.error || 'too_many_attempts', 429, data);
   // 5xx / 429: el servidor esta caido o saturado, no es culpa del pedido -> reintentable.
   if (r.status >= 500 || r.status === 429) throw new NetworkError('El servidor no responde');
   if (!r.ok) throw new ApiError(data.error || 'Error', r.status, data);
@@ -810,9 +815,38 @@ let _netFlashPending = false;
 window.addEventListener('online', () => { _netFlashPending = true; renderNetBar(); flushOutbox(true).then(() => softRefresh(true)); });
 window.addEventListener('offline', renderNetBar);
 
+// ---- Código del local ----
+// Viene en el link o el QR del panel (?local=K7M2QX) o quedó guardado del
+// último ingreso en este celular: así el mozo solo escribe su PIN. Ya no hace
+// falta el email del dueño (que si entra con Google, ni lo tiene a mano).
+const LOCAL_KEY = 'gestiva_waiter_local';
+function localGuardado() {
+  let v = '';
+  try { v = (new URLSearchParams(location.search).get('local') || '').trim(); } catch (e) {}
+  // Un código son letras y números; si vino un email, se deja como está.
+  v = v.includes('@') ? v.slice(0, 120) : v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  if (v) { try { localStorage.setItem(LOCAL_KEY, v); } catch (e) {} return v; }
+  try { return localStorage.getItem(LOCAL_KEY) || ''; } catch (e) { return ''; }
+}
+function marcarCampoLocal() {
+  const campo = $('#local');
+  if (campo) campo.classList.toggle('es-codigo', !!campo.value && !campo.value.includes('@'));
+}
+function prepararLogin() {
+  const campo = $('#local');
+  if (!campo) return;
+  if (!campo.value) campo.value = localGuardado();
+  marcarCampoLocal();
+}
+
 function showLogin() {
   $('#loginScreen').style.display = 'grid';
   $('#appScreen').style.display = 'none';
+  // El PIN del que salió no puede quedar escrito: en un celular compartido el
+  // siguiente tocaba "Entrar" y quedaba logueado como el anterior.
+  const pin = $('#pin');
+  if (pin) pin.value = '';
+  prepararLogin();
 }
 
 function showApp() {
@@ -829,7 +863,7 @@ function setBottomNav(view) {
 }
 
 async function enterDemoMode() {
-  $('#email').value = DEMO_EMAIL;
+  $('#local').value = DEMO_EMAIL;
   $('#pin').value = DEMO_PIN;
   token = 'demo-token';
   WAITER_DEMO = true;
@@ -839,6 +873,15 @@ async function enterDemoMode() {
   showApp();
 }
 
+const MENSAJES_LOGIN = {
+  local_not_found: 'No encontramos ningún local con ese código. Revisalo con el encargado.',
+  invalid_pin: 'PIN incorrecto. Si no lo sabés, pedíselo al encargado.',
+  invalid_credentials: 'El código del local o el PIN no son correctos.',
+  missing_fields: 'Completá el código del local y tu PIN.',
+  too_many_attempts: 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.'
+};
+$('#local').addEventListener('input', marcarCampoLocal);
+
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('#loginErr');
@@ -847,20 +890,23 @@ $('#loginForm').addEventListener('submit', async (e) => {
   btn.disabled = true;
   btn.textContent = 'Entrando...';
   try {
-    const email = $('#email').value.trim().toLowerCase();
+    const local = $('#local').value.trim();
     const pin = $('#pin').value.trim();
     const data = await api('/waiter/login', {
       method:'POST',
-      body: JSON.stringify({ email, pin })
+      // 'email' también, por si el servidor todavía es el anterior
+      body: JSON.stringify({ local, email: local, pin })
     });
     token = data.token;
     localStorage.setItem('gestiva_waiter_token', token);
+    try { localStorage.setItem(LOCAL_KEY, local); } catch (e) {}
+    $('#pin').value = '';
     await loadData();
     showApp();
     startAutoRefresh();
     flushOutbox();
   } catch (e) {
-    err.textContent = e.message === 'invalid_credentials' ? 'Email o PIN incorrectos' : e.message;
+    err.textContent = MENSAJES_LOGIN[e.message] || e.message;
     err.classList.add('on');
   } finally {
     btn.disabled = false;
@@ -1380,8 +1426,12 @@ function seguroParaRecargar() {
   if (state && (state.items || []).some(it => !it.sentToKitchen)) return false;
   const login = document.getElementById('loginScreen');
   if (login && login.style.display !== 'none') {
-    // No lo recargamos si está escribiendo el email o el PIN.
-    if (($('#email')?.value || '').trim() || ($('#pin')?.value || '').trim()) return false;
+    // No lo recargamos si está escribiendo el código del local o el PIN (el
+    // código que ya estaba guardado no cuenta: está precargado).
+    const escrito = ($('#local')?.value || '').trim();
+    let guardado = '';
+    try { guardado = localStorage.getItem(LOCAL_KEY) || ''; } catch (e) {}
+    if ((escrito && escrito !== guardado) || ($('#pin')?.value || '').trim()) return false;
   }
   return true;
 }
@@ -1441,7 +1491,7 @@ if ('serviceWorker' in navigator) {
     if (!controladorActual) { controladorActual = navigator.serviceWorker.controller; return; }
     recargarCuandoSeSeguro();
   });
-  navigator.serviceWorker.register('sw.js?v=20261004-descarga').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20261004-codigo-local').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

@@ -1206,12 +1206,12 @@
       <div class="team-copy fade">
         <div class="tag">App para el equipo</div>
         <h2 class="sec-title">Mozos, bartenders y cocina trabajan desde el celular</h2>
-        <p class="sec-sub">La app del equipo sirve para tomar pedidos por mesa, ver su panel personal, marcar ingreso y salida, y controlar sus horas trabajadas. Entran con el email del restaurante y el PIN que les das desde el panel central.</p>
+        <p class="sec-sub">La app del equipo sirve para tomar pedidos por mesa, ver su panel personal, marcar ingreso y salida, y controlar sus horas trabajadas. Entran con el código del local y el PIN que les das desde el panel central.</p>
         <div class="team-actions">
           <a href="/descargar" class="btn btn-primary">Descargar app de mozos</a>
           <a href="/mozo" class="btn btn-outline">Ya la tengo: entrar</a>
         </div>
-        <p style="margin-top:12px;color:var(--tx-mid);font-size:14px;">Cada integrante del equipo entra con el email del restaurante y el PIN que le asignás desde el panel central. Simple y sin instalaciones complicadas.</p>
+        <p style="margin-top:12px;color:var(--tx-mid);font-size:14px;">Cada integrante del equipo entra con el código del local y el PIN que le asignás desde el panel central. Simple y sin instalaciones complicadas.</p>
         <div class="team-list">
           <div class="team-row"><span class="team-dot">1</span><span>El encargado crea el integrante en el panel Equipo y le asigna un PIN.</span></div>
           <div class="team-row"><span class="team-dot">2</span><span>El empleado abre la app, entra con email + PIN y marca su ingreso.</span></div>
@@ -1549,7 +1549,7 @@
 
   // Service worker: necesario para que el navegador ofrezca instalar la app.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20261004-descarga')
+    navigator.serviceWorker.register('sw.js?v=20261004-codigo-local')
       .then((reg) => { reg.update().catch(() => {}); })
       .catch((e) => console.warn('[sw]', e.message));
   }

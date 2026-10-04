@@ -42,6 +42,9 @@
   .alt a{color:var(--or-dk);font-weight:600;text-decoration:none}
   .divider{display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--tx-mid);font-size:12px;}
   .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  .aviso{display:none;background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;padding:12px 14px;border-radius:10px;font-size:13.5px;line-height:1.5;margin-bottom:14px}
+  .aviso.on{display:block}
+  .aviso .btn-crear{display:block;width:100%;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid #fdba74;background:#fff;color:#9a3412;font-weight:700;font-size:13.5px;font-family:inherit;cursor:pointer}
   #gBtn{display:flex;justify-content:center;}
   #gBtn:empty{display:none;}
 </style>
@@ -56,6 +59,7 @@
     <h1>Iniciar sesión</h1>
     <p class="sub">Accedé a tu sistema Gestiva</p>
     <div class="err" id="err"></div>
+    <div class="aviso" id="sinCuenta" role="status"></div>
     <div id="gBtn"></div>
     <div class="divider" id="gDivider" style="display:none;">o con email</div>
     <form id="loginForm">
@@ -92,20 +96,44 @@ function initGoogleSignIn() {
   });
   document.getElementById('gDivider').style.display = '';
 }
-async function handleGoogleSignIn(response) {
+const MENSAJES = {
+  invalid_credentials: 'Email o contraseña incorrectos',
+  use_google: 'Esta cuenta se creó con Google: entrá con el botón «Iniciar sesión con Google».',
+  too_many_attempts: 'Demasiados intentos. Esperá unos minutos y probá de nuevo.',
+  google_not_configured: 'Google login no está configurado en el backend',
+  invalid_credential: 'Google no confirmó tu cuenta. Probá de nuevo.',
+  email_not_verified: 'Tu cuenta de Google no tiene el email verificado.',
+  server_error: 'Error del servidor. Probá de nuevo en unos segundos.'
+};
+const sinCuentaEl = document.getElementById('sinCuenta');
+const esc = (t) => String(t || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Google con un email que no tiene restaurante: antes se creaba uno nuevo sin
+// avisar, y si el dueño se había registrado con otro email terminaba con dos
+// (la PC en uno y los mozos en el otro). Ahora se le pregunta.
+function mostrarSinCuenta(email, response) {
+  sinCuentaEl.innerHTML = '<b>No hay ningún restaurante registrado con ' + esc(email) + '.</b><br>' +
+    '¿Ya usás Gestiva con otro email? Entrá abajo con ese email y tu contraseña, y después vinculá esta cuenta de Google en <b>Ajustes → Cuenta y acceso</b>.' +
+    '<button type="button" class="btn-crear" id="btnCrearConGoogle">Es mi primera vez: crear mi restaurante</button>';
+  sinCuentaEl.classList.add('on');
+  document.getElementById('btnCrearConGoogle').onclick = () => handleGoogleSignIn(response, true);
+}
+async function handleGoogleSignIn(response, crear) {
   errEl.classList.remove('on');
+  sinCuentaEl.classList.remove('on');
   try {
     const r = await fetch(window.API_URL + '/auth/google', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ credential: response.credential })
+      body: JSON.stringify({ credential: response.credential, mode: crear ? 'signup' : 'login' })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error === 'google_not_configured' ? 'Google login no está configurado en el backend' : (data.error || 'Error de login'));
+    if (r.status === 404 && data.error === 'no_account') { mostrarSinCuenta(data.email, response); return; }
+    if (!r.ok) throw new Error(MENSAJES[data.error] || data.error || 'Error de login');
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
     if (data.isNew) {
-      // Usuario nuevo: lo mandamos a Ajustes para que ponga el nombre del restaurante
-      location.href = 'app.html#/ajustes';
+      // Restaurante nuevo (lo eligió explícitamente): mismo camino que el alta,
+      // primero el nombre del negocio.
+      location.href = 'onboarding.html';
     } else if (['active','grace','trial'].includes(data.user.subscriptionStatus)) {
       location.href = 'app.html';
     } else {
@@ -141,7 +169,7 @@ form.addEventListener('submit', async (e) => {
       })
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error === 'invalid_credentials' ? 'Email o contraseña incorrectos' : (data.error || 'Error'));
+    if (!r.ok) throw new Error(MENSAJES[data.error] || data.error || 'Error');
     localStorage.setItem('gestiva_token', data.token);
     localStorage.setItem('gestiva_user', JSON.stringify(data.user));
     // si suscripción está activa, en gracia o en prueba → app; si no → checkout
