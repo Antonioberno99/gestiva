@@ -269,6 +269,35 @@
     .mobile-menu { display:inline-flex !important; }
   }
   .mobile-menu { display:none; }
+
+  /* ---- Equipo: acceso a la app con código personal ---- */
+  .equipo-hero { display:flex; gap:22px; align-items:stretch; flex-wrap:wrap; margin-bottom:24px; padding:24px;
+                 border-radius:var(--r-lg); color:#fff; background:linear-gradient(135deg,#f97316 0%,#ea580c 55%,#c2410c 100%);
+                 box-shadow:0 14px 34px rgba(234,88,12,.28); }
+  .equipo-hero .eh-txt { flex:1 1 360px; min-width:0; }
+  .equipo-hero .eh-kicker { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.08em; opacity:.85; }
+  .equipo-hero h2 { font-size:24px; line-height:1.2; margin:6px 0 8px; font-weight:800; letter-spacing:-.01em; }
+  .equipo-hero p { margin:0 0 16px; font-size:14.5px; line-height:1.55; opacity:.95; max-width:560px; }
+  .equipo-hero .eh-botones { display:flex; gap:8px; flex-wrap:wrap; }
+  .equipo-hero .eh-btn { background:#fff; color:#c2410c; border:0; border-radius:12px; padding:11px 15px; font-weight:800;
+                         font-size:14px; font-family:inherit; cursor:pointer; box-shadow:0 4px 12px rgba(124,45,18,.18); }
+  .equipo-hero .eh-btn:hover { transform:translateY(-1px); }
+  .equipo-hero .eh-qr { flex:0 0 auto; background:#fff; color:var(--tx-dark); border-radius:16px; padding:14px; text-align:center;
+                        display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .equipo-hero .eh-qr small { font-size:12px; color:var(--tx-mid); font-weight:600; }
+  .equipo-hero .eh-qr .eh-qr-acc { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  .emp-codigo { display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--or-lt);
+                border:1px solid #fed7aa; border-radius:12px; padding:10px 14px; margin:2px 0 10px; }
+  .emp-codigo span { font-size:11.5px; font-weight:800; color:#9a3412; text-transform:uppercase; letter-spacing:.06em; }
+  .emp-codigo strong { font-size:26px; font-weight:800; letter-spacing:.12em; color:var(--tx-dark);
+                       font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .emp-codigo.grande { flex-direction:column; align-items:center; text-align:center; padding:16px; }
+  .emp-codigo.grande strong { font-size:38px; }
+  .emp-clave { font-size:12.5px; font-weight:700; margin-bottom:12px; }
+  .emp-clave.ok { color:var(--green); }
+  .emp-clave.falta { color:#b45309; }
+  .acceso-box { display:grid; gap:10px; margin:6px 0 4px; }
+  @media (max-width:700px) { .equipo-hero { padding:18px; } .equipo-hero h2 { font-size:20px; } .equipo-hero .eh-qr { width:100%; } }
 </style>
 </head>
 <body>
@@ -429,25 +458,23 @@ const fmtHours = (h) => {
   const minutes = Math.round((h || 0) * 60);
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 };
-// Link para que el equipo DESCARGUE la app (página sin login). Lleva el código
-// del local: la app lo deja cargado y el mozo solo escribe su PIN.
-const teamAppUrl = () => {
+// Link para DESCARGAR la app del equipo (página sin login). Con el código
+// personal de alguien, la app se lo deja cargado y solo escribe su clave.
+const teamAppUrl = (codigo) => {
   const u = new URL('/descargar', location.origin);
-  if (USER && USER.teamCode) u.searchParams.set('local', USER.teamCode);
+  if (codigo) u.searchParams.set('local', codigo);
   return u.href;
 };
-const teamAppMensaje = () => 'Descargá la app de Gestiva para tomar pedidos: ' + teamAppUrl() +
-  (USER && USER.teamCode ? '\nCódigo del local: ' + USER.teamCode + '\nTu PIN te lo paso yo.' : '');
-// Cómo entran los mozos a la app (bloque reutilizado en Equipo y en el QR).
-function teamAccesoHtml() {
-  if (USER && USER.teamCode) {
-    return `<div style="margin-top:14px;display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 14px;">
-        <span style="font-size:12px;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:.05em;">Código del local</span>
-        <strong class="team-code" style="font-size:22px;letter-spacing:.16em;color:var(--tx-dark);">${USER.teamCode}</strong>
-      </div>
-      <div style="margin-top:8px;font-size:13px;color:var(--tx-mid);line-height:1.5;">Los mozos entran a la app con este código y su PIN. No necesitan tu email ni tu cuenta de Google.</div>`;
-  }
-  return `<div style="margin-top:10px;font-size:13px;color:var(--tx-mid);line-height:1.5;">Los mozos entran a la app con el email <b>${(USER && USER.email) || ''}</b> y su PIN.</div>`;
+const teamAppMensaje = () => 'Descargá la app de Gestiva para tomar pedidos: ' + teamAppUrl();
+// "482917" → "482 917": más fácil de leer y de dictar.
+const fmtCodigo = (c) => c ? String(c).replace(/^(\d{3})(\d{3})$/, '$1 $2') : '—';
+// Mensaje con el acceso de un integrante, para mandárselo por WhatsApp.
+function mensajeAcceso(w, pin) {
+  const local = (USER && USER.restaurantName) || 'el restaurante';
+  return `Hola ${w.name}! Ya tenés acceso a la app de ${local}.\n` +
+    `1) Descargala: ${teamAppUrl(w.staffCode)}\n` +
+    `2) Entrá con tu código: ${w.staffCode}\n` +
+    (pin ? `   y tu clave: ${pin}` : `   y la clave que te pasé.`);
 }
 // QR en SVG (usa la librería que ya carga el panel para las facturas).
 function qrSvgPanel(text, px) {
@@ -484,8 +511,8 @@ function demoSeed() {
   }
   if (!localStorage.getItem('gestiva_demo_waiters')) {
     demoWrite('gestiva_demo_waiters', [
-      { id:'demo-waiter-1', name:'Juan Demo', role:'Mozo', color:'#f97316', hasPin:true, created_at:new Date().toISOString() },
-      { id:'demo-waiter-2', name:'Bar Demo', role:'Bartender', color:'#8b5cf6', hasPin:true, created_at:new Date().toISOString() }
+      { id:'demo-waiter-1', name:'Juan Demo', role:'Mozo', color:'#f97316', hasPin:true, staffCode:'482917', created_at:new Date().toISOString() },
+      { id:'demo-waiter-2', name:'Bar Demo', role:'Bartender', color:'#8b5cf6', hasPin:true, staffCode:'615204', created_at:new Date().toISOString() }
     ]);
   }
 }
@@ -509,8 +536,14 @@ async function demoApi(path, opts = {}) {
   if (path === '/api/tables' && method === 'POST') { const t = { id:demoId('table'), status:'free', reservation_name:null, reservation_time:null, ...body, room:cleanTableRoom(body.room), num:body.num || (tables.length + 1), seats:body.seats || 4 }; tables.push(t); demoWrite('gestiva_demo_tables', tables); return t; }
   if (path.startsWith('/api/tables/') && method === 'PUT') { const id = path.split('/').pop(); const t = tables.find(x => x.id === id); Object.assign(t, { num:body.num ?? t.num, seats:body.seats ?? t.seats, room:body.room != null ? cleanTableRoom(body.room) : (t.room || 'Salon'), status:body.status ?? t.status, reservation_name:body.reservationName ?? t.reservation_name, reservation_time:body.reservationTime ?? t.reservation_time }); demoWrite('gestiva_demo_tables', tables); return t; }
   if (path.startsWith('/api/tables/') && method === 'DELETE') { demoWrite('gestiva_demo_tables', tables.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
-  if (path === '/api/waiters' && method === 'GET') return waiters;
-  if (path === '/api/waiters' && method === 'POST') { const w = { id:demoId('waiter'), role:'Mozo', color:'#f97316', hasPin:!!body.pin, created_at:new Date().toISOString(), ...body }; delete w.pin; waiters.push(w); demoWrite('gestiva_demo_waiters', waiters); return w; }
+  const codigoDemo = () => String(100000 + Math.floor(Math.random() * 900000));
+  if (path === '/api/waiters' && method === 'GET') {
+    let cambio = false;
+    waiters.forEach(w => { if (!w.staffCode) { w.staffCode = codigoDemo(); cambio = true; } });
+    if (cambio) demoWrite('gestiva_demo_waiters', waiters);
+    return waiters;
+  }
+  if (path === '/api/waiters' && method === 'POST') { const w = { id:demoId('waiter'), role:'Mozo', color:'#f97316', hasPin:!!body.pin, staffCode:codigoDemo(), created_at:new Date().toISOString(), ...body }; delete w.pin; waiters.push(w); demoWrite('gestiva_demo_waiters', waiters); return w; }
   if (path.startsWith('/api/waiters/') && method === 'PUT') { const id = path.split('/').pop(); const w = waiters.find(x => x.id === id); Object.assign(w, body, { hasPin:w.hasPin || !!body.pin }); delete w.pin; demoWrite('gestiva_demo_waiters', waiters); return w; }
   if (path.startsWith('/api/waiters/') && method === 'DELETE') { demoWrite('gestiva_demo_waiters', waiters.filter(x => x.id !== path.split('/').pop())); return { ok:true }; }
   if (path.startsWith('/api/staff-shifts')) return shifts.map(s => ({ ...s, waiter_name:(waiters.find(w => w.id === s.waiter_id)?.name || 'Demo'), waiter_role:(waiters.find(w => w.id === s.waiter_id)?.role || 'Mozo'), waiter_color:(waiters.find(w => w.id === s.waiter_id)?.color || '#f97316') }));
@@ -2577,6 +2610,18 @@ async function doCloseCash() {
 }
 
 // ---------- MOZOS (Equipo) ----------
+// Cada integrante entra a la app con SU código personal (6 números, lo genera
+// Gestiva al agregarlo) y la clave que le pone el dueño. Los botones
+// "+ Mozo", "+ Chef"... abren el alta con el rol ya elegido.
+const ROLES_EQUIPO = [
+  { rol: 'Mozo', boton: 'Mozo', titulo: 'mozo' },
+  { rol: 'Cocina', boton: 'Chef / cocina', titulo: 'chef o cocinero' },
+  { rol: 'Bartender', boton: 'Bartender', titulo: 'bartender' },
+  { rol: 'Caja', boton: 'Caja', titulo: 'cajero' },
+  { rol: 'Otro', boton: 'Otro', titulo: 'integrante' }
+];
+const ROLES_TODOS = ['Mozo', 'Cocina', 'Bartender', 'Caja', 'Encargado', 'Delivery', 'Otro'];
+
 route('mozos', async () => {
   const [waiters, open, orders, shifts] = await Promise.all([
     API.waiters(),
@@ -2589,76 +2634,77 @@ route('mozos', async () => {
   const todayShifts = shifts.filter(s => s.started_at.slice(0,10) === today_);
   const activeShifts = shifts.filter(s => !s.ended_at);
   const totalHoursToday = todayShifts.reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
+  const tarjeta = (w) => {
+    const activeTables = open.filter(ot => ot.waiter_id === w.id && openTableHasOrder(ot)).length;
+    const activeShift = activeShifts.find(s => s.waiter_id === w.id);
+    const todayOrders = orders.filter(o => o.waiter_id === w.id && o.closed_at.slice(0,10) === today_);
+    const todaySales = todayOrders.reduce((s,o) => s + parseFloat(o.total), 0);
+    const worked = todayShifts.filter(s => s.waiter_id === w.id).reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
+    return `<div class="card emp-card" data-id="${w.id}">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div class="avatar" style="background:${escHtml(w.color)};width:44px;height:44px;font-size:17px;">${escHtml((w.name||'?')[0].toUpperCase())}</div>
+        <div style="min-width:0;"><div style="font-weight:700;font-size:16px;">${escHtml(w.name)}</div>
+             <div style="color:var(--tx-mid);font-size:13px;">${escHtml(w.role || 'Mozo')}</div></div>
+      </div>
+      ${w.staffCode ? `<div class="emp-codigo"><span>Código</span><strong class="staff-code">${fmtCodigo(w.staffCode)}</strong></div>` : ''}
+      <div class="emp-clave ${w.hasPin ? 'ok' : 'falta'}">${w.hasPin ? '✓ Clave puesta' : '⚠ Sin clave: todavía no puede entrar a la app'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        ${w.staffCode && w.hasPin ? `<a class="btn btn-primary btn-sm" href="https://wa.me/?text=${encodeURIComponent(mensajeAcceso(w))}" target="_blank" rel="noopener">Enviar acceso</a>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="editWaiter('${w.id}')">${w.hasPin ? 'Editar' : 'Ponerle clave'}</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--border-soft);">
+        <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Turno</div>
+             <div style="font-weight:700;color:${activeShift?'var(--green)':'var(--tx-mid)'};">${activeShift ? 'Trabajando' : 'Sin ingreso'}</div></div>
+        <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Horas</div>
+             <div style="font-weight:700;">${fmtHours(worked)}</div></div>
+        <div style="text-align:right;"><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Ventas</div>
+             <div style="font-weight:700;color:var(--or-dk);">${fmt(todaySales)}</div></div>
+      </div>
+      <div style="color:var(--tx-mid);font-size:12px;margin-top:10px;">${activeTables} mesa${activeTables===1?'':'s'} activas - ${todayOrders.length} ordenes hoy</div>
+    </div>`;
+  };
   $('#view').innerHTML = `
     <div class="page-header">
-      <div><h1 class="page-title">Equipo</h1><div class="page-subtitle">Mozos, bartenders, cocina y otros roles</div></div>
+      <div><h1 class="page-title">Equipo</h1><div class="page-subtitle">Mozos, cocina, barra y otros roles</div></div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <a class="btn btn-secondary" href="/mozo" target="_blank">Abrir app equipo</a>
-        <button class="btn btn-primary" onclick="editWaiter()">+ Nuevo integrante</button>
+        <a class="btn btn-secondary" href="/mozo" target="_blank">Abrir app del equipo</a>
       </div>
     </div>
-    <div class="grid grid-3" style="margin-bottom:24px;">
+    <div class="equipo-hero">
+      <div class="eh-txt">
+        <div class="eh-kicker">App del equipo</div>
+        <h2>Cada integrante entra con su código personal</h2>
+        <p>Agregalo acá: Gestiva le genera su <b>código</b> y vos le ponés la <b>clave</b> (de 4 a 6 números). Con eso entra a la app desde su celular.</p>
+        <div class="eh-botones">
+          ${ROLES_EQUIPO.map(r => `<button class="eh-btn" data-rol="${r.rol}" onclick="editWaiter(null,'${r.rol}')">+ ${r.boton}</button>`).join('')}
+        </div>
+      </div>
+      <div class="eh-qr">
+        ${qrSvgPanel(appUrl, 128)}
+        <small>Escaneá para descargar la app</small>
+        <div class="eh-qr-acc">
+          <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
+          <a class="btn btn-secondary btn-sm" href="https://wa.me/?text=${encodeURIComponent(teamAppMensaje())}" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-2" style="margin-bottom:24px;">
       <div class="card"><div class="card-title">En turno ahora</div><div class="card-value">${activeShifts.length}</div><div class="card-delta neu">ingresos sin salida marcada</div></div>
       <div class="card"><div class="card-title">Horas de hoy</div><div class="card-value">${fmtHours(totalHoursToday)}</div><div class="card-delta neu">${todayShifts.length} fichaje${todayShifts.length===1?'':'s'}</div></div>
-      <div class="card">
-        <div class="card-title">App del equipo</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-          <a class="btn btn-secondary btn-sm" href="/mozo" target="_blank">Abrir</a>
-          <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
-          <button class="btn btn-primary btn-sm" onclick="downloadTeamApk()">Instalar en celular</button>
-        </div>
-      </div>
     </div>
-    <div class="card" style="margin-bottom:24px;">
-      <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;">
-        <div>
-          <h3 style="font-size:16px;margin-bottom:6px;">Descargar la app en el celular del equipo</h3>
-          <div style="color:var(--tx-mid);line-height:1.55;">Que el mozo escanee este QR con la cámara del celular, o mandale el link. Se descarga sin pedir usuario ni contraseña.</div>
-          ${teamAccesoHtml()}
-          <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${appUrl}</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-            <button class="btn btn-secondary btn-sm" onclick="copyTeamAppLink()">Copiar link</button>
-            <a class="btn btn-secondary btn-sm" href="https://wa.me/?text=${encodeURIComponent(teamAppMensaje())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
-          </div>
-        </div>
-        <div style="text-align:center;">
-          <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:8px;display:inline-block;">${qrSvgPanel(appUrl, 150)}</div>
-          <div style="font-size:12px;color:var(--tx-mid);margin-top:4px;">Escaneá con la cámara</div>
-        </div>
-      </div>
-    </div>
+    <h3 style="font-size:16px;margin:0 0 12px;">Integrantes (${waiters.length})</h3>
     <div class="grid grid-3" style="margin-bottom:24px;">
-      ${waiters.length===0 ? '<div class="empty" style="grid-column:1/-1;"><h3>Sin integrantes</h3><button class="btn btn-primary" onclick="editWaiter()">+ Crear integrante</button></div>' : waiters.map(w => {
-        const activeTables = open.filter(ot => ot.waiter_id === w.id && openTableHasOrder(ot)).length;
-        const activeShift = activeShifts.find(s => s.waiter_id === w.id);
-        const todayOrders = orders.filter(o => o.waiter_id === w.id && o.closed_at.slice(0,10) === today_);
-        const todaySales = todayOrders.reduce((s,o) => s + parseFloat(o.total), 0);
-        const worked = todayShifts.filter(s => s.waiter_id === w.id).reduce((sum, s) => sum + hoursBetween(s.started_at, s.ended_at || new Date()), 0);
-        return `<div class="card" style="cursor:pointer;" onclick="editWaiter('${w.id}')">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-            <div class="avatar" style="background:${w.color};width:48px;height:48px;font-size:18px;">${(w.name||'?')[0].toUpperCase()}</div>
-            <div><div style="font-weight:700;font-size:17px;">${w.name}</div>
-                 <div style="color:var(--tx-mid);font-size:13px;">${w.role || 'Mozo'} - ${w.hasPin ? 'PIN activo' : 'sin PIN'}</div></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--border-soft);">
-            <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Turno</div>
-                 <div style="font-weight:700;color:${activeShift?'var(--green)':'var(--tx-mid)'};">${activeShift ? 'Trabajando' : 'Sin ingreso'}</div></div>
-            <div><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Horas</div>
-                 <div style="font-weight:700;">${fmtHours(worked)}</div></div>
-            <div style="text-align:right;"><div style="font-size:11px;color:var(--tx-mid);text-transform:uppercase;letter-spacing:0.04em;">Ventas</div>
-                 <div style="font-weight:700;color:var(--or-dk);">${fmt(todaySales)}</div></div>
-          </div>
-          <div style="color:var(--tx-mid);font-size:12px;margin-top:10px;">${activeTables} mesa${activeTables===1?'':'s'} activas - ${todayOrders.length} ordenes hoy</div>
-        </div>`;
-      }).join('')}
+      ${waiters.length===0
+        ? '<div class="empty" style="grid-column:1/-1;"><h3>Todavía no agregaste a nadie</h3><p style="color:var(--tx-mid);">Usá los botones de arriba: + Mozo, + Chef / cocina, + Bartender…</p></div>'
+        : waiters.map(tarjeta).join('')}
     </div>
     <div class="card">
       <h3 style="font-size:16px;margin-bottom:16px;">Fichajes recientes</h3>
       ${shifts.length===0 ? '<div class="empty">Todavia no hay ingresos o salidas registradas.</div>' : `<table class="data-table">
         <thead><tr><th>Persona</th><th>Rol</th><th>Ingreso</th><th>Salida</th><th>Horas</th><th>Estado</th></tr></thead>
         <tbody>${shifts.slice(0,20).map(s => `<tr>
-          <td><strong>${s.waiter_name}</strong></td>
-          <td>${s.waiter_role || 'Mozo'}</td>
+          <td><strong>${escHtml(s.waiter_name)}</strong></td>
+          <td>${escHtml(s.waiter_role || 'Mozo')}</td>
           <td>${new Date(s.started_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
           <td>${s.ended_at ? new Date(s.ended_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '-'}</td>
           <td>${fmtHours(hoursBetween(s.started_at, s.ended_at || new Date()))}</td>
@@ -2675,38 +2721,40 @@ async function copyTeamAppLink() {
     prompt('Copiar link de la app', teamAppUrl());
   }
 }
-// "Instalar en celular" desde la PC: se muestra el QR para escanear con el
-// celular del mozo (antes intentaba bajar un .apk que no existe y terminaba
-// en la pantalla de login de la app).
+// "Instalar en celular" desde la PC: el QR para escanear con el celular.
 function downloadTeamApk() {
   const url = teamAppUrl();
   openModal('Descargar la app del equipo', `
     <div style="text-align:center;">
-      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Que el mozo escanee este QR con la <b>cámara del celular</b>. Se abre la página de descarga y con un toque queda instalada.</p>
+      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Que escaneen este QR con la <b>cámara del celular</b>. Se abre la página de descarga y queda instalada.</p>
       <div style="display:inline-block;background:#fff;border:1px solid var(--border);border-radius:14px;padding:10px;">${qrSvgPanel(url, 220)}</div>
       <div style="margin-top:10px;font-size:13px;color:var(--tx-mid);word-break:break-all;">${url}</div>
-      ${teamAccesoHtml()}
+      <p style="font-size:12.5px;color:var(--tx-lt);margin:10px 0 0;line-height:1.5;">Después cada uno entra con <b>su código personal</b> (está en su tarjeta, en Equipo) y su clave.</p>
     </div>`,
     `<button class="btn btn-secondary" onclick="copyTeamAppLink()">Copiar link</button>
      <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(teamAppMensaje())}" target="_blank" rel="noopener">Enviar por WhatsApp</a>`);
 }
-async function editWaiter(id) {
-  let w = { name:'', role:'Mozo', color:'#f97316', commissionPercent:0 };
-  if (id) { const list = await API.waiters(); w = list.find(w => w.id === id) || w; }
-  openModal(id?'Editar integrante':'Nuevo integrante', `
-    <div class="field"><label>Nombre</label><input id="wName" value="${w.name||''}" placeholder="Juan"/></div>
+async function editWaiter(id, rolInicial) {
+  let w = { name:'', role: rolInicial || 'Mozo', color:'#f97316', commissionPercent:0 };
+  if (id) { const list = await API.waiters(); w = list.find(x => x.id === id) || w; }
+  const info = ROLES_EQUIPO.find(r => r.rol === w.role);
+  const titulo = id ? 'Editar a ' + escHtml(w.name) : 'Agregar ' + (info ? info.titulo : 'integrante');
+  openModal(titulo, `
+    ${id && w.staffCode ? `<div class="emp-codigo grande" style="margin-bottom:16px;"><span>Código de ${escHtml(w.name)}</span><strong class="staff-code">${fmtCodigo(w.staffCode)}</strong></div>` : ''}
+    <div class="field"><label>Nombre</label><input id="wName" value="${escHtml(w.name||'')}" placeholder="Ej: Juan"/></div>
+    <div class="field"><label>${id ? 'Clave nueva (dejala vacía para no cambiarla)' : 'Clave para entrar a la app'}</label>
+      <input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="De 4 a 6 números, ej: 2580"/></div>
+    ${id ? '' : '<p style="font-size:13px;color:var(--tx-mid);margin:-4px 0 14px;line-height:1.5;">Al guardar, Gestiva le genera su <b>código personal</b>. Con ese código y esta clave entra a la app.</p>'}
     <div class="grid grid-2" style="gap:12px;">
       <div class="field"><label>Rol</label><select id="wRole">
-        ${['Mozo','Bartender','Cocina','Caja','Encargado','Delivery','Otro'].map(r => `<option value="${r}" ${r===(w.role||'Mozo')?'selected':''}>${r}</option>`).join('')}
+        ${ROLES_TODOS.map(r => `<option value="${r}" ${r===(w.role||'Mozo')?'selected':''}>${r}</option>`).join('')}
       </select></div>
       <div class="field"><label>Comisión (%)</label><input id="wCommission" type="number" min="0" max="100" step="0.5" value="${w.commissionPercent||0}"/></div>
     </div>
-    <div class="field"><label>Color</label><input id="wColor" type="color" value="${w.color}"/></div>
-    <div class="field"><label>PIN para app del equipo</label><input id="wPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="${id ? 'Dejar vacio para no cambiar' : 'Ej: 1234'}"/></div>
-    <p style="font-size:13px;color:var(--tx-mid);margin-top:-4px;">Cada persona entra a la app con ${USER.teamCode ? 'el código del local <b>' + USER.teamCode + '</b>' : 'el email del restaurante'} y su PIN. La comisión se calcula sobre el total de sus ventas.</p>`,
+    <div class="field"><label>Color</label><input id="wColor" type="color" value="${escHtml(w.color || '#f97316')}"/></div>`,
     `${id?`<button class="btn btn-danger btn-sm" style="margin-right:auto;" onclick="deleteWaiterCfm('${id}')">Eliminar</button>`:''}
      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveWaiter('${id||''}')">Guardar</button>`);
+     <button class="btn btn-primary" id="wGuardar" onclick="saveWaiter('${id||''}')">${id ? 'Guardar' : 'Agregar'}</button>`);
 }
 async function saveWaiter(id) {
   const data = {
@@ -2718,10 +2766,40 @@ async function saveWaiter(id) {
   const pin = $('#wPin').value.trim();
   if (pin) data.pin = pin;
   if (!data.name) return toast('Falta el nombre','error');
-  if (!id && !pin) return toast('Defini un PIN para que pueda entrar','error');
-  if (pin && pin.length < 4) return toast('El PIN debe tener al menos 4 numeros','error');
-  try { if (id) await API.waiterUpdate(id, data); else await API.waiterCreate(data); closeModal(); navigate(); toast('Integrante guardado','success'); }
-  catch(e) { toast(e.message,'error'); }
+  if (!id && !pin) return toast('Poné una clave para que pueda entrar a la app','error');
+  if (pin && !/^\d{4,6}$/.test(pin)) return toast('La clave tiene que ser de 4 a 6 números','error');
+  const btn = $('#wGuardar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const w = id ? await API.waiterUpdate(id, data) : await API.waiterCreate(data);
+    closeModal();
+    await navigate();
+    // Recién creado o con clave nueva: la tarjeta con el código y la clave.
+    if (pin && w && w.staffCode) mostrarAcceso(w, pin);
+    else toast('Cambios guardados','success');
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = id ? 'Guardar' : 'Agregar'; }
+    toast(e.detail || e.message, 'error');
+  }
+}
+let _accesoTexto = '';
+function mostrarAcceso(w, pin) {
+  _accesoTexto = mensajeAcceso(w, pin);
+  openModal('Acceso de ' + escHtml(w.name), `
+    <div style="text-align:center;">
+      <p style="color:var(--tx-mid);margin:0 0 14px;line-height:1.5;">Pasale estos datos para que entre a la app desde su celular:</p>
+      <div class="acceso-box">
+        <div class="emp-codigo grande"><span>Código</span><strong class="staff-code">${fmtCodigo(w.staffCode)}</strong></div>
+        ${pin ? `<div class="emp-codigo grande"><span>Clave</span><strong class="staff-pin">${escHtml(pin)}</strong></div>` : ''}
+      </div>
+      <p style="font-size:12.5px;color:var(--tx-lt);margin:12px 0 0;line-height:1.5;">Si se olvida la clave, tocá <b>Editar</b> y ponele una nueva. El código no cambia.</p>
+    </div>`,
+    `<button class="btn btn-secondary" onclick="copiarAcceso()">Copiar</button>
+     <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(_accesoTexto)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>`);
+}
+async function copiarAcceso() {
+  try { await navigator.clipboard.writeText(_accesoTexto); toast('Copiado','success'); }
+  catch (e) { prompt('Copiá el acceso', _accesoTexto); }
 }
 async function deleteWaiterCfm(id) {
   if (!confirm('Eliminar integrante?')) return;
@@ -3059,9 +3137,7 @@ function cuentaAccesoHtml() {
         <div id="gLinkBtn"></div>
         <div id="gLinkMsg" style="font-size:13px;margin-top:8px;line-height:1.5;"></div>
       </div>` : ''}
-    ${fila('App de los mozos', USER.teamCode
-        ? `Código del local <b class="team-code" style="letter-spacing:.12em;">${USER.teamCode}</b> + el PIN de cada uno · <a href="#/mozos" style="color:var(--or-dk);">Ver Equipo</a>`
-        : `Email del restaurante + el PIN de cada uno · <a href="#/mozos" style="color:var(--or-dk);">Ver Equipo</a>`)}
+    ${fila('App del equipo', `Cada integrante entra con su <b>código personal</b> y su clave · <a href="#/mozos" style="color:var(--or-dk);">Ver Equipo</a>`)}
   </div>`;
 }
 function cargarGoogle() {
@@ -3812,7 +3888,7 @@ window.addEventListener('focus', kitchenStationTick);
 
   // Service worker: permite instalar la app y que abra sin internet.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js?v=20261004-codigo-local')
+    navigator.serviceWorker.register('sw.js?v=20261005-codigo-personal')
       .then((reg) => {
         reg.update().catch(() => {});
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });

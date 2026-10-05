@@ -173,12 +173,58 @@ const CODIGO = /^[A-HJKMNP-Z2-9]{6}$/;   // sin 0/O/1/I/L
     const ins = (await pool.query(`INSERT INTO tenants (email, password_hash, restaurant_name) VALUES ($1, 'x', 'Directo') RETURNING team_code`, [`directo-${id}@test.local`])).rows[0];
     check('cualquier alta nueva recibe código sola (también fuera de la API)', CODIGO.test(ins.team_code || ''), ins.team_code);
     await pool.query('DELETE FROM tenants WHERE email=$1', [`directo-${id}@test.local`]);
+    const conNumeros = (await pool.query("SELECT count(*)::int AS n FROM tenants WHERE team_code !~ '[A-Z]'")).rows[0].n;
+    check('todo código de local lleva alguna letra (no choca con los personales)', conNumeros === 0, `solo números=${conNumeros}`);
+    const sinPersonal = (await pool.query('SELECT count(*)::int AS n FROM waiters WHERE staff_code IS NULL')).rows[0].n;
+    check('todos los integrantes tienen código personal (también los que ya existían)', sinPersonal === 0, `sin código=${sinPersonal}`);
   }
+
+  seccion('9. CÓDIGO PERSONAL DE CADA INTEGRANTE');
+  const p = await req('/auth/register', { method: 'POST', body: { email: `pizzeria-${id}@test.local`, password: 'Secreta123', restaurantName: 'La Pizzería' } });
+  const ownerP = p.data.token;
+  const mozoP = await req('/api/waiters', { method: 'POST', token: ownerP, body: { name: 'Martín', role: 'Mozo', pin: '2580' } });
+  const chefP = await req('/api/waiters', { method: 'POST', token: ownerP, body: { name: 'Rosa', role: 'Cocina', pin: '1470' } });
+  const codM = mozoP.data.staffCode, codC = chefP.data.staffCode;
+  check('al agregar a alguien se le genera un código de 6 números', /^\d{6}$/.test(codM || '') && /^\d{6}$/.test(codC || ''), `${codM} / ${codC}`);
+  check('cada uno tiene el suyo', codM !== codC);
+  const lista = await req('/api/waiters', { token: ownerP });
+  check('el panel ve el código de cada integrante', lista.data.some(w => w.staffCode === codM) && lista.data.some(w => w.staffCode === codC));
+  r = await req('/waiter/login', { method: 'POST', body: { local: codC, pin: '1470' } });
+  check('con su código y su clave entra la persona correcta', r.status === 200 && r.data.waiter.name === 'Rosa' && r.data.restaurant.restaurantName === 'La Pizzería', JSON.stringify(r.data).slice(0, 120));
+  r = await req('/waiter/login', { method: 'POST', body: { local: codM.slice(0, 3) + ' ' + codM.slice(3), pin: '2580' } });
+  check('el código con espacio en el medio también sirve', r.status === 200 && r.data.waiter.name === 'Martín');
+  r = await req('/waiter/login', { method: 'POST', body: { local: codM, pin: '1470' } });
+  check('con la clave de OTRO no entra (cada código mira solo su clave)', r.status === 401 && r.data.error === 'invalid_pin', JSON.stringify(r.data));
+  let inexistente = '100000';
+  if (inexistente === codM || inexistente === codC) inexistente = '100001';
+  r = await req('/waiter/login', { method: 'POST', body: { local: inexistente, pin: '2580' } });
+  check('código que no existe → "no encontramos ese código"', r.status === 401 && r.data.error === 'codigo_no_encontrado', JSON.stringify(r.data));
+  r = await req('/waiter/login', { method: 'POST', body: { local: p.data.user.teamCode, pin: '1470' } });
+  check('el código del local + clave sigue funcionando', r.status === 200 && r.data.waiter.name === 'Rosa');
+  r = await req('/api/waiters', { method: 'POST', token: ownerP, body: { name: 'Repetido', pin: '2580' } });
+  check('no deja repetir la clave de otro del mismo local (y dice de quién es)', r.status === 409 && r.data.error === 'pin_en_uso' && /Martín/.test(r.data.detail || ''), JSON.stringify(r.data));
+  r = await req('/api/waiters', { method: 'POST', token: ownerX, body: { name: 'Otro local', pin: '2580' } });
+  check('en otro restaurante esa clave sí se puede usar', r.status === 200 && /^\d{6}$/.test(r.data.staffCode || ''));
+  for (const mala of ['12', 'abcd', '1234567', '12 34']) {
+    r = await req('/api/waiters', { method: 'POST', token: ownerP, body: { name: 'Mala', pin: mala } });
+    if (r.status !== 400 || r.data.error !== 'pin_invalido') { check(`clave "${mala}" rechazada`, false, JSON.stringify(r.data)); break; }
+  }
+  check('la clave tiene que ser de 4 a 6 números', r.status === 400 && r.data.error === 'pin_invalido');
+  r = await req('/api/waiters/' + chefP.data.id, { method: 'PUT', token: ownerP, body: { pin: '2580' } });
+  check('al cambiar la clave tampoco deja usar la de otro', r.status === 409 && r.data.error === 'pin_en_uso');
+  r = await req('/api/waiters/' + chefP.data.id, { method: 'PUT', token: ownerP, body: { pin: '1470', name: 'Rosa M.' } });
+  check('volver a poner su propia clave sí se puede', r.status === 200 && r.data.name === 'Rosa M.');
+  r = await req('/api/waiters/' + chefP.data.id, { method: 'PUT', token: ownerP, body: { pin: '3690' } });
+  check('cambiar la clave no cambia el código', r.status === 200 && r.data.staffCode === codC);
+  r = await req('/waiter/login', { method: 'POST', body: { local: codC, pin: '3690' } });
+  check('entra con la clave nueva', r.status === 200);
+  r = await req('/waiter/login', { method: 'POST', body: { local: codC, pin: '1470' } });
+  check('y la vieja ya no sirve', r.status === 401);
 
   google.close();
   if (pool) await pool.end();
   console.log(`\n${'─'.repeat(54)}`);
-  console.log(fail === 0 ? `\x1b[32m\x1b[1m✅ ${pass}/${pass + fail} — mozos con código del local y dueño con Google\x1b[0m`
+  console.log(fail === 0 ? `\x1b[32m\x1b[1m✅ ${pass}/${pass + fail} — código personal del equipo y dueño con Google\x1b[0m`
                          : `\x1b[31m\x1b[1m${fail} FALLARON\x1b[0m (${pass} ok)`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('💥', e); process.exit(1); });

@@ -608,7 +608,9 @@ BEGIN
     FOR i IN 1..6 LOOP
       c := c || substr(abc, 1 + floor(random() * length(abc))::int, 1);
     END LOOP;
-    EXIT WHEN NOT EXISTS (SELECT 1 FROM tenants WHERE team_code = c);
+    -- Siempre con al menos una letra: los códigos personales del equipo son
+    -- solo números, y así nunca se confunden.
+    EXIT WHEN c ~ '[A-Z]' AND NOT EXISTS (SELECT 1 FROM tenants WHERE team_code = c);
   END LOOP;
   RETURN c;
 END $$ LANGUAGE plpgsql VOLATILE;
@@ -633,3 +635,50 @@ END $$;
 -- que se registró el local (el dueño se registró con uno y entra con otro).
 ALTER TABLE IF EXISTS tenants ADD COLUMN IF NOT EXISTS google_email TEXT;
 CREATE INDEX IF NOT EXISTS idx_tenants_google_email ON tenants(google_email);
+
+-- ============================================================
+-- FASE 8: código personal de cada integrante del equipo
+-- ============================================================
+-- Al agregar un mozo, cocinero, bartender, etc., Gestiva le genera un código
+-- de 6 números que es solo suyo. Entra a la app con ese código y la clave
+-- que le pone el dueño.
+ALTER TABLE IF EXISTS waiters ADD COLUMN IF NOT EXISTS staff_code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_waiters_staff_code ON waiters(staff_code);
+CREATE OR REPLACE FUNCTION gestiva_codigo_empleado() RETURNS TEXT AS $$
+DECLARE
+  c TEXT;
+BEGIN
+  LOOP
+    c := (100000 + floor(random() * 900000))::int::text;
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM waiters WHERE staff_code = c);
+  END LOOP;
+  RETURN c;
+END $$ LANGUAGE plpgsql VOLATILE;
+ALTER TABLE IF EXISTS waiters ALTER COLUMN staff_code SET DEFAULT gestiva_codigo_empleado();
+DO $$
+DECLARE r RECORD;
+BEGIN
+  -- Integrantes que ya existían: uno por uno, y si justo se repitiera, otro.
+  FOR r IN SELECT id FROM waiters WHERE staff_code IS NULL LOOP
+    LOOP
+      BEGIN
+        UPDATE waiters SET staff_code = gestiva_codigo_empleado() WHERE id = r.id;
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        NULL;
+      END;
+    END LOOP;
+  END LOOP;
+  -- Códigos de local que salieron solo con números (antes podía pasar): se
+  -- cambian por uno con letras, para que no choquen con los personales.
+  FOR r IN SELECT id FROM tenants WHERE team_code IS NOT NULL AND team_code !~ '[A-Z]' LOOP
+    LOOP
+      BEGIN
+        UPDATE tenants SET team_code = gestiva_codigo_local() WHERE id = r.id;
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        NULL;
+      END;
+    END LOOP;
+  END LOOP;
+END $$;

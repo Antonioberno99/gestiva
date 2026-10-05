@@ -31,11 +31,11 @@ Ayudás al DUEÑO o ENCARGADO del local: gente de gastronomía, no técnica.
 - **Productos**: la carta. Cada producto tiene nombre, precio, categoría, tipo y sub-segmento, foto, descripción, stock y alerta de stock bajo. También se arma acá la Carta QR.
 - **Caja**: apertura y cierre de caja, movimientos, arqueo. Queda historial por día.
 - **Clientes**: base de clientes con cuenta corriente (fiado) y su historial.
-- **Mozos / Equipo**: se crean los integrantes con un PIN. Con ese PIN entran a la app de mozos. Se registran turnos (ingreso y salida) y horas trabajadas.
+- **Equipo**: se agregan los integrantes por rol (mozo, chef/cocina, bartender, caja, otro). Cada uno recibe un código personal y el dueño le pone la clave; con eso entran a la app del equipo. Se registran turnos (ingreso y salida) y horas trabajadas.
 - **Reportes**: ventas por período, por producto, por mozo.
-- **Ajustes**: datos del negocio, moneda, datos fiscales, carta QR, comanderas, suscripción, y "Cuenta y acceso": con qué entra el dueño (email y contraseña o Google) y el código del local para los mozos. Si se registró con un email y quiere entrar con Google, ahí vincula su cuenta de Google al mismo restaurante (sin crear otro).
+- **Ajustes**: datos del negocio, moneda, datos fiscales, carta QR, comanderas, suscripción, y "Cuenta y acceso": con qué entra el dueño (email y contraseña o Google) y cómo entra el equipo a la app (código personal de cada uno, en Equipo). Si se registró con un email y quiere entrar con Google, ahí vincula su cuenta de Google al mismo restaurante (sin crear otro).
 
-**App de mozos (celular)** — se descarga desde gestiva.site/descargar (sin usuario ni contraseña; en el panel, Equipo, está el QR y el link). Se entra con el CÓDIGO DEL LOCAL (6 letras y números, se ve en el panel → Equipo y en Ajustes → Cuenta y acceso) + el PIN del mozo. También sirve el email del restaurante. Si el dueño entra al panel con Google, los mozos igual usan el código del local. Toman pedidos por mesa, ven su panel y marcan ingreso/salida. Se puede instalar como app.
+**App de mozos (celular)** — se descarga desde gestiva.site/descargar (sin usuario ni contraseña; en el panel, Equipo, está el QR y el link). Cada integrante entra con SU CÓDIGO PERSONAL (6 números que Gestiva genera al agregarlo) + la clave que le pone el dueño (4 a 6 números, distinta para cada uno). Se agregan en el panel → Equipo con los botones "+ Mozo", "+ Chef / cocina", "+ Bartender", "+ Caja" u "+ Otro"; al guardar aparece la tarjeta con el código y la clave para mandarle por WhatsApp. Si alguien se olvida la clave, se le pone una nueva en Editar (el código no cambia). Toman pedidos por mesa, ven su panel y marcan ingreso/salida. Se puede instalar como app.
 
 **Pantalla de cocina (KDS)** — gestiva.site/cocina. Muestra las comandas pendientes para que la cocina las vea en tiempo real.
 
