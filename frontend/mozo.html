@@ -112,6 +112,7 @@
   .err.on { display:block; }
   #local.es-codigo { text-transform:uppercase; letter-spacing:.14em; font-weight:800; font-size:18px; }
   .login-ayuda { font-size:12.5px; margin-top:14px; color:#64748b; text-align:center; line-height:1.5; }
+  .campo-modo { display:inline-block; margin-top:7px; background:none; border:0; padding:0; color:var(--or-dk); font-size:12.5px; font-weight:700; font-family:inherit; cursor:pointer; }
   .app { display:none; min-height:100dvh; padding-bottom:82px; background:linear-gradient(180deg,#fff 0%,#f8fafc 28%,#eef2f7 100%); }
   .topbar { position:sticky; top:0; z-index:20; background:rgba(255,255,255,.94); backdrop-filter:blur(18px); border-bottom:1px solid rgba(226,232,240,.82); padding:12px 14px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; }
   .who { min-width:0; max-width:100%; display:flex; align-items:center; gap:10px; }
@@ -227,19 +228,20 @@
   <form class="login-card" id="loginForm">
     <div class="brand"><div class="brand-mark"><img src="assets/logo-gestiva-icon.png?v=2" alt=""></div><div class="brand-name">Gestiva</div></div>
     <h1>App de mozos</h1>
-    <p class="sub">Entrá con el código de tu local y tu PIN para tomar pedidos desde el celular.</p>
+    <p class="sub">Entrá con tu código y tu clave para tomar pedidos desde el celular.</p>
     <div class="err" id="loginErr" aria-live="polite"></div>
     <div class="field">
-      <label for="local">Código del local</label>
-      <input id="local" name="local" type="text" required autocomplete="username" autocapitalize="characters"
-             autocorrect="off" spellcheck="false" placeholder="Ej: K7M2QX" />
+      <label for="local">Tu código</label>
+      <input id="local" name="local" type="text" inputmode="numeric" required autocomplete="username" autocapitalize="characters"
+             autocorrect="off" spellcheck="false" placeholder="Ej: 482917" />
+      <button type="button" class="campo-modo" id="localModo">¿Te dieron un código con letras o un email?</button>
     </div>
     <div class="field">
-      <label for="pin">PIN del mozo</label>
+      <label for="pin">Tu clave</label>
       <input id="pin" name="pin" type="password" inputmode="numeric" required autocomplete="current-password" />
     </div>
     <button class="btn btn-primary" id="loginBtn" type="submit">Entrar</button>
-    <p class="login-ayuda">El código del local y tu PIN te los da el encargado (están en el panel, en <b>Equipo</b>). También podés usar el email del restaurante.</p>
+    <p class="login-ayuda">Tu código y tu clave te los da el encargado: están en el panel, en <b>Equipo</b>.</p>
     <div class="install-card" id="installCard" hidden>
       <div class="install-copy">
         <strong id="installTitle">Instalá la app en tu celular</strong>
@@ -832,10 +834,22 @@ function marcarCampoLocal() {
   const campo = $('#local');
   if (campo) campo.classList.toggle('es-codigo', !!campo.value && !campo.value.includes('@'));
 }
+// El código personal son 6 números (teclado numérico). Quien tenga el código
+// del local (con letras) o el email del restaurante cambia el campo a texto.
+function modoCampoLocal(texto) {
+  const campo = $('#local');
+  if (!campo) return;
+  campo.setAttribute('inputmode', texto ? 'text' : 'numeric');
+  campo.placeholder = texto ? 'Código del local o email' : 'Ej: 482917';
+  $('label[for="local"]').textContent = texto ? 'Código del local o email' : 'Tu código';
+  $('#localModo').textContent = texto ? 'Tengo un código de 6 números' : '¿Te dieron un código con letras o un email?';
+  campo.dataset.texto = texto ? '1' : '';
+}
 function prepararLogin() {
   const campo = $('#local');
   if (!campo) return;
   if (!campo.value) campo.value = localGuardado();
+  modoCampoLocal(/[^0-9\s]/.test(campo.value));
   marcarCampoLocal();
 }
 
@@ -874,13 +888,19 @@ async function enterDemoMode() {
 }
 
 const MENSAJES_LOGIN = {
+  codigo_no_encontrado: 'No encontramos ese código. Revisalo con el encargado.',
   local_not_found: 'No encontramos ningún local con ese código. Revisalo con el encargado.',
-  invalid_pin: 'PIN incorrecto. Si no lo sabés, pedíselo al encargado.',
-  invalid_credentials: 'El código del local o el PIN no son correctos.',
-  missing_fields: 'Completá el código del local y tu PIN.',
+  invalid_pin: 'Clave incorrecta. Si no la sabés, pedísela al encargado.',
+  invalid_credentials: 'El código o la clave no son correctos.',
+  missing_fields: 'Completá tu código y tu clave.',
   too_many_attempts: 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.'
 };
 $('#local').addEventListener('input', marcarCampoLocal);
+$('#localModo').addEventListener('click', () => {
+  const campo = $('#local');
+  modoCampoLocal(!campo.dataset.texto);
+  campo.blur(); campo.focus();   // así el celular cambia de teclado
+});
 
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1491,7 +1511,7 @@ if ('serviceWorker' in navigator) {
     if (!controladorActual) { controladorActual = navigator.serviceWorker.controller; return; }
     recargarCuandoSeSeguro();
   });
-  navigator.serviceWorker.register('sw.js?v=20261004-codigo-local').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=20261005-codigo-personal').then((reg) => {
     reg.update().catch(() => {});
     if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     reg.addEventListener('updatefound', () => {

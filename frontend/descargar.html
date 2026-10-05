@@ -76,9 +76,9 @@
   <div class="ok" id="okMsg">¡Listo! Ya tenés <b>Gestiva Equipo</b> en tu pantalla de inicio. Abrila desde el ícono.</div>
 
   <div class="codigo" id="codigoLocal">
-    <span>Código de tu local</span>
+    <span id="codigoTitulo">Tu código</span>
     <strong id="codigoTxt"></strong>
-    <small>Con este código y tu PIN entrás a la app. Anotalo por las dudas.</small>
+    <small>Con este código y tu clave entrás a la app. Anotalo por las dudas.</small>
   </div>
 
   <p class="ya">¿Ya la tenés? <a href="/mozo" id="linkAbrir">Abrir la app</a></p>
@@ -87,7 +87,7 @@
     <h2>Después de instalarla</h2>
     <ol>
       <li>Abrí <b>Gestiva Equipo</b> desde el ícono.</li>
-      <li>Entrá con el código del local y tu PIN. Te los da el encargado.</li>
+      <li>Entrá con tu código y tu clave. Te los da el encargado.</li>
       <li>Marcá tu ingreso y empezá a tomar pedidos.</li>
     </ol>
   </div>
@@ -101,6 +101,8 @@ var LOCAL = '';
 try { LOCAL = (new URLSearchParams(location.search).get('local') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); } catch (e) {}
 var APP_URL = '/mozo' + (LOCAL ? '?local=' + LOCAL : '');
 if (LOCAL) {
+  // 6 números = código personal del integrante; con letras = código del local.
+  document.getElementById('codigoTitulo').textContent = /^\d{6}$/.test(LOCAL) ? 'Tu código' : 'Código de tu local';
   document.getElementById('codigoTxt').textContent = LOCAL;
   document.getElementById('codigoLocal').classList.add('on');
   document.getElementById('linkAbrir').setAttribute('href', APP_URL);
@@ -146,7 +148,7 @@ if (LOCAL) {
 // app abra sin internet. NO se recarga la página al activarse (eso era el
 // "aparece y desaparece" de la primera visita).
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js?v=20261004-codigo-local').catch(function () {});
+  navigator.serviceWorker.register('sw.js?v=20261005-codigo-personal').catch(function () {});
 }
 </script>
 </body>

@@ -1,9 +1,10 @@
 // Ingreso en el navegador (Chromium), contra el backend real:
-//   - app del mozo: código del local precargado desde el link/QR, recordado en
-//     el celular, y mensajes claros si algo está mal
-//   - /descargar?local=...: muestra el código y lo pasa a la app
-//   - panel: código en Equipo (QR y WhatsApp lo llevan) y "Cuenta y acceso"
-//     en Ajustes, con el botón para vincular Google
+//   - app del equipo: cada integrante entra con SU código personal (6 números)
+//     y su clave; el código viene cargado desde su link y queda recordado
+//   - /descargar?local=...: muestra "Tu código" y lo pasa a la app
+//   - panel → Equipo: botones "+ Mozo", "+ Chef / cocina"..., el código de cada
+//     uno bien visible, la tarjeta de acceso con WhatsApp y claves sin repetir
+//   - Ajustes → "Cuenta y acceso", con el botón para vincular Google
 //   - login del dueño y cocina con Google: no crean otro restaurante
 // El botón de Google se simula (no hay cuentas reales en la prueba).
 //
@@ -86,86 +87,117 @@ async function req(p, { method = 'GET', body, token } = {}) {
     return { ctx, page };
   };
 
-  // Local con email y contraseña, y una moza con PIN
+  // Local con email y contraseña, y una moza con su clave
   const reg = await req('/auth/register', { method: 'POST', body: { email: `bodegon-${id}@test.local`, password: 'Secreta123', restaurantName: 'El Bodegón' } });
   const owner = reg.data.token, user = reg.data.user, COD = user.teamCode;
-  await req('/api/waiters', { method: 'POST', token: owner, body: { name: 'Lucía', pin: '4826' } });
+  const lucia = (await req('/api/waiters', { method: 'POST', token: owner, body: { name: 'Lucía', pin: '4826' } })).data;
+  const LUC = lucia.staffCode;
+  const fmt = (c) => c.slice(0, 3) + ' ' + c.slice(3);
+  const textoToasts = (page) => page.evaluate(() => [...document.querySelectorAll('#toastWrap .toast')].map(t => t.textContent).join(' | '));
 
-  seccion('1. APP DEL MOZO: ENTRA CON EL CÓDIGO DEL LOCAL');
+  seccion('1. APP DEL EQUIPO: CADA UNO ENTRA CON SU CÓDIGO PERSONAL');
   {
     const { ctx, page } = await nuevo(devices['iPhone 13']);
-    await page.goto(`${BASE}/mozo?local=${COD}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/mozo?local=${LUC}`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#local');
-    const label = await page.textContent('label[for="local"]');
-    check('el campo dice "Código del local" (ya no "Email del restaurante")', /Código del local/.test(label) && !(await page.$('label[for="email"]')));
-    check('el link del panel deja el código ya cargado', (await page.inputValue('#local')) === COD);
+    check('el campo dice "Tu código" y abre el teclado de números', /Tu código/.test(await page.textContent('label[for="local"]')) && (await page.getAttribute('#local', 'inputmode')) === 'numeric');
+    check('la clave dice "Tu clave"', /Tu clave/.test(await page.textContent('label[for="pin"]')));
+    check('el link que le mandaron deja su código ya cargado', (await page.inputValue('#local')) === LUC);
     await page.fill('#pin', '4826');
     await page.click('#loginBtn');
     await page.waitForSelector('#appScreen', { state: 'visible', timeout: 8000 }).catch(() => {});
-    check('con solo el PIN entra a su local', (await page.textContent('#restaurantName')).trim() === 'El Bodegón');
+    check('con su clave entra ELLA, a su local', (await page.textContent('#restaurantName')).trim() === 'El Bodegón' && /Lucía/.test(await page.textContent('#waiterName')));
     await page.evaluate(() => logout());
     await page.waitForTimeout(200);
-    check('al salir, el código queda recordado en el celular (el próximo solo pone su PIN)', (await page.inputValue('#local')) === COD && (await page.inputValue('#pin')) === '');
+    check('al salir, el código queda y la clave se borra', (await page.inputValue('#local')) === LUC && (await page.inputValue('#pin')) === '');
     await page.fill('#pin', '0000'); await page.click('#loginBtn'); await page.waitForTimeout(600);
-    check('PIN mal → "PIN incorrecto"', /PIN incorrecto/.test(await page.textContent('#loginErr')), await page.textContent('#loginErr'));
-    await page.fill('#local', 'QQQQQQ'); await page.fill('#pin', '4826'); await page.click('#loginBtn'); await page.waitForTimeout(600);
-    check('código mal → "No encontramos ningún local con ese código"', /No encontramos ningún local/.test(await page.textContent('#loginErr')));
-    await page.fill('#local', `bodegon-${id}@test.local`); await page.click('#loginBtn');
+    check('clave mal → "Clave incorrecta"', /Clave incorrecta/.test(await page.textContent('#loginErr')), await page.textContent('#loginErr'));
+    const otro = LUC === '100000' ? '100001' : '100000';
+    await page.fill('#local', otro); await page.fill('#pin', '4826'); await page.click('#loginBtn'); await page.waitForTimeout(600);
+    check('código que no existe → "No encontramos ese código"', /No encontramos ese código/.test(await page.textContent('#loginErr')), await page.textContent('#loginErr'));
+    await page.click('#localModo');
+    check('quien tiene el código del local o un email cambia el campo a texto', /Código del local o email/.test(await page.textContent('label[for="local"]')) && (await page.getAttribute('#local', 'inputmode')) === 'text');
+    await page.fill('#local', COD); await page.fill('#pin', '4826'); await page.click('#loginBtn');
     await page.waitForSelector('#appScreen', { state: 'visible', timeout: 8000 }).catch(() => {});
-    check('el email del restaurante también sirve (como antes)', (await page.textContent('#restaurantName')).trim() === 'El Bodegón');
+    check('el código del local + la clave sigue funcionando', /Lucía/.test(await page.textContent('#waiterName')));
     if (process.env.GESTIVA_SHOTS) {
-      await page.evaluate(() => logout()); await page.fill('#local', ''); await page.goto(`${BASE}/mozo?local=${COD}`); await page.waitForTimeout(300);
+      await page.evaluate(() => { logout(); localStorage.removeItem('gestiva_waiter_local'); document.getElementById('local').value = ''; });
+      await page.goto(`${BASE}/mozo?local=${LUC}`); await page.waitForTimeout(400);
       await page.screenshot({ path: path.join(process.env.GESTIVA_SHOTS, 'mozo-login-codigo.png') });
     }
     await ctx.close();
   }
 
-  seccion('2. DESCARGA CON EL CÓDIGO');
+  seccion('2. DESCARGA CON SU CÓDIGO');
   {
     const { ctx, page } = await nuevo(devices['Pixel 7']);
-    await page.goto(`${BASE}/descargar?local=${COD}`, { waitUntil: 'domcontentloaded' });
-    check('la página de descarga muestra el código del local', (await page.isVisible('#codigoLocal')) && (await page.textContent('#codigoTxt')) === COD);
-    check('"Abrir la app" lo lleva cargado', (await page.getAttribute('#linkAbrir', 'href')) === `/mozo?local=${COD}`);
+    await page.goto(`${BASE}/descargar?local=${LUC}`, { waitUntil: 'domcontentloaded' });
+    check('la página de descarga le muestra "Tu código"', (await page.isVisible('#codigoLocal')) && /Tu código/.test(await page.textContent('#codigoTitulo')) && (await page.textContent('#codigoTxt')) === LUC);
+    check('"Abrir la app" lo lleva cargado', (await page.getAttribute('#linkAbrir', 'href')) === `/mozo?local=${LUC}`);
     if (process.env.GESTIVA_SHOTS) await page.screenshot({ path: path.join(process.env.GESTIVA_SHOTS, 'descargar-codigo.png') });
     await page.goto(`${BASE}/mozo`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#local');
-    check('la app instalada (abre en /mozo, sin el link) ya tiene el código', (await page.inputValue('#local')) === COD);
+    check('la app instalada (abre en /mozo, sin el link) ya tiene su código', (await page.inputValue('#local')) === LUC);
+    await page.goto(`${BASE}/descargar?local=${COD}`, { waitUntil: 'domcontentloaded' });
+    check('con un link viejo (código del local) dice "Código de tu local"', /Código de tu local/.test(await page.textContent('#codigoTitulo')));
     await ctx.close();
   }
   {
     const { ctx, page } = await nuevo({ ...devices['iPhone 13'] });
     await ctx.addInitScript(() => Object.defineProperty(navigator, 'standalone', { get: () => true }));
-    await page.goto(`${BASE}/descargar?local=${COD}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/descargar?local=${LUC}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(600);
-    check('abierta desde el ícono va a la app con el código', page.url().endsWith(`/mozo?local=${COD}`), page.url());
+    check('abierta desde el ícono va a la app con su código', page.url().endsWith(`/mozo?local=${LUC}`), page.url());
     await ctx.close();
   }
 
-  seccion('3. PANEL: EL CÓDIGO EN EQUIPO Y "CUENTA Y ACCESO"');
+  seccion('3. PANEL → EQUIPO: AGREGAR POR ROL, CÓDIGO Y CLAVE');
   {
     const { ctx, page } = await nuevo({ viewport: { width: 1280, height: 900 } });
     await ctx.addInitScript(([t, u]) => { localStorage.setItem('gestiva_token', t); localStorage.setItem('gestiva_user', JSON.stringify(u)); }, [owner, user]);
     await ctx.addInitScript(GSI_FALSO);
     await page.goto(`${BASE}/app.html#/mozos`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.team-code', { timeout: 10000 }).catch(() => {});
-    check('Equipo muestra el código del local bien grande', ((await page.textContent('#view .team-code').catch(() => '')) || '').trim() === COD);
-    check('y explica que los mozos no necesitan el email ni la cuenta de Google', /No necesitan tu email ni tu cuenta de Google/.test(await page.textContent('#view')));
+    await page.waitForSelector('.equipo-hero', { timeout: 10000 }).catch(() => {});
+    const botones = await page.$$eval('.equipo-hero .eh-btn', bs => bs.map(b => b.textContent.trim()));
+    check('arriba, bien visible: + Mozo, + Chef / cocina, + Bartender, + Caja, + Otro', ['+ Mozo', '+ Chef / cocina', '+ Bartender', '+ Caja', '+ Otro'].every(b => botones.includes(b)), botones.join(', '));
+    const codLucia = await page.$eval(`.emp-card[data-id="${lucia.id}"] .staff-code`, e => e.textContent.trim()).catch(() => '');
+    check('la tarjeta de cada integrante muestra su código grande', codLucia === fmt(LUC), codLucia);
     const url = await page.evaluate(() => teamAppUrl());
-    check('el link y el QR llevan el código (/descargar?local=...)', url.endsWith(`/descargar?local=${COD}`), url);
     let leido = null;
     try {
       const jsQR = require('jsqr'); const { PNG } = require('pngjs');
-      const img = PNG.sync.read(await (await page.$('#view svg[aria-label*="QR"]')).screenshot());
+      const img = PNG.sync.read(await (await page.$('.equipo-hero svg[aria-label*="QR"]')).screenshot());
       const r = jsQR(new Uint8ClampedArray(img.data), img.width, img.height); leido = r && r.data;
     } catch (e) { leido = 'sin jsqr: ' + e.message; }
-    check('el QR escaneado da ese link', leido === url, String(leido));
-    const wa = decodeURIComponent(await page.getAttribute('#view a[href^="https://wa.me/"]', 'href'));
-    check('el WhatsApp para el mozo incluye el código del local', wa.includes(`Código del local: ${COD}`) && wa.includes(url));
-    if (process.env.GESTIVA_SHOTS) await page.screenshot({ path: path.join(process.env.GESTIVA_SHOTS, 'panel-equipo-codigo.png') });
+    check('el QR general sirve para descargar la app (/descargar)', url.endsWith('/descargar') && leido === url, String(leido));
+
+    await page.click('.eh-btn[data-rol="Cocina"]');
+    await page.waitForSelector('#wName', { timeout: 5000 });
+    check('"+ Chef / cocina" abre "Agregar chef o cocinero" con el rol ya elegido', /Agregar chef o cocinero/.test(await page.textContent('.modal-title')) && (await page.inputValue('#wRole')) === 'Cocina');
+    await page.fill('#wName', 'Rosa');
+    await page.click('#wGuardar'); await page.waitForTimeout(300);
+    check('sin clave no lo deja agregar', /Poné una clave/.test(await textoToasts(page)) && !!(await page.$('#wName')));
+    await page.fill('#wPin', '4826');
+    await page.click('#wGuardar'); await page.waitForTimeout(1500);
+    check('con la clave de otro avisa de quién es', /Esa clave ya la usa Lucía/.test(await textoToasts(page)) && !!(await page.$('#wName')), await textoToasts(page));
+    await page.fill('#wPin', '1470');
+    await page.click('#wGuardar');
+    await page.waitForSelector('.staff-pin', { timeout: 8000 }).catch(() => {});
+    const codRosa = ((await page.textContent('.modal .staff-code').catch(() => '')) || '').replace(/\s/g, '');
+    check('al agregarla aparece su acceso: código nuevo de 6 números y su clave', /Acceso de Rosa/.test(await page.textContent('.modal-title')) && /^\d{6}$/.test(codRosa) && (await page.textContent('.staff-pin')) === '1470', codRosa);
+    const wa = decodeURIComponent(await page.getAttribute('.modal a[href^="https://wa.me/"]', 'href'));
+    check('"Enviar por WhatsApp" lleva el link de descarga, su código y su clave', wa.includes(`/descargar?local=${codRosa}`) && wa.includes(`tu código: ${codRosa}`) && wa.includes('tu clave: 1470'), wa.replace(/\s+/g, ' ').slice(0, 160));
+    if (process.env.GESTIVA_SHOTS) await page.screenshot({ path: path.join(process.env.GESTIVA_SHOTS, 'equipo-acceso-nuevo.png') });
+    await page.evaluate(() => closeModal());
+    const tarjetaRosa = await page.$$eval('.emp-card', cs => cs.map(c => c.innerText.replace(/\s+/g, ' ')).find(t => /Rosa/.test(t)) || '');
+    check('Rosa queda en el equipo, como Cocina y con su código', /Cocina/.test(tarjetaRosa) && tarjetaRosa.includes(fmt(codRosa)), tarjetaRosa.slice(0, 120));
+    const r0 = await req('/waiter/login', { method: 'POST', body: { local: codRosa, pin: '1470' } });
+    check('y con ese código y esa clave entra a la app', r0.status === 200 && r0.data.waiter.name === 'Rosa');
+    if (process.env.GESTIVA_SHOTS) await page.screenshot({ path: path.join(process.env.GESTIVA_SHOTS, 'panel-equipo-codigo.png'), fullPage: false });
 
     await page.goto(`${BASE}/app.html#/ajustes`); await page.waitForSelector('#cuentaCard', { timeout: 10000 }).catch(() => {});
     const card = (await page.textContent('#cuentaCard').catch(() => '')) || '';
-    check('Ajustes → "Cuenta y acceso": con qué entra el dueño y el código de los mozos', /Email y contraseña/.test(card) && card.includes(COD), card.replace(/\s+/g, ' ').slice(0, 160));
+    check('Ajustes → "Cuenta y acceso": con qué entra el dueño y cómo entra el equipo', /Email y contraseña/.test(card) && /código personal/.test(card), card.replace(/\s+/g, ' ').slice(0, 160));
     check('ofrece vincular Google (botón de Google en la tarjeta)', await page.evaluate(() => window.__gsi.botones > 0 && !!document.querySelector('#gLinkBtn .g-falso')));
     const g = { sub: `pc-${id}`, email: `bodegon.pc.${id}@gmail.com` };
     await elegirCuentaGoogle(page, cred(g));
@@ -237,7 +269,7 @@ async function req(p, { method = 'GET', body, token } = {}) {
 
   await browser.close(); srv.close(); google.close();
   console.log(`\n${'─'.repeat(54)}`);
-  console.log(fail === 0 ? `\x1b[32m\x1b[1m✅ ${pass}/${pass + fail} — ingreso con código del local y con Google\x1b[0m`
+  console.log(fail === 0 ? `\x1b[32m\x1b[1m✅ ${pass}/${pass + fail} — código personal del equipo y Google\x1b[0m`
                          : `\x1b[31m\x1b[1m${fail} FALLARON\x1b[0m (${pass} ok)`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error('💥', e); process.exit(1); });

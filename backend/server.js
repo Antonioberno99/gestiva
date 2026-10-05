@@ -374,6 +374,8 @@ function publicWaiter(w) {
     role: w.role || 'Mozo',
     color: w.color,
     hasPin: !!w.access_pin_hash,
+    // Código personal (6 números): con él y su clave entra a la app.
+    staffCode: w.staff_code || null,
     commissionPercent: parseFloat(w.commission_percent) || 0,
     created_at: w.created_at
   };
@@ -1261,6 +1263,22 @@ app.post('/waiter/login', loginLimiter, async (req, res) => {
     const { local, email, pin } = req.body || {};
     const identificador = String(local || email || '').trim();
     if (!identificador || !pin) return res.status(400).json({ error: 'missing_fields' });
+
+    // 6 números = código personal del integrante (Gestiva lo genera al
+    // agregarlo en Equipo). Identifica a la persona: solo se mira SU clave.
+    const soloNumeros = identificador.replace(/[\s.-]/g, '');
+    if (/^\d{6}$/.test(soloNumeros)) {
+      const w = (await q('SELECT * FROM waiters WHERE staff_code=$1', [soloNumeros])).rows[0];
+      if (!w) return res.status(401).json({ error: 'codigo_no_encontrado' });
+      if (!w.access_pin_hash || !(await bcrypt.compare(String(pin), w.access_pin_hash))) {
+        return res.status(401).json({ error: 'invalid_pin' });
+      }
+      const freshTenant = await refreshSubscriptionStatus(w.tenant_id);
+      if (!freshTenant) return res.status(401).json({ error: 'codigo_no_encontrado' });
+      const token = signWaiterToken(freshTenant, w);
+      return res.json({ token, restaurant: publicTenantMozo(freshTenant), waiter: publicWaiter(w) });
+    }
+
     const { tenants, porCodigo } = await buscarLocalesDeMozos(identificador);
     // Con el código se puede decir qué falló (el código no es un dato personal);
     // con un email no, para no revelar qué emails son clientes.
@@ -1538,13 +1556,42 @@ app.delete('/api/tables/:id', async (req, res) => {
 });
 
 // ----- WAITERS -----
+// Clave de cada integrante: de 4 a 6 números, y distinta de la de los demás
+// del local. Si dos tuvieran la misma, al entrar con el código del local no se
+// sabría quién es y las ventas quedarían a nombre de otro.
+function pinValido(pin) { return /^\d{4,6}$/.test(String(pin)); }
+async function quienUsaElPin(tenantId, pin, exceptoId) {
+  const rows = (await q(`SELECT id, name, access_pin_hash FROM waiters
+                          WHERE tenant_id=$1 AND access_pin_hash IS NOT NULL AND ($2::uuid IS NULL OR id <> $2::uuid)`,
+                        [tenantId, exceptoId || null])).rows;
+  for (const w of rows) if (await bcrypt.compare(String(pin), w.access_pin_hash)) return w;
+  return null;
+}
+async function revisarPin(req, res, exceptoId) {
+  const { pin } = req.body || {};
+  if (pin == null || pin === '') return true;
+  if (!pinValido(pin)) {
+    res.status(400).json({ error: 'pin_invalido', detail: 'La clave tiene que ser de 4 a 6 números.' });
+    return false;
+  }
+  const otro = await quienUsaElPin(req.tenant.id, pin, exceptoId);
+  if (otro) {
+    res.status(409).json({ error: 'pin_en_uso', detail: `Esa clave ya la usa ${otro.name}. Elegí otra: cada uno necesita la suya.` });
+    return false;
+  }
+  return true;
+}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.get('/api/waiters', async (req, res) => {
   const r = await q('SELECT * FROM waiters WHERE tenant_id=$1 ORDER BY name', [req.tenant.id]);
   res.json(r.rows.map(publicWaiter));
 });
 app.post('/api/waiters', async (req, res) => {
   const { name, role, color, pin, commissionPercent } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'missing_name' });
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'missing_name' });
+  if (!(await revisarPin(req, res, null))) return;
+  // El código personal lo genera la base al insertar (staff_code DEFAULT).
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
   const r = await q(`INSERT INTO waiters (tenant_id, name, role, color, access_pin_hash, commission_percent)
                      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
@@ -1553,6 +1600,8 @@ app.post('/api/waiters', async (req, res) => {
 });
 app.put('/api/waiters/:id', async (req, res) => {
   const { name, role, color, pin, commissionPercent } = req.body || {};
+  if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'not_found' });
+  if (!(await revisarPin(req, res, req.params.id))) return;
   const hash = pin ? await bcrypt.hash(String(pin), 10) : null;
   const r = await q(`UPDATE waiters SET
                        name=COALESCE($1,name),
