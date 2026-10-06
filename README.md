@@ -15,7 +15,7 @@ Gestiva/
 ├── .gitignore
 │
 ├── frontend/                ← estático (deploy en Vercel)
-│   ├── landing.html         página de venta
+│   ├── index.html           página de venta (gestiva.site)
 │   ├── signup.html          registro
 │   ├── login.html           inicio de sesión
 │   ├── checkout.html        activar/renovar suscripción
@@ -79,7 +79,7 @@ npm run dev   # arranca en :3100
 ```bash
 cd frontend
 npx serve -p 3000
-# abrir http://localhost:3000/landing.html
+# abrir http://localhost:3000/
 ```
 
 ## Deploy
