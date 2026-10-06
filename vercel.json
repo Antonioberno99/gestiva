@@ -9,6 +9,6 @@
   "trailingSlash": false,
   "redirects": [
     { "source": "/assets/gestiva-equipo.apk", "destination": "/descargar", "permanent": false },
-    { "source": "/", "destination": "/landing", "permanent": false }
+    { "source": "/landing", "destination": "/", "permanent": false }
   ]
 }

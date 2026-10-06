@@ -55,7 +55,7 @@
 </head>
 <body>
 <div class="wrap">
-  <a href="landing.html" class="brand">
+  <a href="/" class="brand">
     <div class="brand-logo"><img src="assets/logo-gestiva-icon.png" alt=""></div>
     <div class="brand-name">Gestiva</div>
   </a>
@@ -116,7 +116,7 @@ if (user) {
 document.getElementById('logout').onclick = () => {
   localStorage.removeItem('gestiva_token');
   localStorage.removeItem('gestiva_user');
-  location.href = 'landing.html';
+  location.href = '/';
 };
 
 form.addEventListener('submit', async (e) => {

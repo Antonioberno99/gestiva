@@ -34,7 +34,8 @@ const UA = {
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/manifest+json',
                '.png': 'image/png', '.svg': 'image/svg+xml', '.jpeg': 'image/jpeg', '.css': 'text/css' };
 // Como Vercel con cleanUrls: /descargar → descargar.html
-const RUTAS = { '/descargar': 'descargar.html', '/mozo': 'mozo.html', '/landing': 'landing.html', '/app': 'app.html' };
+// "/" es la página principal (index.html); /landing redirige ahí en Vercel.
+const RUTAS = { '/': 'index.html', '/descargar': 'descargar.html', '/mozo': 'mozo.html', '/app': 'app.html' };
 
 // Para simular un deploy nuevo: el sw.js cambia de contenido.
 let SW_EXTRA = '';
@@ -71,7 +72,7 @@ function servidor() {
 
   seccion('1. NINGUNA PÁGINA SE RECARGA SOLA (primera visita, service worker activo)');
   for (const [nombre, ua] of [['iPhone Chrome', UA.chromeIOS], ['iPhone Safari', UA.safari18], ['Android Chrome', UA.android]]) {
-    for (const ruta of ['/mozo', '/descargar', '/landing']) {
+    for (const ruta of ['/mozo', '/descargar', '/']) {
       const { ctx, page, cargas } = await abrir(ua, ruta);
       await page.waitForTimeout(3500);
       const sw = await page.evaluate(() => !!navigator.serviceWorker.controller);
@@ -231,14 +232,14 @@ function servidor() {
 
   seccion('7. LANDING Y PANEL: TODOS LOS BOTONES LLEVAN A /descargar');
   {
-    const { ctx, page } = await abrir(UA.chromeIOS, '/landing');
+    const { ctx, page } = await abrir(UA.chromeIOS, '/');
     const hrefs = await page.$$eval('a', as => as.filter(a => /mozo|equipo/i.test(a.textContent)).map(a => a.textContent.trim().replace(/\s+/g, ' ') + ' → ' + a.getAttribute('href')));
     check('"Descargar app de mozos" → /descargar', hrefs.some(h => /Descargar app de mozos → \/descargar/.test(h)), hrefs.join(' | '));
     check('ningún botón de descarga manda al login (/mozo)', !hrefs.some(h => /Descargar|Instalar/.test(h) && /→ \/?mozo/.test(h)), hrefs.join(' | '));
     await ctx.close();
   }
   {
-    const { ctx, page } = await abrir(UA.android, '/landing');
+    const { ctx, page } = await abrir(UA.android, '/');
     await page.click('#dlInstallBtn');
     await page.waitForTimeout(2600);
     check('"Instalar Gestiva" ya no manda al registro (usuario y contraseña)', !/signup/.test(page.url()), page.url());
@@ -299,6 +300,9 @@ function servidor() {
     const vercel = JSON.parse(fs.readFileSync(path.join(FRONT, '..', 'vercel.json'), 'utf8'));
     const apk = vercel.redirects.find(r => r.source === '/assets/gestiva-equipo.apk');
     check('el link viejo del .apk lleva a /descargar (antes al login)', apk && apk.destination === '/descargar');
+    check('gestiva.site abre la página principal sin "/landing" en la dirección', !vercel.redirects.some(r => r.source === '/') && fs.existsSync(path.join(FRONT, 'index.html')) && /Gestiva/.test(fs.readFileSync(path.join(FRONT, 'index.html'), 'utf8')) && !fs.existsSync(path.join(FRONT, 'landing.html')));
+    const viejo = vercel.redirects.find(r => r.source === '/landing');
+    check('los links viejos a /landing llevan a gestiva.site', viejo && viejo.destination === '/');
   }
 
   await browser.close(); srv.close();

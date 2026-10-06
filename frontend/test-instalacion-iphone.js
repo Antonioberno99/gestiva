@@ -140,7 +140,7 @@ const UA_CHROME_IOS_VIEJO = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_2 like Mac OS
 
   seccion('5. LANDING EN iPHONE — el botón Descargar');
   {
-    const { ctx, page } = await abrir(UA_SAFARI_IOS, 'landing.html');
+    const { ctx, page } = await abrir(UA_SAFARI_IOS, 'index.html');
     const txt = (await page.textContent('#dlInstallBtn')).trim();
     check('el botón habla de iPhone', /iPhone/i.test(txt), txt);
     await page.click('#dlInstallBtn');
