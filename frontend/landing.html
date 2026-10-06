@@ -25,7 +25,7 @@
       font-family: var(--ff-body);
       background: #fff; color: #0f172a; line-height: 1.6; overflow-x: hidden;
     }
-    h1, h2, h3, .hero-title, .sec-title, .stat-n { font-family: var(--ff-display); }
+    h1, h2, h3, .hero-title, .sec-title { font-family: var(--ff-display); }
     :root {
       /* brand */
       --or: #f97316; --or-dk: #ea580c; --or-lt: #fff7ed;
@@ -185,9 +185,6 @@
     @media (max-width: 768px) { .hero-sub { max-width: 100%; font-size: 16px; } }
     .hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
     .hero-btns .btn { padding: 14px 28px; font-size: 16px; }
-    .hero-stats { display: flex; gap: 36px; margin-top: 52px; padding-top: 32px; border-top: 1px solid var(--border); }
-    .stat-n { font-size: 30px; font-weight: 900; color: var(--tx-dark); }
-    .stat-l { font-size: 13px; color: var(--tx-lt); font-weight: 500; margin-top: 2px; }
 
     /* browser frame */
     .hero-visual { position: relative; }
@@ -549,7 +546,6 @@
       .team-actions { flex-direction: column; }
       .team-actions .btn { width: 100%; justify-content: center; }
       .team-phone { margin: 0 auto; }
-      .hero-stats { gap: 24px; flex-wrap: wrap; }
       .big-content { flex-direction: column; height: auto; }
       .big-side { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 12px; gap: 4px; }
       .big-logo { width: 100%; margin-bottom: 8px; }
@@ -654,11 +650,6 @@
         <div class="hero-btns">
           <a href="signup.html" class="btn btn-primary">Probar sistema gratis →</a>
           <a href="#funciones" class="btn btn-outline">Ver funciones &rarr;</a>
-        </div>
-        <div class="hero-stats">
-          <div><div class="stat-n">+500</div><div class="stat-l">Negocios activos</div></div>
-          <div><div class="stat-n">99.9%</div><div class="stat-l">Disponibilidad</div></div>
-          <div><div class="stat-n">5 min</div><div class="stat-l">Para empezar</div></div>
         </div>
       </div>
 
